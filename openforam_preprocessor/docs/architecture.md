@@ -704,6 +704,25 @@ The UI must not:
 - implement cache invalidation
 - directly manipulate engineering artifacts without backend services
 
+Implementation (M7): `app/dashboard.py` (run with `streamlit run
+app/dashboard.py` from the repository root), `app/components/widgets.py`, and
+the application service `core/services/project_service.py`.
+
+- The UI calls only `ProjectService`: load/validate/save configuration (all
+  problems as structured issues, including unreadable or outdated project
+  files), preview which steps a change makes stale (via the planner), store
+  uploaded STLs under `inputs/`, prepare the case, run the resource check, run
+  meshing, and read reports, logs and generated dictionaries.
+- Edits go into a draft held in the session; the Validate tab shows live
+  validation and the stale-step preview, and saves a new revision. Generate
+  actions always use the saved configuration.
+- Source units have no default; a new project cannot be saved until they are
+  chosen. HIGH RESOURCE RISK meshing requires an explicit checkbox.
+- Results show mesh validity, mesh quality, simulation suitability and CFD
+  accuracy as separate values (the last two always NOT_ASSESSED).
+- Known limitation: meshing runs synchronously behind a spinner; logs are
+  viewable after the run, not streamed live.
+
 ---
 
 ## 19. Performance Architecture
