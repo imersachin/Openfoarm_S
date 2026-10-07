@@ -424,8 +424,12 @@ Implementation (M4): `core/workflow/dependency_graph.py` and
   uses while meshing (change → mesh stale).
 - Feature extraction is planned only when enabled; otherwise it is listed as
   skipped. The feature-dictionary step still runs to remove a stale file.
-- The plan says what is stale. Skipping work on that basis requires verified
-  artifacts (M5); until then the pipeline still runs the full sequence.
+- Settings that only reach a generated file while enabled
+  (`feature_refinement_level` without feature extraction, `number_of_layers`
+  without layers) are ignored while inactive and reported as `inactive_paths`.
+- The plan explains what is stale and why. Execution decisions are made by
+  verified artifacts (section 12); a test asserts both agree for every
+  configuration field.
 
 ---
 
@@ -457,6 +461,29 @@ Artifact metadata should include, where applicable:
 An existing file is not a valid cache entry merely because its path exists.
 
 Cache reuse requires dependency identity verification.
+
+Implementation (M5): `core/artifacts/` and `core/workflow/pipeline.py`.
+
+- Manifest: `<case>/.preprocessor/artifacts.json`, one record per cached
+  operation: input hashes, output content hashes, creation time.
+- Cached operations and their recorded inputs:
+  - geometry: source STL content, geometry configuration, artifact format
+    version, validator limits → transformed STL + geometry report;
+  - feature extraction: `surfaceFeatureExtractDict`, `controlDict`,
+    transformed STL, tool identity → `.eMesh`;
+  - mesh (blockMesh + snappyHexMesh as one unit, because snappy overwrites the
+    background mesh in place): all meshing dictionaries, transformed STL,
+    `.eMesh` when used, tool identity → `constant/polyMesh` files;
+  - checkMesh: `constant/polyMesh` files, tool identity → checkMesh log.
+- `constant/polyMesh/sets/` (checkMesh diagnostics) is excluded from mesh hashes.
+- Tool identity: profile, `WM_PROJECT`, `WM_PROJECT_VERSION`, resolved
+  executable paths. Unknown values are recorded as `None`.
+- Reuse requires a record, identical input hashes, and every output present
+  with an identical hash. A record is removed before its operation re-runs, so
+  partial outputs from a failed run are never reused. An unreadable manifest
+  reuses nothing and is reported (`ARTIFACT_MANIFEST_UNREADABLE`).
+- Dictionaries are cheap and always regenerated (write-if-changed); mesh
+  validation always re-runs. `force=True` ignores the cache.
 
 ---
 

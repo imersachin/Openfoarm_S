@@ -237,3 +237,28 @@ def test_plan_is_deterministic() -> None:
     assert first == second
     assert first.as_dict() == second.as_dict()
     assert first.as_dict()["operations"][0] == "import_geometry"
+
+
+def test_inactive_settings_are_ignored_and_reported() -> None:
+    old = base()  # feature extraction and layers disabled
+    new = changed(changed(old, "mesh.surface.feature_refinement_level", 5),
+                  "mesh.layers.number_of_layers", 7)
+
+    plan = plan_change(old, new)
+
+    assert plan.is_empty
+    assert plan.inactive_paths == frozenset({
+        "mesh.surface.feature_refinement_level", "mesh.layers.number_of_layers",
+    })
+
+
+def test_inactive_setting_counts_when_enabled_in_same_change() -> None:
+    old = base()
+    new = changed(changed(old, "mesh.surface.feature_refinement_level", 5),
+                  "mesh.surface.extract_features", True)
+
+    plan = plan_change(old, new)
+
+    assert plan.inactive_paths == frozenset()
+    assert Op.EXTRACT_FEATURES in plan.operations
+    assert "mesh.surface.feature_refinement_level" in plan.reasons[Op.GENERATE_SNAPPY_DICT]

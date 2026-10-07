@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, replace
 from typing import Any
 
 from core.config.manager import ChangeSet
@@ -8,6 +9,14 @@ from core.config.models import ProjectConfig
 from core.workflow.dependency_graph import DependencyGraph, PipelineOperation
 
 INITIAL_BUILD = "<initial>"
+
+# Settings that only reach a generated file while another setting enables
+# them. While inactive in the new configuration, changing them is ignored.
+# (If the enabling setting changes too, that change covers the work.)
+ACTIVE_WHEN: Mapping[str, Callable[[ProjectConfig], bool]] = {
+    "mesh.surface.feature_refinement_level": lambda c: c.mesh.surface.extract_features,
+    "mesh.layers.number_of_layers": lambda c: c.mesh.layers.enabled,
+}
 
 
 @dataclass(frozen=True)
@@ -19,12 +28,14 @@ class ExecutionPlan:
     reasons: changed configuration paths behind each planned/skipped operation.
     unmapped_paths: changed paths with no dependency rule; these were
         treated conservatively as invalidating everything.
+    inactive_paths: changed settings ignored because they are inactive.
     """
 
     operations: tuple[PipelineOperation, ...]
     skipped: tuple[PipelineOperation, ...]
     reasons: dict[PipelineOperation, frozenset[str]]
     unmapped_paths: frozenset[str] = frozenset()
+    inactive_paths: frozenset[str] = frozenset()
 
     @property
     def is_empty(self) -> bool:
@@ -36,6 +47,7 @@ class ExecutionPlan:
             "skipped": [op.value for op in self.skipped],
             "reasons": {op.value: sorted(paths) for op, paths in self.reasons.items()},
             "unmapped_paths": sorted(self.unmapped_paths),
+            "inactive_paths": sorted(self.inactive_paths),
         }
 
 
@@ -49,8 +61,14 @@ class ExecutionPlanner:
         config is the new configuration; it decides which stale operations
         actually apply (conditional operations).
         """
-        return self._build(self.graph.stale_by_path(changes.changed_paths), config,
-                           self.graph.unmapped(changes.changed_paths))
+        inactive = frozenset(
+            path for path in changes.changed_paths
+            if path in ACTIVE_WHEN and not ACTIVE_WHEN[path](config)
+        )
+        active = changes.changed_paths - inactive
+        plan = self._build(self.graph.stale_by_path(active), config,
+                           self.graph.unmapped(active))
+        return replace(plan, inactive_paths=inactive)
 
     def plan_full(self, config: ProjectConfig) -> ExecutionPlan:
         """Plan for a project with no previous state: every applicable operation."""

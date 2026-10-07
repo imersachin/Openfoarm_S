@@ -83,6 +83,21 @@ class Issue:
             "details": dict(self.details),
         }
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Issue:
+        return cls(
+            category=IssueCategory(data["category"]),
+            severity=IssueSeverity(data["severity"]),
+            stage=IssueStage(data["stage"]),
+            code=data["code"],
+            message=data["message"],
+            explanation=data.get("explanation", ""),
+            suggested_action=data.get("suggested_action", ""),
+            artifact_reference=data.get("artifact_reference"),
+            log_reference=data.get("log_reference"),
+            details=dict(data.get("details", {})),
+        )
+
 
 def has_stopping_issue(issues: Iterable[Issue]) -> bool:
     """True when any issue is ERROR or BLOCKING and downstream work must not start."""

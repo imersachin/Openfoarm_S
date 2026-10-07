@@ -10,6 +10,10 @@ import trimesh
 
 from core.config.models import GeometryConfig
 
+# Bump whenever transformation or STL-writing behaviour changes output for the
+# same input: cached geometry artifacts are keyed on it.
+ARTIFACT_FORMAT_VERSION = 1
+
 TRANSFORMATION_ORDER = ("unit_conversion", "scale", "rotation", "translation")
 ROTATION_CONVENTION = "extrinsic fixed global axes, X then Y then Z (R = Rz @ Ry @ Rx)"
 PIVOT = (0.0, 0.0, 0.0)

@@ -14,6 +14,13 @@ from pathlib import Path
 from typing import TextIO
 
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage
+from openfoam.commands import (
+    MeshingStep,
+    block_mesh_step,
+    check_mesh_step,
+    feature_extraction_step,
+    snappy_step,
+)
 
 
 class RunStatus(StrEnum):
@@ -255,46 +262,37 @@ class OpenFOAMRunner:
         env: Mapping[str, str] | None = None,
         cancel_event: asyncio.Event | None = None,
     ) -> list[CommandResult]:
-        commands: list[tuple[Sequence[str], str, IssueStage]] = [
-            (("blockMesh", "-case", str(case_root)), "01_blockMesh.log", IssueStage.BLOCK_MESH),
-        ]
-
+        steps = [block_mesh_step(case_root)]
         if extract_features_argv:
-            commands.append((
-                extract_features_argv,
-                "02_surfaceFeatureExtract.log",
-                IssueStage.FEATURE_EXTRACTION,
-            ))
-
-        commands.extend([
-            (
-                ("snappyHexMesh", "-case", str(case_root), "-overwrite"),
-                "03_snappyHexMesh.log",
-                IssueStage.SNAPPY_HEX_MESH,
-            ),
-            (
-                (
-                    "checkMesh", "-case", str(case_root),
-                    "-allGeometry", "-allTopology",
-                    "-meshQuality",
-                ),
-                "04_checkMesh.log",
-                IssueStage.CHECK_MESH,
-            ),
-        ])
+            steps.append(feature_extraction_step(extract_features_argv))
+        steps.extend([snappy_step(case_root), check_mesh_step(case_root)])
 
         results: list[CommandResult] = []
-        for argv, log_name, stage in commands:
-            result = await self.run(
-                argv,
-                case_root=case_root,
-                log_name=log_name,
-                stage=stage,
-                timeout_seconds=timeout_seconds,
-                env=env,
-                cancel_event=cancel_event,
+        for step in steps:
+            result = await self.run_step(
+                step, case_root=case_root, timeout_seconds=timeout_seconds,
+                env=env, cancel_event=cancel_event,
             )
             results.append(result)
             if not result.succeeded:
                 break
         return results
+
+    async def run_step(
+        self,
+        step: MeshingStep,
+        *,
+        case_root: Path,
+        timeout_seconds: float | None = None,
+        env: Mapping[str, str] | None = None,
+        cancel_event: asyncio.Event | None = None,
+    ) -> CommandResult:
+        return await self.run(
+            step.argv,
+            case_root=case_root,
+            log_name=step.log_name,
+            stage=step.stage,
+            timeout_seconds=timeout_seconds,
+            env=env,
+            cancel_event=cancel_event,
+        )
