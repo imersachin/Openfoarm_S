@@ -56,13 +56,30 @@ def _digest(*paths: Path) -> str:
     return digest.hexdigest()
 
 
+_ABNORMAL = {
+    RunStatus.TIMEOUT: (IssueCategory.TIMEOUT_CANCELLATION, "COMMAND_TIMEOUT"),
+    RunStatus.CANCELLED: (IssueCategory.TIMEOUT_CANCELLATION, "COMMAND_CANCELLED"),
+}
+
+
 class FakeOpenFOAMRunner(OpenFOAMRunner):
-    def __init__(self, *, fail: str | None = None, no_output: tuple[str, ...] = ()) -> None:
+    """fail: command that exits non-zero. outcome: {command: TIMEOUT|CANCELLED}.
+    cancel_after: (command, event) sets the event when that command finishes,
+    simulating a user cancelling while the run continues. A set cancel_event
+    makes the running command end CANCELLED."""
+
+    def __init__(
+        self, *, fail: str | None = None, no_output: tuple[str, ...] = (),
+        outcome: Mapping[str, RunStatus] | None = None,
+        cancel_after: tuple[str, asyncio.Event] | None = None,
+    ) -> None:
         super().__init__()
         self.calls: list[str] = []
         self.argv: list[tuple[str, ...]] = []
         self.fail = fail
         self.no_output = no_output
+        self.outcome = dict(outcome or {})
+        self.cancel_after = cancel_after
 
     async def run(
         self,
@@ -93,6 +110,20 @@ class FakeOpenFOAMRunner(OpenFOAMRunner):
                 log_reference=str(log),
             ))
 
+        status = self.outcome.get(name)
+        if status is None and cancel_event is not None and cancel_event.is_set():
+            status = RunStatus.CANCELLED
+        if status is not None:
+            category, code = _ABNORMAL[status]
+            log.write_text(f"{name} interrupted\n", encoding="utf-8")
+            return self._result(argv, case_root, log, status, None, Issue(
+                category=category, severity=IssueSeverity.ERROR, stage=stage,
+                code=code, message=f"{name} {status.value.lower()}.", log_reference=str(log),
+            ))
+
+        if self.cancel_after is not None and self.cancel_after[0] == name:
+            self.cancel_after[1].set()
+
         if name not in self.no_output:
             if name == "blockMesh":
                 poly.mkdir(parents=True, exist_ok=True)
@@ -121,7 +152,7 @@ class FakeOpenFOAMRunner(OpenFOAMRunner):
     @staticmethod
     def _result(
         argv: Sequence[str], case_root: Path, log: Path, status: RunStatus,
-        return_code: int, *issues: Issue,
+        return_code: int | None, *issues: Issue,
     ) -> CommandResult:
         return CommandResult(
             run_id="fake", argv=tuple(argv), working_directory=str(case_root),

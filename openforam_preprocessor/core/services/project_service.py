@@ -24,6 +24,7 @@ from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage
 from core.workflow.dependency_graph import DependencyGraph
 from core.workflow.pipeline import GEOMETRY_REPORT, PREFLIGHT_REPORT, MeshPipeline, PipelineResult
 from core.workflow.planner import ExecutionPlan, ExecutionPlanner
+from core.workflow.run_records import list_run_records
 from mesh.estimator import ResourceAssessment
 from mesh.generator import OpenFOAMMeshCaseGenerator
 
@@ -210,6 +211,10 @@ class ProjectService:
             "preflight": self._read_json(PREFLIGHT_REPORT),
             "mesh_quality": self._read_json(MESH_REPORT),
         }
+
+    def runs(self) -> list[dict[str, Any]]:
+        """Persistent run records, newest first."""
+        return list_run_records(self.root)
 
     def logs(self) -> list[LogFile]:
         directory = self.root / "logs"

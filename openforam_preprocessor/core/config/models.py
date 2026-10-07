@@ -6,6 +6,8 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from core.version import CONFIG_SCHEMA_VERSION
+
 PositiveFloat = Annotated[float, Field(gt=0)]
 NonNegativeFloat = Annotated[float, Field(ge=0)]
 PositiveInt = Annotated[int, Field(gt=0)]
@@ -212,7 +214,7 @@ class MeshConfig(BaseModel):
 class ProjectConfig(BaseModel):
     model_config = ConfigDict(frozen=True, allow_inf_nan=False)
 
-    schema_version: int = 1
+    schema_version: int = CONFIG_SCHEMA_VERSION
     project_name: str = Field(
         min_length=1,
         max_length=80,
@@ -221,3 +223,22 @@ class ProjectConfig(BaseModel):
     openfoam_profile: OpenFOAMProfile = OpenFOAMProfile.OPENCFD
     geometry: GeometryConfig
     mesh: MeshConfig
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_schema(cls, data: Any) -> Any:
+        """Upgrade older files to the current schema; refuse newer ones.
+
+        Version 1 -> 2: snappy_quality is inherited from quality (see
+        MeshConfig). Required source_units cannot be migrated, because units
+        must never be assumed; validation reports it instead.
+        """
+        if not isinstance(data, dict):
+            return data
+        version = data.get("schema_version", 1)
+        if isinstance(version, int) and version > CONFIG_SCHEMA_VERSION:
+            raise ValueError(
+                f"schema_version {version} was written by a newer version of this "
+                f"application (supported: {CONFIG_SCHEMA_VERSION}); upgrade the application."
+            )
+        return {**data, "schema_version": CONFIG_SCHEMA_VERSION}

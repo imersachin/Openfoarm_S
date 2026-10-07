@@ -4,14 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openfoam-preprocessor"
-version = "0.1.0"
+version = "0.1.0"  # keep in sync with core/version.py (tested)
 description = "Deterministic OpenFOAM preprocessing and mesh validation"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "pydantic>=2.10,<3",
   "numpy>=2.0,<3",
-  "scipy>=1.14,<2",
-  "polars>=1.20,<2",
+  "scipy>=1.14,<2",  # trimesh connected components
   "trimesh>=4.6,<5",
   "psutil>=6.0,<8",  # available RAM for resource preflight
   "streamlit>=1.42,<2",
@@ -25,9 +25,15 @@ dev = [
   "mypy>=1.14,<2",
 ]
 
+[tool.hatch.build.targets.wheel]
+packages = ["app", "core", "geometry", "mesh", "openfoam", "visualization"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+  "openfoam: needs a real, sourced OpenFOAM installation (skipped otherwise)",
+]
 
 [tool.ruff]
 line-length = 100
@@ -35,3 +41,10 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+packages =["app", "core", "geometry", "mesh", "openfoam", "visualization"]
+
+[[tool.mypy.overrides]]
+module = ["trimesh.*", "plotly.*", "psutil.*", "scipy.*"]
+ignore_missing_imports = true

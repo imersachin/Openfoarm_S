@@ -342,6 +342,31 @@ with tabs["Results"]:
             st.plotly_chart(view.figure, use_container_width=True)
 
 with tabs["Logs"]:
+    runs = service.runs()
+    st.subheader("Run history")
+    if not runs:
+        st.info("No runs yet.")
+    else:
+        st.dataframe(
+            [
+                {
+                    "started (UTC)": run.get("started_at", "")[:19].replace("T", " "),
+                    "action": run.get("kind"),
+                    "result": "succeeded" if run.get("succeeded") else "failed",
+                    "seconds": round(float(run.get("duration_seconds", 0.0)), 1),
+                    "ran": len(run.get("executed", [])),
+                    "reused": len(run.get("reused", [])),
+                    "OpenFOAM": (run.get("environment") or {}).get("WM_PROJECT_VERSION"),
+                    "message": run.get("message"),
+                }
+                for run in runs
+            ],
+            hide_index=True,
+        )
+        with st.expander("Latest run record"):
+            st.json(runs[0])
+
+    st.subheader("Command logs")
     logs = service.logs()
     if not logs:
         st.info("No logs yet.")

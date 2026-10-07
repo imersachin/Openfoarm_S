@@ -552,6 +552,25 @@ CANCELLED
 
 Raw process output remains available for diagnosis.
 
+Reliability (M9): `core/workflow/run_lock.py`, `core/workflow/run_records.py`,
+`core/version.py`.
+
+- Run lock: `prepare_case` and `generate_mesh` hold
+  `.preprocessor/run.lock`; a second run on the same case is refused with
+  `RUN_IN_PROGRESS`. A lock left by a dead process on the same host is
+  replaced; a lock from another host is never assumed stale.
+- Cancellation: `generate_mesh(cancel_event=...)` stops the running command
+  and starts no further step (`RUN_CANCELLED`). Records of interrupted steps
+  were removed before they started, so nothing partial is reused.
+- Run records: every run writes `.preprocessor/runs/<time>_<id>.json` with the
+  app and schema versions, configuration hash, OpenFOAM identity, each
+  command's argv/status/exit code/duration/log paths, executed vs reused
+  steps, issues and outcome (the newest 100 are kept). Unexpected exceptions
+  still leave a record and release the lock.
+- Versions: `APP_VERSION` (matches `pyproject.toml`, tested) and
+  `CONFIG_SCHEMA_VERSION` = 2. Older project files are migrated on load
+  (units are never filled in); files from a newer application are rejected.
+
 ---
 
 ## 15. Issue Model
