@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -16,6 +16,12 @@ from core.workflow.dependency_graph import PipelineOperation
 from geometry.importer import import_stl
 from geometry.transformer import ARTIFACT_FORMAT_VERSION, GeometryTransform, write_stl_artifact
 from geometry.validator import GeometryReport, TrimeshGeometryValidator
+from mesh.estimator import (
+    ResourceAssessment,
+    ResourceEstimator,
+    ResourceStatus,
+    SystemResources,
+)
 from mesh.generator import FEATURE_DICT, OpenFOAMMeshCaseGenerator
 from mesh.parser import CheckMeshParser
 from mesh.validator import MeshQualityValidator
@@ -28,12 +34,13 @@ from openfoam.commands import (
     feature_extraction_step,
     snappy_step,
 )
-from openfoam.environment import tool_identity
+from openfoam.environment import tool_identity, validate_environment
 from openfoam.runner import CommandResult, OpenFOAMRunner
 
 Op = PipelineOperation
 
 GEOMETRY_REPORT = "reports/geometry_report.json"
+PREFLIGHT_REPORT = "reports/resource_preflight.json"
 POLY_MESH = "constant/polyMesh"
 # checkMesh may write problem face/point sets here; they are diagnostics, not
 # part of the mesh, so they never make the mesh look changed.
@@ -56,6 +63,8 @@ class MeshPipeline:
         self,
         runner: OpenFOAMRunner | None = None,
         environment: Mapping[str, str] | None = None,
+        estimator: ResourceEstimator | None = None,
+        system_probe: Callable[[Path], SystemResources] | None = None,
     ) -> None:
         self.geometry_validator = TrimeshGeometryValidator()
         self.case_generator = OpenFOAMMeshCaseGenerator()
@@ -64,6 +73,9 @@ class MeshPipeline:
         self.mesh_validator = MeshQualityValidator()
         # None: use the process environment at run time.
         self.environment = environment
+        self.estimator = estimator or ResourceEstimator()
+        # Measures RAM/disk/CPU of this machine at run time; injectable for tests.
+        self.system_probe = system_probe or SystemResources.detect
 
     def _env(self) -> Mapping[str, str]:
         return self.environment if self.environment is not None else os.environ
@@ -188,6 +200,31 @@ class MeshPipeline:
     async def _run(self, step: MeshingStep, root: Path) -> CommandResult:
         return await self.runner.run_step(step, case_root=root, env=self.environment)
 
+    def preflight(
+        self, root: Path, config: ProjectConfig
+    ) -> tuple[ResourceAssessment, tuple[Issue, ...]]:
+        """Heuristic resource check before expensive meshing; writes a report."""
+        extra: list[Issue] = []
+        surface_area = 0.0
+        try:
+            report = json.loads((root / GEOMETRY_REPORT).read_text(encoding="utf-8"))
+            surface_area = float(report["artifact"]["surface_area"])
+        except (OSError, ValueError, KeyError, TypeError):
+            extra.append(Issue(
+                category=IssueCategory.RESOURCE_RISK,
+                severity=IssueSeverity.WARNING,
+                stage=IssueStage.RESOURCE_PREFLIGHT,
+                code="SURFACE_AREA_UNKNOWN",
+                message="Geometry surface area is unavailable; surface refinement cost was "
+                "not included in the estimate.",
+                suggested_action="Re-run geometry preparation.",
+            ))
+        assessment = self.estimator.assess(config, surface_area, self.system_probe(root))
+        path = root / PREFLIGHT_REPORT
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(assessment.as_dict(), indent=2) + "\n", encoding="utf-8")
+        return assessment, (*extra, *assessment.issues)
+
     async def generate_mesh(
         self,
         root: Path,
@@ -195,8 +232,14 @@ class MeshPipeline:
         feature_command: tuple[str, ...] | None = None,
         *,
         force: bool = False,
+        allow_high_resource_risk: bool = False,
     ) -> PipelineResult:
         """Run only the meshing steps whose verified artifacts are not reusable.
+
+        Before any OpenFOAM command runs, the environment is checked for the
+        steps that may run, and a resource preflight runs if meshing may run.
+        BLOCKED always stops; HIGH RESOURCE RISK stops unless
+        allow_high_resource_risk is True.
 
         feature_command overrides the profile's feature-extraction command.
         force=True ignores every cached artifact.
@@ -232,6 +275,7 @@ class MeshPipeline:
         store = ArtifactStore(root)
         executed = list(prepared.executed)
         reused = list(prepared.reused)
+        notes: list[Issue] = []  # non-stopping environment/preflight findings
         patch = config.geometry.patch_name
         stl = root / "constant" / "triSurface" / f"{patch}.stl"
         emesh = root / "constant" / "triSurface" / f"{patch}.eMesh"
@@ -242,7 +286,7 @@ class MeshPipeline:
                 mesh_report_path=None,
                 succeeded=False,
                 message=message,
-                issues=(*prepared.issues, *issues),
+                issues=(*prepared.issues, *notes, *issues),
                 executed=tuple(executed),
                 reused=tuple(reused),
             )
@@ -259,41 +303,99 @@ class MeshPipeline:
                 log_reference=str(root / "logs" / log),
             )
 
+        def mesh_inputs() -> dict[str, str]:
+            files = [
+                root / "system/controlDict", root / "system/blockMeshDict",
+                root / "system/snappyHexMeshDict", root / "system/meshQualityDict", stl,
+            ]
+            if requires_features:
+                files.append(emesh)
+            return {
+                **hash_files(root, files),
+                "tool": self._tool(config, "blockMesh", "snappyHexMesh"),
+            }
+
+        def check_inputs() -> dict[str, str]:
+            mesh_files = files_under(root / POLY_MESH, exclude_dirs=_MESH_EXCLUDED_DIRS)
+            return {**hash_files(root, mesh_files), "tool": self._tool(config, "checkMesh")}
+
+        # Decide up front which steps may run (cached steps verify first).
+        feature_step = feature_extraction_step(feature_command) if feature_command else None
+        feature_inputs: dict[str, str] = {}
+        features_run = False
+        if requires_features:
+            assert feature_step is not None
+            feature_inputs = {
+                **hash_files(root, [root / FEATURE_DICT, root / "system/controlDict", stl]),
+                "tool": self._tool(config, feature_step.argv[0]),
+            }
+            features_run = force or not store.check(Op.EXTRACT_FEATURES, feature_inputs).reusable
+        mesh_may_run = (
+            force or features_run or not store.check(Op.GENERATE_MESH, mesh_inputs()).reusable
+        )
+        check_may_run = mesh_may_run or not store.check(Op.CHECK_MESH, check_inputs()).reusable
+
+        # Environment check for every executable that may run.
+        executables = [
+            *([feature_step.argv[0]] if features_run and feature_step else []),
+            *(["blockMesh", "snappyHexMesh"] if mesh_may_run else []),
+            *(["checkMesh"] if check_may_run else []),
+        ]
+        if executables:
+            environment_issues = validate_environment(
+                config.openfoam_profile, executables, self._env()
+            )
+            if has_stopping_issue(environment_issues):
+                return failed("The OpenFOAM environment is not usable; nothing was run.",
+                              *environment_issues)
+            notes.extend(environment_issues)
+
+        # Resource preflight before expensive meshing.
+        if mesh_may_run:
+            assessment, preflight_issues = self.preflight(root, config)
+            if assessment.status is ResourceStatus.BLOCKED:
+                return failed("Resource preflight BLOCKED meshing.", *preflight_issues)
+            if (assessment.status is ResourceStatus.HIGH_RESOURCE_RISK
+                    and not allow_high_resource_risk):
+                return failed(
+                    "Resource preflight reported HIGH RESOURCE RISK; meshing was not started.",
+                    *preflight_issues,
+                    Issue(
+                        category=IssueCategory.RESOURCE_RISK,
+                        severity=IssueSeverity.BLOCKING,
+                        stage=IssueStage.RESOURCE_PREFLIGHT,
+                        code="HIGH_RESOURCE_RISK_NOT_ACKNOWLEDGED",
+                        message="Meshing needs explicit acknowledgement of the high "
+                        "resource risk.",
+                        suggested_action="Reduce the mesh settings, or re-run with "
+                        "allow_high_resource_risk=True to proceed anyway.",
+                    ),
+                )
+            notes.extend(preflight_issues)
+
         # 1. Feature extraction (conditional).
         if requires_features:
-            assert feature_command is not None
-            step = feature_extraction_step(feature_command)
-            inputs = {
-                **hash_files(root, [root / FEATURE_DICT, root / "system/controlDict", stl]),
-                "tool": self._tool(config, step.argv[0]),
-            }
-            if not force and store.check(Op.EXTRACT_FEATURES, inputs).reusable:
+            assert feature_step is not None
+            if not features_run:
                 reused.append(Op.EXTRACT_FEATURES)
             else:
                 store.invalidate(Op.EXTRACT_FEATURES)
                 executed.append(Op.EXTRACT_FEATURES)
-                result = await self._run(step, root)
+                result = await self._run(feature_step, root)
                 if not result.succeeded:
                     return failed("Feature extraction failed. Review logs/.", *result.issues)
                 if not emesh.is_file():
                     return failed("Feature extraction produced no .eMesh.", missing_output(
-                        "FEATURE_OUTPUT_MISSING", step.stage, f"{emesh.name}", step.log_name
+                        "FEATURE_OUTPUT_MISSING", feature_step.stage, f"{emesh.name}",
+                        feature_step.log_name,
                     ))
-                store.record(Op.EXTRACT_FEATURES, inputs, [emesh])
+                store.record(Op.EXTRACT_FEATURES, feature_inputs, [emesh])
 
         # 2. Background mesh + snappyHexMesh as one unit: snappy -overwrite
-        #    replaces the background mesh in place.
-        mesh_inputs_files = [
-            root / "system/controlDict", root / "system/blockMeshDict",
-            root / "system/snappyHexMeshDict", root / "system/meshQualityDict", stl,
-        ]
-        if requires_features:
-            mesh_inputs_files.append(emesh)
-        mesh_inputs = {
-            **hash_files(root, mesh_inputs_files),
-            "tool": self._tool(config, "blockMesh", "snappyHexMesh"),
-        }
-        if not force and store.check(Op.GENERATE_MESH, mesh_inputs).reusable:
+        #    replaces the background mesh in place. Re-verify here: feature
+        #    extraction output is a mesh input.
+        current_mesh_inputs = mesh_inputs()
+        if not force and store.check(Op.GENERATE_MESH, current_mesh_inputs).reusable:
             reused.extend((Op.GENERATE_BACKGROUND_MESH, Op.GENERATE_MESH))
         else:
             store.invalidate(Op.GENERATE_MESH, Op.CHECK_MESH)
@@ -312,15 +414,12 @@ class MeshPipeline:
                     "MESH_OUTPUT_MISSING", IssueStage.SNAPPY_HEX_MESH, "polyMesh files",
                     snappy_step(root).log_name,
                 ))
-            store.record(Op.GENERATE_MESH, mesh_inputs, mesh_files)
+            store.record(Op.GENERATE_MESH, current_mesh_inputs, mesh_files)
 
         # 3. checkMesh on the current mesh files.
         log = root / "logs" / CHECK_MESH_LOG
-        check_inputs = {
-            **hash_files(root, files_under(root / POLY_MESH, exclude_dirs=_MESH_EXCLUDED_DIRS)),
-            "tool": self._tool(config, "checkMesh"),
-        }
-        if not force and store.check(Op.CHECK_MESH, check_inputs).reusable:
+        current_check_inputs = check_inputs()
+        if not force and store.check(Op.CHECK_MESH, current_check_inputs).reusable:
             reused.append(Op.CHECK_MESH)
         else:
             store.invalidate(Op.CHECK_MESH)
@@ -328,7 +427,7 @@ class MeshPipeline:
             result = await self._run(check_mesh_step(root), root)
             if not result.succeeded:
                 return failed("checkMesh failed. Review logs/.", *result.issues)
-            store.record(Op.CHECK_MESH, check_inputs, [log])
+            store.record(Op.CHECK_MESH, current_check_inputs, [log])
 
         # 4. Validation against acceptance limits: cheap, always re-run.
         executed.append(Op.VALIDATE_MESH)
@@ -346,7 +445,7 @@ class MeshPipeline:
             mesh_report_path=mesh_report_path,
             succeeded=report.status != "failed",
             message=f"Mesh validation completed with status: {report.status}.",
-            issues=(*prepared.issues, *report.issues),
+            issues=(*prepared.issues, *notes, *report.issues),
             executed=tuple(executed),
             reused=tuple(reused),
         )
@@ -358,5 +457,9 @@ class MeshPipeline:
         feature_command: tuple[str, ...] | None = None,
         *,
         force: bool = False,
+        allow_high_resource_risk: bool = False,
     ) -> PipelineResult:
-        return asyncio.run(self.generate_mesh(root, config, feature_command, force=force))
+        return asyncio.run(self.generate_mesh(
+            root, config, feature_command, force=force,
+            allow_high_resource_risk=allow_high_resource_risk,
+        ))

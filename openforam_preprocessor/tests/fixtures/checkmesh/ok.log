@@ -1,0 +1,58 @@
+Create time
+
+Create polyMesh for time = 0
+
+Time = 0
+
+Mesh stats
+    points:           1782
+    faces:            4580
+    internal faces:   2620
+    cells:            700
+    faces per cell:   6.28571
+    boundary patches: 3
+    point zones:      0
+    face zones:       0
+    cell zones:       0
+
+Overall number of cells of each type:
+    hexahedra:     700
+    prisms:        0
+    wedges:        0
+    pyramids:      0
+    tet wedges:    0
+    tetrahedra:    0
+    polyhedra:     0
+
+Checking topology...
+    Boundary definition OK.
+    Cell to face addressing OK.
+    Point usage OK.
+    Upper triangular ordering OK.
+    Face vertices OK.
+    Number of regions: 1 (OK).
+
+Checking patch topology for multiply connected surfaces...
+    Patch               Faces    Points   Surface topology
+    inlet               100      121      ok (non-closed singly connected)
+    outlet              100      121      ok (non-closed singly connected)
+    part                1760     1802     ok (closed singly connected)
+
+Checking geometry...
+    Overall domain bounding box (-2 -2 -2) (2 2 2)
+    Mesh has 3 geometric (non-empty/wedge) directions (1 1 1)
+    Mesh has 3 solution (non-empty) directions (1 1 1)
+    Boundary openness (1.2e-17 0 0) OK.
+    Max cell openness = 1.3e-16 OK.
+    Max aspect ratio = 3.2 OK.
+    Minimum face area = 0.0001. Maximum face area = 0.25.  Face area magnitudes OK.
+    Min volume = 1.5e-06. Max volume = 0.125.  Total volume = 63.4.  Cell volumes OK.
+    Mesh non-orthogonality Max: 42.7 average: 6.1
+    Non-orthogonality check OK.
+    Face pyramids OK.
+    Max skewness = 1.85 OK.
+    Coupled point location match (average 0) OK.
+
+Mesh OK.
+
+End

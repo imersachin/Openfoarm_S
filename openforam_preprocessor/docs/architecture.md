@@ -356,6 +356,25 @@ The estimator is heuristic.
 It must not claim exact runtime or exact memory consumption unless an
 authoritative calculation is actually available.
 
+Implementation (M6): `mesh/estimator.py`, gated in `core/workflow/pipeline.py`.
+
+- Cells: background (effective blockMesh cells) + surface band at the maximum
+  surface level (from the transformed geometry's surface area) + feature band
+  when feature refinement is finer than surface refinement + boundary layers.
+- RAM/disk estimates = cells × configurable bytes-per-cell coefficients,
+  compared with *available* RAM (psutil) and free disk in the case directory.
+  Fractions above 0.5 / 0.8 / 1.0 of available give WARNING / HIGH RESOURCE
+  RISK / BLOCKED (configurable `ResourceThresholds`). Unknown resources are a
+  WARNING, never a guess. Exceeding `max_global_cells` or a large serial run
+  is a WARNING.
+- The preflight runs only when meshing will actually run (not for verified
+  cached meshes) and writes `reports/resource_preflight.json` with a
+  disclaimer. BLOCKED always stops; HIGH RESOURCE RISK stops unless the caller
+  passes `allow_high_resource_risk=True`.
+- Before any OpenFOAM command, the environment check reports every missing
+  executable at once (BLOCKING) and warns when `WM_PROJECT_VERSION` does not
+  match the profile's release naming.
+
 ---
 
 ## 11. Dependency Model
@@ -608,6 +627,18 @@ CFD Accuracy
 ```
 
 A valid or high-quality mesh does not prove CFD accuracy.
+
+Implementation (M6): `mesh/parser.py` and `mesh/validator.py`.
+
+- Parsed: points, faces, cells, boundary patches (name/faces/points), max and
+  average non-orthogonality, severely non-orthogonal face count, max skewness,
+  max aspect ratio, min/max cell volume, zero/negative volume cells, failed
+  check count and `***` messages, `*` warnings, overall status, and whether the
+  output was recognized at all. Missing values stay `None`.
+- `mesh_quality_report.json` contains separate `mesh_validity`
+  (VALID / INVALID / UNKNOWN, from checkMesh), `mesh_quality` (WITHIN_LIMITS /
+  REVIEW / NOT_EVALUATED, against `mesh.quality`), and `simulation_suitability`
+  and `cfd_accuracy`, which are always `NOT_ASSESSED`, with an explanatory note.
 
 ---
 

@@ -8,7 +8,35 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage
+from core.workflow.pipeline import MeshPipeline
+from mesh.estimator import SystemResources
 from openfoam.runner import CommandResult, OpenFOAMRunner, RunStatus
+
+FAKE_TOOLS = ("blockMesh", "snappyHexMesh", "checkMesh", "surfaceFeatureExtract")
+PLENTY = SystemResources(available_ram_bytes=64 * 10**9, available_disk_bytes=10**12,
+                         cpu_count=8)
+
+
+def openfoam_env(
+    directory: Path, version: str = "v2312", tools: Sequence[str] = FAKE_TOOLS
+) -> dict[str, str]:
+    """A PATH with placeholder OpenFOAM executables, so environment checks pass."""
+    bin_dir = directory / "fake-openfoam-bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    for name in tools:
+        for file_name in (name, f"{name}.bat"):  # POSIX and Windows lookup
+            path = bin_dir / file_name
+            path.write_text("exit 0\n", encoding="utf-8")
+            path.chmod(0o755)
+    return {"PATH": str(bin_dir), "WM_PROJECT": "OpenFOAM", "WM_PROJECT_VERSION": version}
+
+
+def fake_pipeline(
+    runner: OpenFOAMRunner, env: Mapping[str, str], resources: SystemResources = PLENTY,
+    **kwargs: object,
+) -> MeshPipeline:
+    return MeshPipeline(runner, environment=env, system_probe=lambda _: resources,
+                        **kwargs)  # type: ignore[arg-type]
 
 CHECKMESH_OK = """\
 Mesh stats

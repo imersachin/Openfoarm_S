@@ -1,0 +1,41 @@
+Mesh stats
+    points:           52310
+    faces:            149820
+    internal faces:   141200
+    cells:            48900
+    faces per cell:   5.95
+    boundary patches: 7
+    point zones:      0
+    face zones:       0
+    cell zones:       0
+
+Checking topology...
+    Boundary definition OK.
+    Cell to face addressing OK.
+    Point usage OK.
+    Upper triangular ordering OK.
+    Face vertices OK.
+    Number of regions: 1 (OK).
+
+Checking geometry...
+    Overall domain bounding box (-2 -2 -2) (2 2 2)
+    Mesh has 3 geometric (non-empty/wedge) directions (1 1 1)
+    Mesh has 3 solution (non-empty) directions (1 1 1)
+    Boundary openness (1.1e-17 -2e-17 0) OK.
+    Max cell openness = 2.1e-16 OK.
+    Max aspect ratio = 18.4 OK.
+    Minimum face area = 1.2e-07. Maximum face area = 0.25.  Face area magnitudes OK.
+    Min volume = 2.3e-10. Max volume = 0.125.  Total volume = 63.1.  Cell volumes OK.
+    Mesh non-orthogonality Max: 78.6 average: 9.4
+   *Number of severely non-orthogonal (> 70 degrees) faces: 15.
+    Non-orthogonality check OK.
+  <<Writing 15 non-orthogonal faces to set nonOrthoFaces
+ ***Error in face pyramids: 4 faces are incorrectly oriented.
+  <<Writing 4 faces with incorrect orientation to set wrongOrientedFaces
+ ***Max skewness = 6.12, 9 highly skew faces detected which may impair the quality of the results
+  <<Writing 9 skew faces to set skewFaces
+    Coupled point location match (average 0) OK.
+
+Failed 2 mesh checks.
+
+End

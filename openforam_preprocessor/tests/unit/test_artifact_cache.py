@@ -13,9 +13,9 @@ from core.artifacts import MANIFEST_PATH
 from core.config.manager import ConfigurationManager
 from core.config.models import ProjectConfig
 from core.workflow.dependency_graph import DependencyGraph, PipelineOperation
-from core.workflow.pipeline import MeshPipeline, PipelineResult
+from core.workflow.pipeline import PipelineResult
 from core.workflow.planner import ExecutionPlanner
-from tests.fakes import FakeOpenFOAMRunner
+from tests.fakes import FakeOpenFOAMRunner, fake_pipeline, openfoam_env
 from tests.helpers import build_config
 
 Op = PipelineOperation
@@ -41,19 +41,18 @@ def changed(config: ProjectConfig, path: str, value: Any) -> ProjectConfig:
 class Harness:
     def __init__(self, tmp_path: Path, version: str = "v2312") -> None:
         self.case = tmp_path / "case"
-        self.no_bin = tmp_path / "no-bin"
+        self.tmp_path = tmp_path
         self.version = version
+
+    def env(self, version: str | None = None) -> dict[str, str]:
+        return openfoam_env(self.tmp_path, version or self.version)
 
     def run(
         self, config: ProjectConfig, *, version: str | None = None, force: bool = False,
         runner: FakeOpenFOAMRunner | None = None,
     ) -> tuple[PipelineResult, FakeOpenFOAMRunner]:
         runner = runner or FakeOpenFOAMRunner()
-        env = {
-            "PATH": str(self.no_bin), "WM_PROJECT": "OpenFOAM",
-            "WM_PROJECT_VERSION": version or self.version,
-        }
-        pipeline = MeshPipeline(runner, environment=env)
+        pipeline = fake_pipeline(runner, self.env(version))
         result = asyncio.run(pipeline.generate_mesh(self.case, config, force=force))
         assert result.succeeded, result.issues
         return result, runner
@@ -211,7 +210,7 @@ def test_failed_meshing_is_never_reused(harness: Harness, config: ProjectConfig)
     harness.run(config)
     finer = changed(config, "mesh.surface.maximum_level", 4)
     failing = FakeOpenFOAMRunner(fail="snappyHexMesh")
-    pipeline = MeshPipeline(failing, environment={"PATH": str(harness.no_bin)})
+    pipeline = fake_pipeline(failing, harness.env())
     assert not asyncio.run(pipeline.generate_mesh(harness.case, finer)).succeeded
 
     # Back to the original config: its old record was invalidated before the
@@ -236,7 +235,7 @@ def test_feature_extraction_is_cached_and_invalidated(
 
 def test_missing_emesh_after_success_is_an_error(harness: Harness, cube_stl: Path) -> None:
     runner = FakeOpenFOAMRunner(no_output=("surfaceFeatureExtract",))
-    pipeline = MeshPipeline(runner, environment={"PATH": str(harness.no_bin)})
+    pipeline = fake_pipeline(runner, harness.env())
 
     result = asyncio.run(
         pipeline.generate_mesh(harness.case, build_config(cube_stl, extract_features=True))
@@ -251,7 +250,7 @@ def test_missing_mesh_output_after_success_is_an_error(
     harness: Harness, config: ProjectConfig
 ) -> None:
     runner = FakeOpenFOAMRunner(no_output=("blockMesh", "snappyHexMesh"))
-    pipeline = MeshPipeline(runner, environment={"PATH": str(harness.no_bin)})
+    pipeline = fake_pipeline(runner, harness.env())
 
     result = asyncio.run(pipeline.generate_mesh(harness.case, config))
 

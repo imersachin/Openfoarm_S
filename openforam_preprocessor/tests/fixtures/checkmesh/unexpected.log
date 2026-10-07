@@ -1,0 +1,7 @@
+--> FOAM FATAL ERROR:
+    Cannot find file "points" in directory "polyMesh" in times "0" down to constant
+
+    From function virtual Foam::IOobject Foam::fileOperation::findInstance(...)
+    in file global/fileOperations/fileOperation/fileOperation.C at line 1036.
+
+FOAM exiting

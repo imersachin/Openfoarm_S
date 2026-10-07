@@ -1,0 +1,20 @@
+Mesh stats
+    points:           9120
+    faces:            25600
+    internal faces:   23040
+    cells:            8000
+    faces per cell:   6.08
+    boundary patches: 6
+
+Checking geometry...
+    Overall domain bounding box (0 0 0) (1 1 1)
+    Max aspect ratio = 5.1 OK.
+ ***Zero or negative cell volume detected.  Minimum negative volume: -3.4e-09, Number of negative volume cells: 3
+  <<Writing 3 zero volume cells to set zeroVolumeCells
+    Mesh non-orthogonality Max: 55.0 average: 7.2
+    Non-orthogonality check OK.
+    Max skewness = 2.4 OK.
+
+Failed 1 mesh checks.
+
+End

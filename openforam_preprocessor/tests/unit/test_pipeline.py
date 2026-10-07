@@ -6,7 +6,7 @@ from pathlib import Path
 
 from core.issues import IssueCategory
 from core.workflow.pipeline import MeshPipeline
-from tests.fakes import FakeOpenFOAMRunner
+from tests.fakes import FakeOpenFOAMRunner, fake_pipeline, openfoam_env
 from tests.helpers import build_config
 
 
@@ -37,7 +37,9 @@ def test_meshing_sequence_and_checkmesh_report(tmp_path: Path, cube_stl: Path) -
     runner = FakeOpenFOAMRunner()
     case = tmp_path / "case"
 
-    result = asyncio.run(MeshPipeline(runner).generate_mesh(case, build_config(cube_stl)))
+    pipeline = fake_pipeline(runner, openfoam_env(tmp_path))
+
+    result = asyncio.run(pipeline.generate_mesh(case, build_config(cube_stl)))
 
     assert result.succeeded, result.issues
     assert runner.calls == ["blockMesh", "snappyHexMesh", "checkMesh"]
@@ -51,7 +53,7 @@ def test_esi_profile_derives_feature_extraction_command(tmp_path: Path, cube_stl
     case = tmp_path / "case"
     config = build_config(cube_stl, extract_features=True)
 
-    asyncio.run(MeshPipeline(runner).generate_mesh(case, config))
+    asyncio.run(fake_pipeline(runner, openfoam_env(tmp_path)).generate_mesh(case, config))
 
     assert runner.calls == ["surfaceFeatureExtract", "blockMesh", "snappyHexMesh", "checkMesh"]
     assert runner.argv[0] == ("surfaceFeatureExtract", "-case", str(case))
@@ -64,7 +66,9 @@ def test_foundation_profile_with_feature_extraction_is_blocked(
     runner = FakeOpenFOAMRunner()
     config = build_config(cube_stl, profile="openfoam_foundation", extract_features=True)
 
-    result = asyncio.run(MeshPipeline(runner).generate_mesh(tmp_path / "case", config))
+    pipeline = fake_pipeline(runner, openfoam_env(tmp_path))
+
+    result = asyncio.run(pipeline.generate_mesh(tmp_path / "case", config))
 
     assert not result.succeeded
     assert runner.calls == []
@@ -80,7 +84,9 @@ def test_foundation_profile_without_feature_extraction_runs(
     runner = FakeOpenFOAMRunner()
     config = build_config(cube_stl, profile="openfoam_foundation")
 
-    asyncio.run(MeshPipeline(runner).generate_mesh(tmp_path / "case", config))
+    pipeline = fake_pipeline(runner, openfoam_env(tmp_path))
+
+    asyncio.run(pipeline.generate_mesh(tmp_path / "case", config))
 
     assert "surfaceFeatureExtract" not in runner.calls
 
@@ -90,7 +96,7 @@ def test_feature_command_is_not_run_when_extraction_disabled(
 ) -> None:
     runner = FakeOpenFOAMRunner()
 
-    asyncio.run(MeshPipeline(runner).generate_mesh(
+    asyncio.run(fake_pipeline(runner, openfoam_env(tmp_path)).generate_mesh(
         tmp_path / "case", build_config(cube_stl), ("surfaceFeatureExtract",)
     ))
 
@@ -101,7 +107,7 @@ def test_feature_command_override_is_used(tmp_path: Path, cube_stl: Path) -> Non
     runner = FakeOpenFOAMRunner()
     config = build_config(cube_stl, extract_features=True)
 
-    asyncio.run(MeshPipeline(runner).generate_mesh(
+    asyncio.run(fake_pipeline(runner, openfoam_env(tmp_path)).generate_mesh(
         tmp_path / "case", config, ("surfaceFeatureExtract", "-custom")
     ))
 
@@ -111,7 +117,7 @@ def test_feature_command_override_is_used(tmp_path: Path, cube_stl: Path) -> Non
 def test_failed_command_stops_pipeline_with_its_issue(tmp_path: Path, cube_stl: Path) -> None:
     runner = FakeOpenFOAMRunner(fail="snappyHexMesh")
 
-    pipeline = MeshPipeline(runner)
+    pipeline = fake_pipeline(runner, openfoam_env(tmp_path))
 
     result = asyncio.run(pipeline.generate_mesh(tmp_path / "case", build_config(cube_stl)))
 

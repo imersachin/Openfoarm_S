@@ -1,0 +1,18 @@
+Mesh stats
+    points:           3300
+    faces:            9100
+    internal faces:   8300
+    cells:            2900
+    boundary patches: 6
+
+Checking geometry...
+    Max aspect ratio = 4.0 OK.
+    Min volume = 1e-05. Max volume = 0.002.  Total volume = 1.  Cell volumes OK.
+    Mesh non-orthogonality Max: 68.3 average: 8.0
+    Non-orthogonality check OK.
+    Face pyramids OK.
+    Max skewness = 3.1 OK.
+
+Mesh OK.
+
+End
