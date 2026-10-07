@@ -43,19 +43,44 @@ def test_valid_geometry_generates_case_under_system(tmp_path: Path, cube_stl: Pa
     assert (case / "system" / "controlDict").is_file()
 
 
-def test_required_feature_extraction_without_command_blocks_meshing(
+def test_esi_profile_derives_feature_extraction_command(tmp_path: Path, cube_stl: Path) -> None:
+    runner = RecordingRunner()
+    case = tmp_path / "case"
+    config = build_config(cube_stl, extract_features=True)
+
+    asyncio.run(MeshPipeline(runner).generate_mesh(case, config))
+
+    assert runner.calls[0]["extract_features_argv"] == (  # type: ignore[index]
+        "surfaceFeatureExtract", "-case", str(case),
+    )
+    assert (case / "system" / "surfaceFeatureExtractDict").is_file()
+
+
+def test_foundation_profile_with_feature_extraction_is_blocked(
     tmp_path: Path, cube_stl: Path
 ) -> None:
     runner = RecordingRunner()
-    config = build_config(cube_stl, extract_features=True)
+    config = build_config(cube_stl, profile="openfoam_foundation", extract_features=True)
 
-    result = asyncio.run(MeshPipeline(runner).generate_mesh(tmp_path / "case", config, None))
+    result = asyncio.run(MeshPipeline(runner).generate_mesh(tmp_path / "case", config))
 
     assert not result.succeeded
     assert runner.calls == []
     issue = result.issues[-1]
-    assert issue.code == "FEATURE_EXTRACTION_UNAVAILABLE"
-    assert issue.category is IssueCategory.DEPENDENCY
+    assert issue.code == "FEATURE_EXTRACTION_UNSUPPORTED_PROFILE"
+    assert issue.category is IssueCategory.OPENFOAM_ENVIRONMENT
+    assert issue.severity.value == "BLOCKING"
+
+
+def test_foundation_profile_without_feature_extraction_runs(
+    tmp_path: Path, cube_stl: Path
+) -> None:
+    runner = RecordingRunner()
+    config = build_config(cube_stl, profile="openfoam_foundation")
+
+    asyncio.run(MeshPipeline(runner).generate_mesh(tmp_path / "case", config))
+
+    assert runner.calls[0]["extract_features_argv"] is None  # type: ignore[index]
 
 
 def test_feature_command_is_not_run_when_extraction_disabled(

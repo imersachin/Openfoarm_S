@@ -291,6 +291,22 @@ The planner must represent this dependency.
 If no feature extraction is required, it should not execute merely because the
 operation exists in the codebase.
 
+Case-generation conventions (approved in M3):
+
+- Feature extraction is required only when `mesh.surface.extract_features` is
+  enabled. Only then are `system/surfaceFeatureExtractDict`, the `.eMesh`
+  reference and `explicitFeatureSnap true` generated; a stale generated
+  feature dictionary is removed when extraction is disabled.
+- Supported profile: openfoam.com (ESI), using `surfaceFeatureExtract -case
+  <case>` (see `openfoam/commands.py`). For openfoam.org (Foundation), feature
+  extraction is reported as a BLOCKING `FEATURE_EXTRACTION_UNSUPPORTED_PROFILE`
+  issue rather than generating unverified syntax.
+- `includedAngle = 180 - feature_angle_deg` (the tutorial pairing 150/30).
+- Numbers are written with shortest round-trip precision; non-finite values
+  are rejected in configuration and by the dictionary writer.
+- If `max_cells_per_axis` limits the background cells, generation continues
+  with a `BACKGROUND_CELLS_CAPPED` warning that reports the effective cell size.
+
 ---
 
 ## 9. snappyHexMesh

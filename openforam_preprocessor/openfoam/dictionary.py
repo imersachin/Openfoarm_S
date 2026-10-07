@@ -1,7 +1,20 @@
 from __future__ import annotations
 
 import hashlib
+import math
 from pathlib import Path
+
+
+def foam_scalar(value: float) -> str:
+    """Shortest round-trip representation; never truncates precision like :g."""
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"Cannot write non-finite value {number!r} to an OpenFOAM dictionary.")
+    return repr(number)
+
+
+def foam_vector(x: float, y: float, z: float) -> str:
+    return f"({foam_scalar(x)} {foam_scalar(y)} {foam_scalar(z)})"
 
 
 class OpenFOAMFileWriter:
@@ -27,4 +40,16 @@ class OpenFOAMFileWriter:
         # platform, otherwise write-if-changed always rewrites on Windows.
         temporary.write_text(content, encoding="utf-8", newline="\n")
         temporary.replace(path)
+        return True
+
+    @classmethod
+    def remove_if_generated(cls, path: Path) -> bool:
+        """Delete a stale file only if this application generated it."""
+        if not path.is_file():
+            return False
+        if not path.read_text(encoding="utf-8", errors="replace").startswith(
+            cls.GENERATED_HEADER
+        ):
+            return False
+        path.unlink()
         return True

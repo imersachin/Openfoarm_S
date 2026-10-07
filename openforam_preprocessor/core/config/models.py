@@ -17,18 +17,18 @@ class OpenFOAMProfile(StrEnum):
 
 
 class Vector3(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, allow_inf_nan=False)
 
     x: float
     y: float
     z: float
 
     def as_openfoam(self) -> str:
-        return f"({self.x:g} {self.y:g} {self.z:g})"
+        return f"({float(self.x)!r} {float(self.y)!r} {float(self.z)!r})"
 
 
 class Bounds(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, allow_inf_nan=False)
 
     minimum: Vector3
     maximum: Vector3
@@ -88,7 +88,7 @@ class GeometryConfig(BaseModel):
     artifact is.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, allow_inf_nan=False)
 
     source_path: Path
     source_units: LengthUnit  # required: STL does not reliably encode units
@@ -109,7 +109,7 @@ class GeometryConfig(BaseModel):
 
 
 class BackgroundMeshConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, allow_inf_nan=False)
 
     domain: Bounds
     base_cell_size: PositiveFloat = 0.1
@@ -118,7 +118,7 @@ class BackgroundMeshConfig(BaseModel):
 
 
 class SurfaceRefinementConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, allow_inf_nan=False)
 
     minimum_level: int = Field(default=2, ge=0, le=10)
     maximum_level: int = Field(default=3, ge=0, le=10)
@@ -137,7 +137,7 @@ class SurfaceRefinementConfig(BaseModel):
 
 
 class BoundaryLayerConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, allow_inf_nan=False)
 
     enabled: bool = False
     number_of_layers: int = Field(default=3, ge=1, le=20)
@@ -149,7 +149,7 @@ class BoundaryLayerConfig(BaseModel):
 class MeshQualityLimits(BaseModel):
     """Explicit engineering policy, separate from OpenFOAM defaults."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, allow_inf_nan=False)
 
     max_non_orthogonality: float = Field(default=65.0, gt=0, le=180)
     max_boundary_skewness: float = Field(default=20.0, gt=0)
@@ -159,7 +159,7 @@ class MeshQualityLimits(BaseModel):
 
 
 class MeshConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, allow_inf_nan=False)
 
     background: BackgroundMeshConfig
     surface: SurfaceRefinementConfig = Field(default_factory=SurfaceRefinementConfig)
@@ -185,7 +185,7 @@ class MeshConfig(BaseModel):
 
 
 class ProjectConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, allow_inf_nan=False)
 
     schema_version: int = 1
     project_name: str = Field(

@@ -14,6 +14,7 @@ from geometry.validator import GeometryReport, TrimeshGeometryValidator
 from mesh.generator import OpenFOAMMeshCaseGenerator
 from mesh.parser import CheckMeshParser
 from mesh.validator import MeshQualityValidator
+from openfoam.commands import feature_extraction_command
 from openfoam.runner import OpenFOAMRunner
 
 
@@ -85,22 +86,28 @@ class MeshPipeline:
             return finish(False, "Transformed geometry failed validation; mesh generation "
                           "was not started.", artifact_report.issues)
 
-        self.case_generator.generate(root, config)
-        return finish(True, "Case files are current and ready for mesh generation.",
-                      artifact_report.issues)
+        generated = self.case_generator.generate(root, config)
+        issues = (*artifact_report.issues, *generated.issues)
+        if has_stopping_issue(generated.issues):
+            return finish(False, "Case generation failed; mesh generation was not started.",
+                          issues)
+        return finish(True, "Case files are current and ready for mesh generation.", issues)
 
     async def generate_mesh(
         self,
         root: Path,
         config: ProjectConfig,
-        feature_command: tuple[str, ...] | None,
+        feature_command: tuple[str, ...] | None = None,
     ) -> PipelineResult:
+        """feature_command overrides the profile's feature-extraction command."""
         prepared = self.prepare_case(root, config)
         if not prepared.succeeded:
             return prepared
 
         # Feature extraction runs only when the configuration requires an .eMesh.
         requires_features = config.mesh.surface.extract_features
+        if requires_features and feature_command is None:
+            feature_command = feature_extraction_command(config.openfoam_profile, root)
         if requires_features and not feature_command:
             return replace(
                 prepared,
@@ -157,6 +164,6 @@ class MeshPipeline:
         self,
         root: Path,
         config: ProjectConfig,
-        feature_command: tuple[str, ...] | None,
+        feature_command: tuple[str, ...] | None = None,
     ) -> PipelineResult:
         return asyncio.run(self.generate_mesh(root, config, feature_command))

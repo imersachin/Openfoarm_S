@@ -68,9 +68,8 @@ with left:
 with right:
     if st.button("Generate mesh and run checkMesh"):
         with st.spinner("Running OpenFOAM meshing pipeline..."):
-            # Feature extraction is profile-specific. Keep None until the selected
-            # OpenFOAM installation has been detected and verified.
-            result = pipeline.generate_mesh_sync(project_root, config, None)
+            # The feature-extraction command is derived from the OpenFOAM profile.
+            result = pipeline.generate_mesh_sync(project_root, config)
         if result.succeeded:
             st.success(result.message)
         else:

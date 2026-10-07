@@ -17,11 +17,13 @@ def build_config(
     source_path: Path,
     *,
     source_units: str = "m",
+    profile: str = "openfoam_com",
     geometry: dict[str, Any] | None = None,
     **surface: Any,
 ) -> ProjectConfig:
     return ProjectConfig(
         project_name="Demo",
+        openfoam_profile=profile,
         geometry=GeometryConfig(
             source_path=source_path,
             source_units=source_units,
