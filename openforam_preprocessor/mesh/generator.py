@@ -10,6 +10,7 @@ from openfoam.dictionary import OpenFOAMFileWriter
 
 @dataclass(frozen=True)
 class GeneratedFiles:
+    control_dict_changed: bool
     block_mesh_changed: bool
     snappy_changed: bool
     mesh_quality_changed: bool
@@ -19,8 +20,12 @@ class OpenFOAMMeshCaseGenerator:
     def generate(self, project_root: Path, config: ProjectConfig) -> GeneratedFiles:
         geometry_name = f"{config.geometry.patch_name}.stl"
 
+        control_changed = OpenFOAMFileWriter.write_if_changed(
+            project_root / "system/controlDict",
+            self._control_dict(),
+        )
         block_changed = OpenFOAMFileWriter.write_if_changed(
-            project_root / "constant/polyMesh/blockMeshDict",
+            project_root / "system/blockMeshDict",
             self._block_mesh_dict(config),
         )
         snappy_changed = OpenFOAMFileWriter.write_if_changed(
@@ -33,10 +38,40 @@ class OpenFOAMMeshCaseGenerator:
         )
 
         return GeneratedFiles(
+            control_dict_changed=control_changed,
             block_mesh_changed=block_changed,
             snappy_changed=snappy_changed,
             mesh_quality_changed=quality_changed,
         )
+
+    @staticmethod
+    def _control_dict() -> str:
+        # Meshing utilities construct a Time object from system/controlDict.
+        # These are standard time/write controls; no solver is configured.
+        return """\
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+endTime         1;
+deltaT          1;
+writeControl    timeStep;
+writeInterval   1;
+purgeWrite      0;
+writeFormat     ascii;
+writePrecision  6;
+writeCompression off;
+timeFormat      general;
+timePrecision   6;
+runTimeModifiable false;
+"""
 
     @staticmethod
     def _cells(length: float, cell_size: float, maximum: int) -> int:
@@ -117,6 +152,19 @@ mergePatchPairs ();
             else ""
         )
 
+        # The .eMesh only exists when surfaceFeatureExtract is part of the plan;
+        # never reference it otherwise.
+        features_section = (
+            f"""
+        {{
+            file "{feature_file}";
+            level {surface.feature_refinement_level};
+        }}"""
+            if surface.extract_features
+            else ""
+        )
+        explicit_feature_snap = "true" if surface.extract_features else "false"
+
         return f"""\
 FoamFile
 {{
@@ -147,11 +195,7 @@ castellatedMeshControls
     nCellsBetweenLevels 2;
 
     features
-    (
-        {{
-            file "{feature_file}";
-            level {surface.feature_refinement_level};
-        }}
+    ({features_section}
     );
 
     refinementSurfaces
@@ -176,7 +220,7 @@ snapControls
     nRelaxIter         5;
     nFeatureSnapIter   10;
     implicitFeatureSnap false;
-    explicitFeatureSnap true;
+    explicitFeatureSnap {explicit_feature_snap};
     multiRegionFeatureSnap false;
 }}
 

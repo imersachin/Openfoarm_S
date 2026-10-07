@@ -10,7 +10,6 @@ from core.config.models import ProjectConfig
 from core.workflow.dependency_graph import DependencyGraph
 from core.workflow.pipeline import MeshPipeline
 
-
 st.set_page_config(page_title="OpenFOAM Preprocessor", layout="wide")
 st.title("OpenFOAM Pre-Processing & Mesh Validation")
 

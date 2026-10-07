@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
@@ -11,7 +11,7 @@ NonNegativeFloat = Annotated[float, Field(ge=0)]
 PositiveInt = Annotated[int, Field(gt=0)]
 
 
-class OpenFOAMProfile(str, Enum):
+class OpenFOAMProfile(StrEnum):
     OPENCFD = "openfoam_com"
     FOUNDATION = "openfoam_foundation"
 
@@ -34,7 +34,7 @@ class Bounds(BaseModel):
     maximum: Vector3
 
     @model_validator(mode="after")
-    def validate_extents(self) -> "Bounds":
+    def validate_extents(self) -> Bounds:
         if (
             self.minimum.x >= self.maximum.x
             or self.minimum.y >= self.maximum.y
@@ -68,7 +68,7 @@ class GeometryConfig(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_stl_source(self) -> "GeometryConfig":
+    def validate_stl_source(self) -> GeometryConfig:
         if self.source_path.suffix.lower() != ".stl":
             raise ValueError("The MVP accepts STL geometry only.")
         return self
@@ -90,9 +90,13 @@ class SurfaceRefinementConfig(BaseModel):
     maximum_level: int = Field(default=3, ge=0, le=10)
     feature_angle_deg: float = Field(default=30.0, gt=0, lt=180)
     feature_refinement_level: int = Field(default=3, ge=0, le=10)
+    # Explicit feature edges require a surfaceFeatureExtract .eMesh. When False,
+    # snappyHexMesh is generated without edge-mesh references or explicit
+    # feature snapping, and feature extraction is not part of the plan.
+    extract_features: bool = False
 
     @model_validator(mode="after")
-    def validate_levels(self) -> "SurfaceRefinementConfig":
+    def validate_levels(self) -> SurfaceRefinementConfig:
         if self.maximum_level < self.minimum_level:
             raise ValueError("maximum_level must be >= minimum_level.")
         return self
@@ -130,6 +134,20 @@ class MeshConfig(BaseModel):
     location_in_mesh: Vector3
     max_global_cells: PositiveInt = 2_000_000
     overwrite_existing_mesh: bool = True
+
+    @model_validator(mode="after")
+    def validate_location_in_mesh(self) -> MeshConfig:
+        # snappyHexMesh keeps the mesh region containing locationInMesh; a point
+        # outside (or on the boundary of) the background domain cannot select a
+        # region, so reject it before any expensive meshing starts.
+        point, domain = self.location_in_mesh, self.background.domain
+        lo, hi = domain.minimum, domain.maximum
+        if not (lo.x < point.x < hi.x and lo.y < point.y < hi.y and lo.z < point.z < hi.z):
+            raise ValueError(
+                "location_in_mesh must lie strictly inside the background domain "
+                f"{lo.as_openfoam()} - {hi.as_openfoam()}; got {point.as_openfoam()}."
+            )
+        return self
 
 
 class ProjectConfig(BaseModel):

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class PipelineOperation(str, Enum):
+class PipelineOperation(StrEnum):
     IMPORT_GEOMETRY = "import_geometry"
     VALIDATE_GEOMETRY = "validate_geometry"
     GENERATE_BLOCK_MESH_DICT = "generate_block_mesh_dict"

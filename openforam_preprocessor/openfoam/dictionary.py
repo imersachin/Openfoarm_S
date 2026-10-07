@@ -23,6 +23,8 @@ class OpenFOAMFileWriter:
 
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(f"{path.suffix}.tmp")
-        temporary.write_text(content, encoding="utf-8")
+        # newline="\n": bytes on disk must match the hashed content on every
+        # platform, otherwise write-if-changed always rewrites on Windows.
+        temporary.write_text(content, encoding="utf-8", newline="\n")
         temporary.replace(path)
         return True
