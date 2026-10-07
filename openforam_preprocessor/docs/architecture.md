@@ -667,6 +667,21 @@ It does not answer:
 
 > Is the CFD solution physically accurate?
 
+Implementation (M8): `visualization/foam_reader.py`, `visualization/views.py`
+(plotly), exposed through `ProjectService` and the Results tab.
+
+- Geometry view: transformed artifact (what is meshed) overlaid on the source
+  STL converted to metres only, plus the domain box and `locationInMesh`.
+- Mesh view: boundary patches from `constant/polyMesh` (uncompressed ASCII,
+  as configured in `controlDict`; binary/compressed meshes are reported, not
+  guessed), coloured per patch, with checkMesh face/cell/point sets from
+  `constant/polyMesh/sets` drawn at their locations (cell sets at approximate
+  centres).
+- Quality chart: measured checkMesh values against the acceptance limits.
+- Views load only on request and sample large surfaces deterministically
+  (default 150,000 faces) with a visible note. Plotly is imported lazily;
+  a test asserts the pipeline and services do not import it.
+
 ---
 
 ## 18. UI Architecture

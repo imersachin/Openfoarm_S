@@ -112,3 +112,35 @@ def test_prepare_case_button_runs_backend(saved_case: Path) -> None:
     assert not app.exception
     assert "Case files are current" in texts(app.success)
     assert (saved_case / "system" / "blockMeshDict").is_file()
+
+
+def test_geometry_view_renders_on_request(saved_case: Path) -> None:
+    app = open_app(saved_case)
+    button(app, "Prepare case (geometry + dictionaries)").click().run()
+
+    button(app, "Show geometry and domain").click().run()
+
+    assert not app.exception
+    charts = app.get("plotly_chart")
+    assert len(charts) == 1
+
+
+def test_mesh_view_without_mesh_explains_instead_of_failing(saved_case: Path) -> None:
+    app = open_app(saved_case)
+
+    button(app, "Show mesh and problem locations").click().run()
+
+    assert not app.exception
+    assert "The mesh cannot be displayed" in texts(app.info)
+
+
+def test_mesh_view_renders_existing_mesh(saved_case: Path) -> None:
+    from tests.foam_fixtures import write_poly_mesh, write_set
+
+    write_set(write_poly_mesh(saved_case), "skewFaces", "faceSet", [0])
+    app = open_app(saved_case)
+
+    button(app, "Show mesh and problem locations").click().run()
+
+    assert not app.exception
+    assert len(app.get("plotly_chart")) == 1

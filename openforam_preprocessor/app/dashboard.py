@@ -312,8 +312,34 @@ with tabs["Results"]:
             "cells", "faces", "points", "max_non_orthogonality", "max_skewness",
             "max_aspect_ratio", "min_volume",
         )})
+        chart = service.quality_chart()
+        if chart.figure is not None:
+            st.plotly_chart(chart.figure, use_container_width=True)
+        for note in chart.notes:
+            st.caption(note)
         with st.expander("Mesh quality report"):
             st.json(mesh_report)
+
+    st.subheader("3D views")
+    st.caption("Loaded on request. Views show whether the geometry and mesh are what you "
+               "intended; they do not indicate CFD accuracy.")
+    view_config = service.load().config
+    geometry_col, mesh_col = st.columns(2)
+    if geometry_col.button("Show geometry and domain", disabled=view_config is None):
+        state.view = "geometry"
+    if mesh_col.button("Show mesh and problem locations"):
+        state.view = "mesh"
+    view = None
+    if state.get("view") == "geometry" and view_config is not None:
+        view = service.geometry_view(view_config)
+    elif state.get("view") == "mesh":
+        view = service.mesh_view()
+    if view is not None:
+        render_issues(view.issues)
+        for note in view.notes:
+            st.caption(note)
+        if view.figure is not None:
+            st.plotly_chart(view.figure, use_container_width=True)
 
 with tabs["Logs"]:
     logs = service.logs()

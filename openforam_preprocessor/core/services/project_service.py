@@ -227,6 +227,24 @@ class ProjectService:
         text = (self.root / "logs" / name).read_text(encoding="utf-8", errors="replace")
         return text[-max_chars:]
 
+    # --- visualization (lazy: plotly is needed only for display) ---------------
+
+    def geometry_view(self, config: ProjectConfig) -> Any:
+        from visualization.views import geometry_view
+
+        return geometry_view(self.root, config)
+
+    def mesh_view(self) -> Any:
+        from visualization.views import mesh_view
+
+        return mesh_view(self.root)
+
+    def quality_chart(self) -> Any:
+        from visualization.views import View, quality_chart
+
+        report = self._read_json(MESH_REPORT)
+        return quality_chart(report) if report else View(None)
+
     def dictionaries(self) -> dict[str, str]:
         """Generated system/ dictionaries, for advanced inspection."""
         directory = self.root / "system"
