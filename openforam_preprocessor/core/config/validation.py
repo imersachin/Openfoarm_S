@@ -24,10 +24,12 @@ def validate_project_config(raw: Any) -> ConfigValidationResult:
     try:
         return ConfigValidationResult(config=ProjectConfig.model_validate(raw), issues=())
     except ValidationError as exc:
-        return ConfigValidationResult(
-            config=None,
-            issues=tuple(_issue_from_error(error) for error in exc.errors()),
-        )
+        return ConfigValidationResult(config=None, issues=issues_from_validation_error(exc))
+
+
+def issues_from_validation_error(exc: ValidationError) -> tuple[Issue, ...]:
+    """One BLOCKING CONFIGURATION issue per model error, for any configuration model."""
+    return tuple(_issue_from_error(error) for error in exc.errors())
 
 
 def _issue_from_error(error: Any) -> Issue:

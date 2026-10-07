@@ -26,7 +26,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["app", "core", "geometry", "mesh", "openfoam", "visualization"]
+packages = ["app", "core", "geometry", "mesh", "openfoam", "vawt", "visualization"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -43,7 +43,7 @@ target-version = "py311"
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.mypy]
-packages =["app", "core", "geometry", "mesh", "openfoam", "visualization"]
+packages = ["app", "core", "geometry", "mesh", "openfoam", "vawt", "visualization"]
 
 [[tool.mypy.overrides]]
 module = ["trimesh.*", "plotly.*", "psutil.*", "scipy.*"]

@@ -73,6 +73,10 @@ Also inspect:
 - relevant tests
 - current configuration models
 
+### Before VAWT work
+
+Also read `docs/vawt_mesh_generator.md`.
+
 Do not claim to have followed documentation that you did not actually read.
 
 ---
@@ -556,6 +560,20 @@ M6 Validation/Resource Safety
 M7 UI
 M8 Visualization
 M9 Reliability
+```
+
+The VAWT mesh generator (`docs/vawt_mesh_generator.md`) follows its own
+milestone order:
+
+```text
+V0 Method proof and baseline
+V1 Configuration and analysis
+V2 Case generation
+V3 Pipeline
+V4 Service and background runs
+V5 UI
+V6 Visualization
+V7 Export and verification
 ```
 
 Do not skip ahead because a later feature is convenient to implement.

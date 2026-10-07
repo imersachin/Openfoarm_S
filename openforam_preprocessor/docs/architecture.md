@@ -92,7 +92,9 @@ openforam_preprocessor/
 ├── app/
 │   ├── dashboard.py
 │   ├── pages/
-│   └── components/
+│   ├── components/
+│   ├── vawt_app.py         VAWT entry point (see docs/vawt_mesh_generator.md)
+│   └── vawt/               VAWT UI shell and sections
 ├── core/
 │   ├── config/
 │   ├── workflow/
@@ -116,6 +118,7 @@ openforam_preprocessor/
 │   ├── runner.py
 │   └── commands.py
 ├── visualization/
+├── vawt/                   VAWT mesh generator workflow (docs/vawt_mesh_generator.md)
 ├── storage/
 └── tests/
     ├── unit/
@@ -705,7 +708,13 @@ Implementation (M8): `visualization/foam_reader.py`, `visualization/views.py`
 
 ## 18. UI Architecture
 
-Recommended tabs:
+The application has two UI entry points: the generic workflow
+(`app/dashboard.py`) and the VAWT mesh generator (`app/vawt_app.py`). The VAWT
+UI uses section navigation, where only the active section runs, instead of one
+tab strip; see `docs/vawt_mesh_generator.md` section 13. The rules below apply
+to both.
+
+Recommended tabs for the generic workflow:
 
 ```text
 Project
