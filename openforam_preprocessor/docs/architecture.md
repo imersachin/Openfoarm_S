@@ -406,6 +406,27 @@ Quality threshold
 
 The mesh itself remains reusable if its inputs are unchanged.
 
+Implementation (M4): `core/workflow/dependency_graph.py` and
+`core/workflow/planner.py`.
+
+- Operations, in execution order: import geometry (units + transform →
+  artifact), validate geometry, generate blockMesh / feature-extraction /
+  snappy / meshQuality dictionaries, blockMesh, surfaceFeatureExtract,
+  snappyHexMesh, checkMesh, validate mesh.
+- Every configuration field maps to the operations that read it directly;
+  staleness then follows the data-flow edges. A test enforces that every
+  field has a rule. An unmapped path is reported and treated conservatively
+  as invalidating everything.
+- `snappyHexMesh -overwrite` replaces the background mesh in place, so any
+  snappy re-run also re-runs blockMesh (but not blockMeshDict generation).
+- `mesh.quality` holds the post-checkMesh acceptance limits (change → validate
+  mesh only). `mesh.snappy_quality` holds the `meshQualityDict` values snappy
+  uses while meshing (change → mesh stale).
+- Feature extraction is planned only when enabled; otherwise it is listed as
+  skipped. The feature-dictionary step still runs to remove a stale file.
+- The plan says what is stale. Skipping work on that basis requires verified
+  artifacts (M5); until then the pipeline still runs the full sequence.
+
 ---
 
 ## 12. Artifact and Cache Model

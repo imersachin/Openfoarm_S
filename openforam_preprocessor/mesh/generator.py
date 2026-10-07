@@ -360,7 +360,7 @@ mergeTolerance 1e-6;
 
     @staticmethod
     def _mesh_quality_dict(config: ProjectConfig) -> str:
-        q = config.mesh.quality
+        q = config.mesh.snappy_quality
         return f"""\
 maxNonOrtho             {foam_scalar(q.max_non_orthogonality)};
 maxBoundarySkewness     {foam_scalar(q.max_boundary_skewness)};

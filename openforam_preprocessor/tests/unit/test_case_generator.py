@@ -203,9 +203,11 @@ def test_snappy_layer_controls_are_complete(tmp_path: Path) -> None:
         assert f"\n    {key} " in text, key
 
 
-def test_mesh_quality_dict_uses_configured_limits(tmp_path: Path) -> None:
+def test_mesh_quality_dict_uses_snappy_quality_controls(tmp_path: Path) -> None:
     config = build_config(Path("part.stl"))
-    config = with_mesh(config, quality={"max_non_orthogonality": 70.5, "min_volume": 1e-15})
+    config = with_mesh(
+        config, snappy_quality={"max_non_orthogonality": 70.5, "min_volume": 1e-15}
+    )
 
     OpenFOAMMeshCaseGenerator().generate(tmp_path, config)
 
@@ -213,6 +215,40 @@ def test_mesh_quality_dict_uses_configured_limits(tmp_path: Path) -> None:
     assert "maxNonOrtho             70.5;" in text
     assert "minVol                  1e-15;" in text
     assert '#include "meshQualityDict"' in system_text(tmp_path, "snappyHexMeshDict")
+
+
+def test_old_project_without_snappy_quality_keeps_its_meshing_values() -> None:
+    data = build_config(Path("part.stl")).model_dump(mode="json")
+    del data["mesh"]["snappy_quality"]
+    data["mesh"]["quality"]["max_non_orthogonality"] = 55.0
+
+    config = ProjectConfig.model_validate(data)
+
+    assert config.mesh.snappy_quality.max_non_orthogonality == 55.0
+    assert config.mesh.quality.max_non_orthogonality == 55.0
+
+
+def test_explicit_snappy_quality_is_not_overridden() -> None:
+    data = build_config(Path("part.stl")).model_dump(mode="json")
+    data["mesh"]["quality"]["max_non_orthogonality"] = 55.0
+    data["mesh"]["snappy_quality"]["max_non_orthogonality"] = 70.0
+
+    config = ProjectConfig.model_validate(data)
+
+    assert config.mesh.snappy_quality.max_non_orthogonality == 70.0
+    assert config.mesh.quality.max_non_orthogonality == 55.0
+
+
+def test_acceptance_limits_do_not_change_generated_dictionaries(tmp_path: Path) -> None:
+    generator = OpenFOAMMeshCaseGenerator()
+    generator.generate(tmp_path, build_config(Path("part.stl")))
+
+    stricter = with_mesh(build_config(Path("part.stl")), quality={"max_non_orthogonality": 40})
+    files = generator.generate(tmp_path, stricter)
+
+    assert not files.mesh_quality_changed
+    assert not files.snappy_changed
+    assert "maxNonOrtho             65.0;" in system_text(tmp_path, "meshQualityDict")
 
 
 def test_output_is_identical_across_case_directories(tmp_path: Path) -> None:

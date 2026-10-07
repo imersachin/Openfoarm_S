@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -147,7 +147,11 @@ class BoundaryLayerConfig(BaseModel):
 
 
 class MeshQualityLimits(BaseModel):
-    """Explicit engineering policy, separate from OpenFOAM defaults."""
+    """Acceptance limits applied to checkMesh results after meshing.
+
+    Explicit engineering policy, separate from OpenFOAM defaults. Changing
+    these re-runs validation only; the mesh itself remains reusable.
+    """
 
     model_config = ConfigDict(frozen=True, allow_inf_nan=False)
 
@@ -158,6 +162,14 @@ class MeshQualityLimits(BaseModel):
     min_determinant: float = Field(default=0.001, ge=0)
 
 
+class SnappyQualityControls(MeshQualityLimits):
+    """meshQualityDict values snappyHexMesh enforces while meshing.
+
+    Same fields as the acceptance limits, but a different role: changing
+    these changes how the mesh is built, so the mesh becomes stale.
+    """
+
+
 class MeshConfig(BaseModel):
     model_config = ConfigDict(frozen=True, allow_inf_nan=False)
 
@@ -165,9 +177,22 @@ class MeshConfig(BaseModel):
     surface: SurfaceRefinementConfig = Field(default_factory=SurfaceRefinementConfig)
     layers: BoundaryLayerConfig = Field(default_factory=BoundaryLayerConfig)
     quality: MeshQualityLimits = Field(default_factory=MeshQualityLimits)
+    snappy_quality: SnappyQualityControls = Field(default_factory=SnappyQualityControls)
     location_in_mesh: Vector3
     max_global_cells: PositiveInt = 2_000_000
     overwrite_existing_mesh: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def inherit_snappy_quality(cls, data: Any) -> Any:
+        # Before snappy_quality existed, mesh.quality also produced
+        # meshQualityDict. Keep older project files meshing identically.
+        if isinstance(data, dict) and "snappy_quality" not in data and "quality" in data:
+            quality = data["quality"]
+            if isinstance(quality, BaseModel):
+                quality = quality.model_dump()
+            return {**data, "snappy_quality": quality}
+        return data
 
     @model_validator(mode="after")
     def validate_location_in_mesh(self) -> MeshConfig:
