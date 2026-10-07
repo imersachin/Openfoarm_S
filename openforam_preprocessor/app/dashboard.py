@@ -37,9 +37,10 @@ with geometry_col:
     st.code(str(config.geometry.source_path), language=None)
     st.write({
         "patch": config.geometry.patch_name,
+        "source_units": config.geometry.source_units.value,
         "scale": config.geometry.scale,
         "rotation_deg": config.geometry.rotation_deg.model_dump(),
-        "translation": config.geometry.translation.model_dump(),
+        "translation_m": config.geometry.translation.model_dump(),
     })
 
 with mesh_col:

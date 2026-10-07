@@ -207,6 +207,20 @@ The exact order is part of the contract and must be covered by tests.
 
 The transformed artifact is the geometry consumed by downstream meshing.
 
+Transformation conventions (approved in M2):
+
+- **Units:** `geometry.source_units` is required (`m`, `cm`, `mm`, `um`, `in`,
+  `ft`). The artifact is always in metres.
+- **Pivot:** scale and rotation act about the origin `(0, 0, 0)`.
+- **Rotation:** `rotation_deg` is applied about the fixed global axes, X then Y
+  then Z (`R = Rz · Ry · Rx`), matching OpenFOAM's roll-pitch-yaw convention.
+- **Translation:** applied last, in metres (after unit conversion).
+- **Orientation:** normals are checked and reported (`INWARD_NORMALS`); the
+  geometry is never flipped or repaired.
+- **Artifact:** `constant/triSurface/<patch>.stl`, written as deterministic
+  ASCII STL with round-trip float precision, only when its content changes,
+  and re-validated from disk after writing.
+
 ### 5.4 Validation
 
 Validation should cover, where applicable:

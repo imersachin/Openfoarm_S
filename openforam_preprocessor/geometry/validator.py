@@ -8,6 +8,7 @@ import numpy as np
 import trimesh
 
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage
+from geometry.importer import import_stl
 
 
 @dataclass(frozen=True)
@@ -33,22 +34,32 @@ class GeometryReport:
         return data
 
 
+@dataclass(frozen=True)
+class DimensionLimits:
+    """Heuristic plausibility range for the largest extent, in metres.
+
+    Values outside the range usually indicate wrong source units. These are
+    warnings, not engineering limits, and are configurable per validator.
+    """
+
+    min_largest_extent_m: float = 1e-4
+    max_largest_extent_m: float = 1e4
+
+
 def _geometry_issue(
     severity: IssueSeverity,
     code: str,
     message: str,
     source: Path,
     *,
-    category: IssueCategory = IssueCategory.GEOMETRY,
-    stage: IssueStage = IssueStage.GEOMETRY_VALIDATION,
     explanation: str = "",
     suggested_action: str = "",
     details: dict[str, Any] | None = None,
 ) -> Issue:
     return Issue(
-        category=category,
+        category=IssueCategory.GEOMETRY,
         severity=severity,
-        stage=stage,
+        stage=IssueStage.GEOMETRY_VALIDATION,
         code=code,
         message=message,
         explanation=explanation,
@@ -59,64 +70,44 @@ def _geometry_issue(
 
 
 class TrimeshGeometryValidator:
-    """Fast, deterministic STL preflight validation."""
+    """Fast, deterministic STL validation. Never modifies the geometry file."""
 
-    def validate(self, source: Path) -> GeometryReport:
-        if not source.is_file():
+    def __init__(self, dimension_limits: DimensionLimits | None = None) -> None:
+        self.dimension_limits = dimension_limits or DimensionLimits()
+
+    def validate(self, source: Path, *, check_dimensions_in_metres: bool = False) -> GeometryReport:
+        imported = import_stl(source)
+        if imported.mesh is None:
+            return GeometryReport(source=str(source), issues=imported.issues)
+        return self.validate_mesh(
+            imported.mesh, source, check_dimensions_in_metres=check_dimensions_in_metres
+        )
+
+    def validate_mesh(
+        self,
+        loaded: trimesh.Trimesh,
+        source: Path,
+        *,
+        check_dimensions_in_metres: bool = False,
+    ) -> GeometryReport:
+        if not np.isfinite(np.asarray(loaded.vertices, dtype=float)).all():
             return GeometryReport(
                 source=str(source),
+                faces=len(loaded.faces),
                 issues=(_geometry_issue(
                     IssueSeverity.ERROR,
-                    "GEOMETRY_SOURCE_MISSING",
-                    f"Geometry file not found: {source}",
+                    "NON_FINITE_COORDINATES",
+                    "Geometry contains NaN or infinite vertex coordinates.",
                     source,
-                    category=IssueCategory.INPUT,
-                    stage=IssueStage.GEOMETRY_IMPORT,
-                    explanation="The configured STL path does not point to an existing file.",
-                    suggested_action="Check the geometry source path in the project settings.",
-                ),),
-            )
-
-        try:
-            loaded = trimesh.load_mesh(source, process=False)
-            if isinstance(loaded, trimesh.Scene):
-                loaded = trimesh.util.concatenate(tuple(loaded.geometry.values()))
-        except Exception as exc:  # trimesh raises many unrelated types for bad input
-            return GeometryReport(
-                source=str(source),
-                issues=(_geometry_issue(
-                    IssueSeverity.ERROR,
-                    "GEOMETRY_UNREADABLE",
-                    f"Geometry file could not be parsed as STL: {source}",
-                    source,
-                    category=IssueCategory.INPUT,
-                    stage=IssueStage.GEOMETRY_IMPORT,
-                    explanation="The file is corrupt, truncated, or not a valid STL surface.",
-                    suggested_action="Re-export the geometry as ASCII or binary STL.",
-                    details={"exception_type": type(exc).__name__, "exception": str(exc)},
-                ),),
-            )
-
-        if not isinstance(loaded, trimesh.Trimesh):
-            return GeometryReport(
-                source=str(source),
-                issues=(_geometry_issue(
-                    IssueSeverity.ERROR,
-                    "GEOMETRY_UNSUPPORTED_OBJECT",
-                    f"Unsupported geometry object read from {source}",
-                    source,
-                    category=IssueCategory.INPUT,
-                    stage=IssueStage.GEOMETRY_IMPORT,
-                    explanation="The file did not contain a triangulated surface.",
-                    suggested_action="Provide a triangulated STL surface.",
-                    details={"object_type": type(loaded).__name__},
+                    explanation="Non-finite coordinates make every downstream operation invalid.",
+                    suggested_action="Re-export the geometry from CAD.",
                 ),),
             )
 
         # STL stores every triangle's vertices independently. Merge coincident
-        # vertices on this in-memory copy so topology checks (watertightness,
-        # winding, components) see shared edges. The artifact file is unchanged.
-        mesh = loaded
+        # vertices on an in-memory copy so topology checks (watertightness,
+        # winding, components) see shared edges. The file is unchanged.
+        mesh = loaded.copy()
         mesh.merge_vertices()
         if len(mesh.faces) == 0:
             return GeometryReport(
@@ -136,25 +127,9 @@ class TrimeshGeometryValidator:
         issues: list[Issue] = []
         extents = np.asarray(mesh.extents, dtype=float)
         component_count = len(mesh.split(only_watertight=False))
-
-        if not mesh.is_watertight:
-            issues.append(_geometry_issue(
-                IssueSeverity.WARNING,
-                "NOT_WATERTIGHT",
-                "Surface is not watertight; external-flow meshing may still be possible, "
-                "but enclosed-volume workflows require review.",
-                source,
-                suggested_action="Inspect open edges and repair the surface in CAD if required.",
-            ))
-
-        if not mesh.is_winding_consistent:
-            issues.append(_geometry_issue(
-                IssueSeverity.WARNING,
-                "INCONSISTENT_WINDING",
-                "Triangle winding is inconsistent.",
-                source,
-                suggested_action="Re-export or repair the STL before meshing.",
-            ))
+        is_watertight = bool(mesh.is_watertight)
+        is_winding_consistent = bool(mesh.is_winding_consistent)
+        volume = float(mesh.volume) if is_watertight else None
 
         if np.any(extents <= 0.0):
             issues.append(_geometry_issue(
@@ -167,6 +142,66 @@ class TrimeshGeometryValidator:
                 details={"extents": extents.tolist()},
             ))
 
+        faces = np.asarray(mesh.faces)
+        collapsed = (
+            (faces[:, 0] == faces[:, 1])
+            | (faces[:, 1] == faces[:, 2])
+            | (faces[:, 0] == faces[:, 2])
+        )
+        degenerate = int(np.count_nonzero(collapsed | (mesh.area_faces <= 0.0)))
+        if degenerate:
+            issues.append(_geometry_issue(
+                IssueSeverity.WARNING,
+                "DEGENERATE_FACES",
+                f"{degenerate} zero-area or collapsed triangle(s) found.",
+                source,
+                explanation="Degenerate triangles can disturb snapping and feature detection.",
+                suggested_action="Clean the surface in CAD and re-export.",
+                details={"count": degenerate},
+            ))
+
+        duplicates = len(faces) - len(np.unique(np.sort(faces, axis=1), axis=0))
+        if duplicates:
+            issues.append(_geometry_issue(
+                IssueSeverity.WARNING,
+                "DUPLICATE_FACES",
+                f"{duplicates} duplicate triangle(s) found.",
+                source,
+                explanation="Duplicate triangles create non-manifold edges.",
+                suggested_action="Remove duplicate faces in CAD and re-export.",
+                details={"count": duplicates},
+            ))
+
+        if not is_watertight:
+            issues.append(_geometry_issue(
+                IssueSeverity.WARNING,
+                "NOT_WATERTIGHT",
+                "Surface is not watertight; external-flow meshing may still be possible, "
+                "but enclosed-volume workflows require review.",
+                source,
+                suggested_action="Inspect open edges and repair the surface in CAD if required.",
+            ))
+
+        if not is_winding_consistent:
+            issues.append(_geometry_issue(
+                IssueSeverity.WARNING,
+                "INCONSISTENT_WINDING",
+                "Triangle winding is inconsistent.",
+                source,
+                suggested_action="Re-export or repair the STL before meshing.",
+            ))
+        elif volume is not None and volume < 0.0:
+            # Orientation is reported only; the geometry is never flipped.
+            issues.append(_geometry_issue(
+                IssueSeverity.WARNING,
+                "INWARD_NORMALS",
+                "Face normals point into the enclosed volume (negative signed volume).",
+                source,
+                explanation="The surface is closed and consistently wound, but inside-out.",
+                suggested_action="Flip the surface normals in CAD and re-export.",
+                details={"signed_volume": volume},
+            ))
+
         if component_count > 1:
             issues.append(_geometry_issue(
                 IssueSeverity.INFO,
@@ -177,18 +212,35 @@ class TrimeshGeometryValidator:
                 details={"components": component_count},
             ))
 
+        if check_dimensions_in_metres:
+            largest = float(extents.max())
+            limits = self.dimension_limits
+            if not limits.min_largest_extent_m <= largest <= limits.max_largest_extent_m:
+                issues.append(Issue(
+                    category=IssueCategory.UNITS,
+                    severity=IssueSeverity.WARNING,
+                    stage=IssueStage.GEOMETRY_VALIDATION,
+                    code="SUSPICIOUS_DIMENSIONS",
+                    message=f"Largest geometry extent is {largest:g} m, outside the expected "
+                    f"range {limits.min_largest_extent_m:g}-{limits.max_largest_extent_m:g} m.",
+                    explanation="An implausible size usually means the source units are wrong.",
+                    suggested_action="Confirm geometry.source_units and geometry.scale.",
+                    artifact_reference=str(source),
+                    details={"largest_extent_m": largest},
+                ))
+
         bounds = np.asarray(mesh.bounds, dtype=float)
         return GeometryReport(
             source=str(source),
             vertices=len(mesh.vertices),
             faces=len(mesh.faces),
             components=component_count,
-            is_watertight=bool(mesh.is_watertight),
-            is_winding_consistent=bool(mesh.is_winding_consistent),
+            is_watertight=is_watertight,
+            is_winding_consistent=is_winding_consistent,
             bounds_min=(float(bounds[0][0]), float(bounds[0][1]), float(bounds[0][2])),
             bounds_max=(float(bounds[1][0]), float(bounds[1][1]), float(bounds[1][2])),
             extents=(float(extents[0]), float(extents[1]), float(extents[2])),
             surface_area=float(mesh.area),
-            volume=float(mesh.volume) if mesh.is_watertight else None,
+            volume=volume,
             issues=tuple(issues),
         )

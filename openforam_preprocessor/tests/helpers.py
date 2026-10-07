@@ -13,10 +13,21 @@ from core.config.models import (
 )
 
 
-def build_config(source_path: Path, **surface: Any) -> ProjectConfig:
+def build_config(
+    source_path: Path,
+    *,
+    source_units: str = "m",
+    geometry: dict[str, Any] | None = None,
+    **surface: Any,
+) -> ProjectConfig:
     return ProjectConfig(
         project_name="Demo",
-        geometry=GeometryConfig(source_path=source_path, patch_name="part"),
+        geometry=GeometryConfig(
+            source_path=source_path,
+            source_units=source_units,
+            patch_name="part",
+            **(geometry or {}),
+        ),
         mesh=MeshConfig(
             background=BackgroundMeshConfig(
                 domain=Bounds(

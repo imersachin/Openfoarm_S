@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-import shutil
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any
 
 from core.config.models import ProjectConfig
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage, has_stopping_issue
-from geometry.validator import TrimeshGeometryValidator
+from geometry.importer import import_stl
+from geometry.transformer import GeometryTransform, write_stl_artifact
+from geometry.validator import GeometryReport, TrimeshGeometryValidator
 from mesh.generator import OpenFOAMMeshCaseGenerator
 from mesh.parser import CheckMeshParser
 from mesh.validator import MeshQualityValidator
@@ -33,46 +35,59 @@ class MeshPipeline:
         self.mesh_validator = MeshQualityValidator()
 
     def prepare_case(self, root: Path, config: ProjectConfig) -> PipelineResult:
+        """Import -> validate source -> transform -> write artifact -> re-validate -> case.
+
+        The transformed artifact at constant/triSurface/<patch>.stl, never the
+        source file, is what snappyHexMesh consumes.
+        """
         source = config.geometry.source_path
-        tri_surface = root / "constant" / "triSurface"
-        tri_surface.mkdir(parents=True, exist_ok=True)
-
-        target_stl = tri_surface / f"{config.geometry.patch_name}.stl"
-        if source.is_file():
-            if not target_stl.exists() or (
-                target_stl.stat().st_mtime_ns < source.stat().st_mtime_ns
-            ):
-                shutil.copy2(source, target_stl)
-            geometry_report = self.geometry_validator.validate(target_stl)
-        else:
-            # Report against the configured source; never mesh a stale project copy.
-            geometry_report = self.geometry_validator.validate(source)
-
         reports_dir = root / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
         geometry_path = reports_dir / "geometry_report.json"
-        geometry_path.write_text(
-            json.dumps(geometry_report.as_dict(), indent=2) + "\n",
-            encoding="utf-8",
-        )
+        report: dict[str, Any] = {"source_path": str(source)}
 
-        if has_stopping_issue(geometry_report.issues):
+        def finish(succeeded: bool, message: str, issues: tuple[Issue, ...]) -> PipelineResult:
+            geometry_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
             return PipelineResult(
                 geometry_report_path=geometry_path,
                 mesh_report_path=None,
-                succeeded=False,
-                message="Geometry preflight failed; mesh generation was not started.",
-                issues=geometry_report.issues,
+                succeeded=succeeded,
+                message=message,
+                issues=issues,
             )
 
-        self.case_generator.generate(root, config)
-        return PipelineResult(
-            geometry_report_path=geometry_path,
-            mesh_report_path=None,
-            succeeded=True,
-            message="Case files are current and ready for mesh generation.",
-            issues=geometry_report.issues,
+        imported = import_stl(source)
+        if imported.mesh is None:
+            report["source"] = GeometryReport(source=str(source), issues=imported.issues).as_dict()
+            return finish(False, "Geometry import failed; mesh generation was not started.",
+                          imported.issues)
+
+        source_report = self.geometry_validator.validate_mesh(imported.mesh, source)
+        report["source"] = source_report.as_dict()
+        if has_stopping_issue(source_report.issues):
+            return finish(False, "Geometry preflight failed; mesh generation was not started.",
+                          source_report.issues)
+
+        transform = GeometryTransform.from_config(config.geometry)
+        target_stl = root / "constant" / "triSurface" / f"{config.geometry.patch_name}.stl"
+        write_stl_artifact(
+            transform.apply_to_mesh(imported.mesh), target_stl, config.geometry.patch_name
         )
+        report["transformation"] = transform.as_dict()
+        report["artifact_path"] = str(target_stl)
+
+        # Re-validate the artifact as written to disk: this is what meshing consumes.
+        artifact_report = self.geometry_validator.validate(
+            target_stl, check_dimensions_in_metres=True
+        )
+        report["artifact"] = artifact_report.as_dict()
+        if has_stopping_issue(artifact_report.issues):
+            return finish(False, "Transformed geometry failed validation; mesh generation "
+                          "was not started.", artifact_report.issues)
+
+        self.case_generator.generate(root, config)
+        return finish(True, "Case files are current and ready for mesh generation.",
+                      artifact_report.issues)
 
     async def generate_mesh(
         self,

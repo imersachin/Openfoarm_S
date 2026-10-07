@@ -28,7 +28,7 @@ def test_missing_source_is_reported_not_raised(tmp_path: Path) -> None:
     assert not result.succeeded
     assert [i.code for i in result.issues] == ["GEOMETRY_SOURCE_MISSING"]
     report = json.loads(result.geometry_report_path.read_text(encoding="utf-8"))
-    assert report["issues"][0]["severity"] == "ERROR"
+    assert report["source"]["issues"][0]["severity"] == "ERROR"
     assert not (tmp_path / "case" / "system").exists()
 
 

@@ -25,6 +25,14 @@ class DependencyGraph:
             PipelineOperation.GENERATE_MESH,
             PipelineOperation.VALIDATE_MESH,
         }),
+        "geometry.source_units": frozenset({
+            PipelineOperation.IMPORT_GEOMETRY,
+            PipelineOperation.VALIDATE_GEOMETRY,
+            PipelineOperation.GENERATE_SNAPPY_DICT,
+            PipelineOperation.EXTRACT_FEATURES,
+            PipelineOperation.GENERATE_MESH,
+            PipelineOperation.VALIDATE_MESH,
+        }),
         "geometry.scale": frozenset({
             PipelineOperation.IMPORT_GEOMETRY,
             PipelineOperation.VALIDATE_GEOMETRY,

@@ -76,3 +76,78 @@ def test_report_serializes_issues(cube_stl: Path) -> None:
 
     assert data["faces"] == 12
     assert isinstance(data["issues"], list)
+
+
+def test_inward_normals_are_reported_not_repaired(tmp_path: Path) -> None:
+    box = trimesh.creation.box()
+    box.invert()
+    path = tmp_path / "inverted.stl"
+    box.export(path)
+    original = path.read_bytes()
+
+    report = TrimeshGeometryValidator().validate(path)
+
+    assert "INWARD_NORMALS" in codes(report)
+    assert report.volume == pytest.approx(-1.0)
+    assert path.read_bytes() == original
+
+
+def test_outward_normals_are_not_flagged(cube_stl: Path) -> None:
+    assert "INWARD_NORMALS" not in codes(TrimeshGeometryValidator().validate(cube_stl))
+
+
+def test_duplicate_faces_are_reported() -> None:
+    box = trimesh.creation.box()
+    faces = list(box.faces) + [box.faces[0]]
+    mesh = trimesh.Trimesh(vertices=box.vertices, faces=faces, process=False)
+
+    report = TrimeshGeometryValidator().validate_mesh(mesh, Path("dup.stl"))
+
+    assert "DUPLICATE_FACES" in codes(report)
+    issue = next(i for i in report.issues if i.code == "DUPLICATE_FACES")
+    assert issue.details["count"] == 1
+
+
+def test_degenerate_faces_are_reported() -> None:
+    box = trimesh.creation.box()
+    vertices = list(box.vertices) + [[0, 0, 0], [1, 0, 0], [2, 0, 0]]  # collinear
+    n = len(box.vertices)
+    faces = list(box.faces) + [[n, n + 1, n + 2]]
+    mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+
+    report = TrimeshGeometryValidator().validate_mesh(mesh, Path("degenerate.stl"))
+
+    assert "DEGENERATE_FACES" in codes(report)
+
+
+def test_non_finite_coordinates_stop_validation() -> None:
+    mesh = trimesh.Trimesh(
+        vertices=[[0, 0, 0], [1, 0, 0], [0, float("nan"), 0]], faces=[[0, 1, 2]], process=False
+    )
+
+    report = TrimeshGeometryValidator().validate_mesh(mesh, Path("nan.stl"))
+
+    assert codes(report) == {"NON_FINITE_COORDINATES"}
+    assert has_stopping_issue(report.issues)
+
+
+def test_dimension_check_only_when_requested(tmp_path: Path) -> None:
+    path = tmp_path / "huge.stl"
+    trimesh.creation.box(extents=(5e4, 1, 1)).export(path)
+    validator = TrimeshGeometryValidator()
+
+    assert "SUSPICIOUS_DIMENSIONS" not in codes(validator.validate(path))
+    report = validator.validate(path, check_dimensions_in_metres=True)
+    issue = next(i for i in report.issues if i.code == "SUSPICIOUS_DIMENSIONS")
+    assert issue.category is IssueCategory.UNITS
+    assert issue.severity is IssueSeverity.WARNING
+
+
+def test_dimension_limits_are_configurable(cube_stl: Path) -> None:
+    from geometry.validator import DimensionLimits
+
+    strict = TrimeshGeometryValidator(DimensionLimits(min_largest_extent_m=2.0))
+
+    report = strict.validate(cube_stl, check_dimensions_in_metres=True)
+
+    assert "SUSPICIOUS_DIMENSIONS" in codes(report)

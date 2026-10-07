@@ -52,12 +52,46 @@ class Bounds(BaseModel):
         )
 
 
+class LengthUnit(StrEnum):
+    """Source STL length units. Generated geometry is always in metres."""
+
+    METRE = "m"
+    CENTIMETRE = "cm"
+    MILLIMETRE = "mm"
+    MICROMETRE = "um"
+    INCH = "in"
+    FOOT = "ft"
+
+    @property
+    def to_metres(self) -> float:
+        return _METRES_PER_UNIT[self]
+
+
+_METRES_PER_UNIT: dict[LengthUnit, float] = {
+    LengthUnit.METRE: 1.0,
+    LengthUnit.CENTIMETRE: 1e-2,
+    LengthUnit.MILLIMETRE: 1e-3,
+    LengthUnit.MICROMETRE: 1e-6,
+    LengthUnit.INCH: 0.0254,
+    LengthUnit.FOOT: 0.3048,
+}
+
+
 class GeometryConfig(BaseModel):
-    """A source STL is copied into the project; source paths are never used by OpenFOAM."""
+    """Source STL plus the explicit transformation that produces the meshed artifact.
+
+    Transformation order (contract): unit conversion -> scale -> rotation ->
+    translation. Scale and rotation act about the origin (0, 0, 0). Rotation
+    angles are applied about the fixed global axes in the order X, then Y,
+    then Z. Translation is applied after unit conversion and is in metres.
+    The source path is never referenced by OpenFOAM; only the transformed
+    artifact is.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     source_path: Path
+    source_units: LengthUnit  # required: STL does not reliably encode units
     scale: PositiveFloat = 1.0
     rotation_deg: Vector3 = Field(default_factory=lambda: Vector3(x=0, y=0, z=0))
     translation: Vector3 = Field(default_factory=lambda: Vector3(x=0, y=0, z=0))
