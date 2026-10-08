@@ -355,6 +355,7 @@ a zoned surface, followed by interface creation.
 V0 must settle, on the target installation, with captured evidence:
 
 1. Target OpenFOAM version. The old app's environment was openfoam.com v2412.
+   Settled in V0: OpenFOAM v2512 (section 19).
 2. Which method produces a valid interface, and its exact dictionaries.
 3. How the outer mesh excludes the cylinder volume.
 4. `CELL_ZONE` mode: how the zone is created in a single mesh.
@@ -599,8 +600,16 @@ Confirmed by the owner during V1:
   the UI until a real OpenFOAM run has proven it.
 - Decision 4 (flow direction): inlet on the minimum face of the flow axis.
 
+Confirmed by the owner during V0:
+
+- Decision 1 (version and platform): **OpenFOAM v2512** (openfoam.com /
+  OpenCFD, package `openfoam2512`), running in WSL2 Ubuntu 24.04. All V0
+  evidence was captured on this version (`docs/vawt_method_notes.md`). Other
+  versions, including the old app's v2412, are not verified.
+
 Decision 5 is reflected in `docs/architecture.md` §3 and §18 (separate entry
-point `app/vawt_app.py`). Decisions 3 and 6 remain open for V0.
+point `app/vawt_app.py`). Decisions 3 and 6 remain open (see
+`docs/vawt_method_notes.md` section 8).
 
 ---
 
