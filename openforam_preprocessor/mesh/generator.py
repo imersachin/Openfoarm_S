@@ -20,6 +20,8 @@ class GeneratedFiles:
     snappy_changed: bool
     mesh_quality_changed: bool
     issues: tuple[Issue, ...] = ()
+    fv_schemes_changed: bool = False
+    fv_solution_changed: bool = False
 
 
 @dataclass(frozen=True)
@@ -88,6 +90,12 @@ class OpenFOAMMeshCaseGenerator:
                 project_root / "system/meshQualityDict", self._mesh_quality_dict(config)
             ),
             issues=tuple(issues),
+            fv_schemes_changed=OpenFOAMFileWriter.write_if_changed(
+                project_root / "system/fvSchemes", self._fv_schemes()
+            ),
+            fv_solution_changed=OpenFOAMFileWriter.write_if_changed(
+                project_root / "system/fvSolution", self._fv_solution()
+            ),
         )
 
     @staticmethod
@@ -168,6 +176,24 @@ timeFormat      general;
 timePrecision   6;
 runTimeModifiable false;
 """
+
+    @staticmethod
+    def _fv_schemes() -> str:
+        # snappyHexMesh (v2512) stops without system/fvSchemes. Meshing reads no
+        # schemes from it, so the sections are empty: this is not a CFD setup.
+        return _header("fvSchemes") + """
+ddtSchemes {}
+gradSchemes {}
+divSchemes {}
+laplacianSchemes {}
+interpolationSchemes {}
+snGradSchemes {}
+"""
+
+    @staticmethod
+    def _fv_solution() -> str:
+        # Required to exist alongside fvSchemes; no solver settings (meshing only).
+        return _header("fvSolution")
 
     @staticmethod
     def _block_mesh_dict(config: ProjectConfig, cells: BackgroundCells) -> str:
@@ -361,7 +387,9 @@ mergeTolerance 1e-6;
     @staticmethod
     def _mesh_quality_dict(config: ProjectConfig) -> str:
         q = config.mesh.snappy_quality
-        return f"""\
+        # The FoamFile header is required: checkMesh -meshQuality (v2512) reads
+        # this file on its own. snappyHexMeshDict #includes it unchanged.
+        return _header("meshQualityDict") + f"""
 maxNonOrtho             {foam_scalar(q.max_non_orthogonality)};
 maxBoundarySkewness     {foam_scalar(q.max_boundary_skewness)};
 maxInternalSkewness     {foam_scalar(q.max_internal_skewness)};

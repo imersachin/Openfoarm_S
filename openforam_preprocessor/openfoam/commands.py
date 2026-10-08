@@ -33,8 +33,11 @@ def snappy_step(case_root: Path) -> MeshingStep:
 
 
 def check_mesh_step(case_root: Path) -> MeshingStep:
+    # No -allGeometry: its extra checks (e.g. concave cells) fail on ordinary
+    # snappyHexMesh meshes, and every failed check makes the mesh INVALID
+    # (OpenFOAM v2512; see docs/architecture.md section 16).
     return MeshingStep(
-        ("checkMesh", "-case", str(case_root), "-allGeometry", "-allTopology", "-meshQuality"),
+        ("checkMesh", "-case", str(case_root), "-allTopology", "-meshQuality"),
         CHECK_MESH_LOG,
         IssueStage.CHECK_MESH,
     )

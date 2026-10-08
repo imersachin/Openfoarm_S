@@ -440,7 +440,8 @@ class MeshPipeline:
         def mesh_inputs() -> dict[str, str]:
             files = [
                 root / "system/controlDict", root / "system/blockMeshDict",
-                root / "system/snappyHexMeshDict", root / "system/meshQualityDict", stl,
+                root / "system/snappyHexMeshDict", root / "system/meshQualityDict",
+                root / "system/fvSchemes", root / "system/fvSolution", stl,
             ]
             if requires_features:
                 files.append(emesh)
@@ -451,7 +452,15 @@ class MeshPipeline:
 
         def check_inputs() -> dict[str, str]:
             mesh_files = files_under(root / POLY_MESH, exclude_dirs=_MESH_EXCLUDED_DIRS)
-            return {**hash_files(root, mesh_files), "tool": self._tool(config, "checkMesh")}
+            # The options decide which checks run, so a result produced with other
+            # options is not reused (the case path is left out: it is not a check).
+            argv = check_mesh_step(root).argv
+            options = " ".join(a for a in argv[1:] if a not in ("-case", str(root)))
+            return {
+                **hash_files(root, mesh_files),
+                "tool": self._tool(config, "checkMesh"),
+                "checkMesh_options": options,
+            }
 
         # Decide up front which steps may run (cached steps verify first).
         feature_step = feature_extraction_step(feature_command) if feature_command else None
