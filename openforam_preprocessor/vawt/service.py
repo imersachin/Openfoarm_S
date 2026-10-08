@@ -31,7 +31,6 @@ from pydantic import ValidationError
 from core.config.models import OpenFOAMProfile
 from core.config.validation import issues_from_validation_error
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage, has_stopping_issue
-from core.services import ProjectService
 from core.workflow.run_lock import CREATE_TIME_TOLERANCE_S, RunLock, process_create_time
 from core.workflow.run_records import list_run_records
 from mesh.estimator import ResourceAssessment, ResourceEstimator, SystemResources
@@ -169,6 +168,12 @@ class ValidationOutcome:
     @property
     def can_run(self) -> bool:
         return self.config is not None and not has_stopping_issue(self.issues)
+
+
+@dataclass(frozen=True)
+class Analysis:
+    outcome: ValidationOutcome
+    sections: dict[str, SectionStatus]
 
 
 @dataclass(frozen=True)
@@ -390,6 +395,9 @@ class VawtService:
 
     def store_source_file(self, filename: str, data: bytes) -> Path:
         """Copy an uploaded STL into the project's inputs/ (ValueError if not .stl)."""
+        # Imported here: the generic service brings plotly with it (spec 14.1 #10).
+        from core.services import ProjectService
+
         return ProjectService(self.root).store_source_file(filename, data)
 
     def rotor_metrics(self, geometry: Mapping[str, Any], axis: Axis | None = None,
@@ -412,13 +420,15 @@ class VawtService:
         if metrics is None:
             return None, issues
         try:
-            return preset_draft(dict(base), metrics, flow_axis, kind,
-                                include_domain=include_domain), issues
+            draft = preset_draft(dict(base), metrics, flow_axis, kind,
+                                 include_domain=include_domain)
         except ValueError as exc:
             return None, (*issues, _issue(
                 IssueSeverity.ERROR, "PRESET_NOT_APPLICABLE", str(exc),
                 "Confirm the rotor axis and choose a different flow axis.",
                 category=IssueCategory.CONFIGURATION, stage=IssueStage.CONFIGURATION))
+        config, _ = parse_config(draft)  # complete: every default written out
+        return (config.model_dump(mode="json") if config is not None else draft), issues
 
     # --- sections, plan, preflight ---------------------------------------------------
 
@@ -441,11 +451,21 @@ class VawtService:
     def section_status(self, raw: Mapping[str, Any] | None = None,
                        ) -> dict[str, SectionStatus]:
         """Per setup section, for a draft (default: the saved configuration)."""
+        return self.analyse(raw).sections
+
+    def analyse(self, raw: Mapping[str, Any] | None = None) -> Analysis:
+        """Validation and section status of a draft (default: the saved
+        configuration) from one validation pass."""
         if raw is None:
             raw = self.load().raw
         if raw is None:
-            return {s: SectionStatus(SectionState.EMPTY) for s in SETUP_SECTIONS}
+            return Analysis(ValidationOutcome(None, None, ()),
+                            {s: SectionStatus(SectionState.EMPTY) for s in SETUP_SECTIONS})
         outcome = self.validate(dict(raw))
+        return Analysis(outcome, self._sections(raw, outcome))
+
+    def _sections(self, raw: Mapping[str, Any], outcome: ValidationOutcome,
+                  ) -> dict[str, SectionStatus]:
         found: dict[str, list[Issue]] = {s: [] for s in SETUP_SECTIONS}
         for issue in outcome.issues:
             section = section_of_issue(issue)
@@ -479,6 +499,46 @@ class VawtService:
                 state = SectionState.READY
             result[section] = SectionStatus(state, issues, tuple(stale[section]))
         return result
+
+    @staticmethod
+    def layout_not_offered(raw: Mapping[str, Any] | None) -> str | None:
+        """Why the UI may not run this layout yet, or None. Only AMI has a real
+        OpenFOAM pipeline run so far; CELL_ZONE (with or without a domain) stays
+        in the configuration but is not offered (owner decision, spec 19)."""
+        if not raw:
+            return None
+        zone = raw.get("rotating_zone")
+        interface = zone.get("interface", "AMI") if isinstance(zone, Mapping) else "AMI"
+        if interface != "AMI":
+            return ("This project uses the CELL_ZONE interface, which has not yet been "
+                    "proven by a real OpenFOAM run and is not offered in this UI.")
+        if raw.get("domain") is None:
+            return ("This project has no outer domain (rotor-only), which has not yet been "
+                    "proven by a real OpenFOAM run and is not offered in this UI.")
+        return None
+
+    def switch_to_ami(self, raw: Mapping[str, Any]) -> tuple[dict[str, Any] | None,
+                                                              tuple[Issue, ...]]:
+        """The draft with the AMI interface. Without a domain, the domain and wake
+        come from the SIMPLE preset for the draft's rotor axes. Nothing is saved."""
+        draft = json.loads(json.dumps(dict(raw)))
+        if draft.get("domain") is None:
+            rotor = draft.get("rotor") or {}
+            try:
+                axis, flow = Axis(str(rotor.get("axis"))), Axis(str(rotor.get("flow_axis")))
+            except ValueError:
+                return None, (_issue(
+                    IssueSeverity.ERROR, "ROTOR_AXIS_NOT_CONFIRMED",
+                    "Confirm the rotor axis and the flow axis before switching to AMI.",
+                    "Set both axes in the Rotating zone section.",
+                    category=IssueCategory.CONFIGURATION, stage=IssueStage.CONFIGURATION),)
+            preset, issues = self.draft_from_preset(draft, axis, flow)
+            if preset is None:
+                return None, issues
+            draft["domain"] = preset["domain"]
+            draft.setdefault("refinement", {})["wake"] = preset["refinement"].get("wake")
+        draft.setdefault("rotating_zone", {})["interface"] = "AMI"
+        return draft, ()
 
     def plan(self, raw: Mapping[str, Any] | None = None) -> PlanView:
         """Which operations a run would execute and why, from the configuration
@@ -677,12 +737,32 @@ class VawtService:
     def runs(self) -> list[dict[str, Any]]:
         return [r for r in list_run_records(self.root) if r.get("kind") == "vawt_mesh"]
 
-    def log_tail(self, max_bytes: int = LOG_TAIL_BYTES) -> LogTail:
-        """The end of the active log (or the most recent one), read by seek:
-        at most max_bytes, whatever the log's size."""
-        status = read_status(self.root) or {}
-        command = status.get("command") or {}
-        relative = command.get("log") if isinstance(command, Mapping) else None
+    def generated_files(self, max_bytes: int = 256 * 1024) -> dict[str, str]:
+        """The generated dictionaries of every sub-case, {relative path: text}."""
+        files = {}
+        for path in sorted((self.root / "cases").glob("*/system/*")):
+            if path.is_file():
+                with path.open("rb") as stream:
+                    files[path.relative_to(self.root).as_posix()] = stream.read(
+                        max_bytes).decode("utf-8", errors="replace")
+        return files
+
+    def logs(self) -> list[str]:
+        """Command logs, relative to the project, by sub-case and name."""
+        return sorted(p.relative_to(self.root).as_posix()
+                      for p in (self.root / "logs").glob("*/*.log"))
+
+    def log_tail(self, max_bytes: int = LOG_TAIL_BYTES, log: str | None = None) -> LogTail:
+        """The end of a log, read by seek: at most max_bytes, whatever its size.
+        log: one of logs(); default the active log, else the most recent one."""
+        if log is not None:
+            if log not in self.logs():
+                return LogTail(None, "", False, 0)
+            relative: Any = log
+        else:
+            status = read_status(self.root) or {}
+            command = status.get("command") or {}
+            relative = command.get("log") if isinstance(command, Mapping) else None
         path = self.root / relative if isinstance(relative, str) else None
         if path is None or not path.is_file():
             logs = [p for p in (self.root / "logs").glob("*/*.log")

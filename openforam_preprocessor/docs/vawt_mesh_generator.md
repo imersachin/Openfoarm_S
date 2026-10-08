@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | V0 to V4 complete; V5 next |
+| Status | V0 to V4 complete; V5 implemented, real-browser check pending |
 | Place this file at | `openforam_preprocessor/docs/vawt_mesh_generator.md` |
 | Written against | `main` after M9 (commit "Replace placeholder PR template with project checklist") |
 | Replaces | The standalone "Mesh" app (React frontend + WSL backend). That app is reference material only; none of its code is copied. |
@@ -562,6 +562,22 @@ Implemented in V4 (`vawt/service.py`, `vawt/runtime.py`):
   shown separately; the last two are always NOT_ASSESSED.
 - Advanced users can view generated dictionaries and raw logs.
 
+Implemented in V5 (`app/vawt_app.py`, `app/vawt/`):
+
+- Sidebar navigation grouped Setup / Run / Results / Tools. Only the active
+  section's `render()` runs (tested). Marks are the service's states
+  (`section_status`, `run_status`, mesh validity), drawn as symbols.
+- One form per setup section; Apply writes the draft and reruns the page.
+  Revert and Save are in the action bar. Runs use the saved configuration.
+- The rotating zone shows the cell size actually used. The interface type
+  and the domain on/off choice are not shown (CELL_ZONE and rotor-only are
+  hidden). A project saved with either shows a banner, keeps the value,
+  disables Start and offers "Switch to AMI" (the domain and wake come from
+  the SIMPLE preset); the switch changes the draft only.
+- Leftover OpenFOAM process and unreadable run lock: a button, then an
+  explicit confirm step, call `terminate_orphan` / `remove_unreadable_lock`.
+- The 3D pane is reserved (a fragment); its views arrive in V6.
+
 ---
 
 ## 14. Performance Requirements
@@ -583,6 +599,10 @@ Implemented in V4 (`vawt/service.py`, `vawt/runtime.py`):
 
 Optional, after V7 and only if preflight allows the combined memory: run the
 outer and rotor meshing steps at the same time.
+
+V5 notes: Streamlit 1.65 imports plotly itself when it is imported, so
+mechanism 10 is held as "the VAWT UI adds no plotly module" (tested);
+`trimesh` loads with the validation code the section status needs.
 
 ### 14.2 Budgets
 
