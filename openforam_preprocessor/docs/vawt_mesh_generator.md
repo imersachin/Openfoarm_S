@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | V0 to V3 complete; V4 next |
+| Status | V0 to V4 complete; V5 next |
 | Place this file at | `openforam_preprocessor/docs/vawt_mesh_generator.md` |
 | Written against | `main` after M9 (commit "Replace placeholder PR template with project checklist") |
 | Replaces | The standalone "Mesh" app (React frontend + WSL backend). That app is reference material only; none of its code is copied. |
@@ -181,6 +181,17 @@ create a module until it has content.
 
 `cases/outer` and `cases/merged` exist only when the outer domain is enabled.
 One artifact manifest at project level covers all sub-cases.
+
+VAWT files under `.preprocessor/` (V4, `vawt/project_store.py`):
+`vawt/project.json` (current revision), `vawt/history/NNNNNN.json` (every
+saved revision), `vawt/last_meshed.json` (run ID, mesh status and
+configuration of the last run that produced meshes). They are kept apart from
+the generic workflow's `project.json`, which holds a different model.
+
+Projects live in the WSL file system: default `~/vawt_projects`, or
+`$VAWT_PROJECTS_DIR` (`vawt/workspace.py`). A project on a Windows drive
+(`/mnt/<drive>`, file system 9p/drvfs per `/proc/mounts`) gets a WARNING
+`PROJECT_ON_WINDOWS_DRIVE` on load, save, start and in the environment report.
 
 Sub-cases per mode (method A, owner decision after V0; `vawt/case_generator.py`):
 
@@ -468,6 +479,36 @@ behind a spinner, logs only afterwards).
   browser tab re-attaches by reading the status file; it never starts a second run.
 - A worker that dies leaves a stale lock; the existing stale-lock rule clears it.
   The status file is then reported as an interrupted run, not as running.
+
+Implemented in V4 (`vawt/service.py`, `vawt/runtime.py`):
+
+- The app runs inside WSL, where OpenFOAM is sourced; the browser on Windows
+  opens it on `localhost`. The server binds `127.0.0.1` (not the network); WSL
+  forwards Windows `localhost` to it (verified, `vawt_method_notes.md` §12).
+- `run_status` combines the status file, the run lock and the process's run
+  registry: `RUNNING` (this process; can cancel), `RUNNING_ELSEWHERE` (a live
+  lock held by another process; cannot cancel from here), `INTERRUPTED` (the
+  status says running but no live run holds the lock), or the last terminal
+  state. `start_run` during an active run returns that run's ID
+  (`RUN_ALREADY_ACTIVE`); it never starts a second run.
+- The lock records the holder's process start time, so a PID reused after a
+  WSL restart does not keep a dead run's lock alive.
+- The status file names the running command, its log and, once started, its
+  PID and start time. After an interrupted run, a command still running with
+  that PID and start time is reported as `ORPHANED_OPENFOAM_PROCESS`
+  (BLOCKING); `terminate_orphan` stops it after confirmation.
+- After an interruption the interrupted operation re-runs (its record was
+  removed before it started); earlier operations are reused only if their
+  files verify. The next run's record names the interrupted run.
+- On a normal exit of the app every active run is cancelled, so its OpenFOAM
+  command is terminated and the status ends as `CANCELLED`.
+- `section_status`: EMPTY / INCOMPLETE / READY / STALE / ERROR per setup
+  section; STALE names the settings that changed since the last mesh and make
+  a mesh operation stale (acceptance limits do not).
+- `plan` comes from the dependency tables (from scratch before the first
+  mesh); the run re-verifies cached files itself.
+- `log_tail` reads at most 64 KiB from the end of the active log by seek.
+- `preview` (V6) and `export_files` (V7) are not implemented yet.
 
 ---
 

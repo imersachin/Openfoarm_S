@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -24,13 +25,17 @@ class RunState(StrEnum):
 
 
 def write_status(project_root: Path, *, run_id: str, state: RunState, stage: str,
-                 step: int, total: int, started_at: str, message: str = "") -> None:
+                 step: int, total: int, started_at: str, message: str = "",
+                 command: Mapping[str, Any] | None = None) -> None:
+    """command: the OpenFOAM command running now (name, sub_case, log relative to
+    the project, and once started its pid and pid_create_time), else None."""
     path = project_root / STATUS_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     payload: dict[str, Any] = {
         "run_id": run_id, "state": state.value, "stage": stage, "step": step,
         "total_steps": total, "started_at": started_at,
         "updated_at": datetime.now(UTC).isoformat(), "pid": os.getpid(), "message": message,
+        "command": dict(command) if command is not None else None,
     }
     temporary = path.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8", newline="\n")

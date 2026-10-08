@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage
@@ -78,8 +78,10 @@ class FakeVawtRunner(OpenFOAMRunner):
         wrong_region: Sequence[str] = (), empty_ami: bool = False,
         no_zone: Sequence[str] = (), regions: int | None = None,
         checkmesh_failure: bool = False, project_root: Path | None = None,
+        pid: int | None = None,
     ) -> None:
         super().__init__()
+        self.pid = pid  # reported through on_start when set
         self.calls: list[tuple[str, str]] = []  # (command, sub-case)
         self.cwds: list[Path] = []
         self.statuses: list[dict[str, object]] = []  # status file seen at each command
@@ -95,8 +97,11 @@ class FakeVawtRunner(OpenFOAMRunner):
         stage: IssueStage = IssueStage.OPENFOAM_EXECUTION,
         timeout_seconds: float | None = None, env: Mapping[str, str] | None = None,
         cancel_event: asyncio.Event | None = None, logs_dir: Path | None = None,
+        on_start: Callable[[int], None] | None = None,
     ) -> CommandResult:
         name, case = argv[0], case_root.name
+        if on_start is not None and self.pid is not None:
+            on_start(self.pid)
         self.calls.append((name, case))
         self.cwds.append(case_root)
         if self.project_root is not None:

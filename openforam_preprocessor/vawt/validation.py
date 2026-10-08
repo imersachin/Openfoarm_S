@@ -37,6 +37,7 @@ from vawt.config import (
     Axis,
     InterfaceType,
     LayerSizing,
+    RotorGeometryConfig,
     VawtProjectConfig,
     plane_axes,
 )
@@ -89,6 +90,7 @@ def parse_config(raw: Any) -> tuple[VawtProjectConfig | None, tuple[Issue, ...]]
 
 # Error types meaning "no value given" (absent, null, or not one of the options).
 _UNSET = frozenset({"missing", "enum", "model_type", "model_attributes_type"})
+UNSET_ERROR_TYPES = _UNSET
 
 
 def _rename(issue: Issue) -> Issue:
@@ -129,12 +131,19 @@ def _rename(issue: Issue) -> Issue:
 
 def load_rotor(config: VawtProjectConfig) -> tuple[trimesh.Trimesh | None, tuple[Issue, ...]]:
     """Import the source STL and apply the configured transform in memory."""
-    imported = import_stl(config.geometry.source_path)
+    return load_rotor_geometry(config.geometry)
+
+
+def load_rotor_geometry(
+    geometry: RotorGeometryConfig,
+) -> tuple[trimesh.Trimesh | None, tuple[Issue, ...]]:
+    """load_rotor for the geometry section alone (before the rest is configured)."""
+    imported = import_stl(geometry.source_path)
     if imported.mesh is None:
         return None, imported.issues
-    transformed = GeometryTransform.from_config(config.geometry).apply_to_mesh(imported.mesh)
+    transformed = GeometryTransform.from_config(geometry).apply_to_mesh(imported.mesh)
     report = TrimeshGeometryValidator().validate_mesh(
-        transformed, config.geometry.source_path, check_dimensions_in_metres=True
+        transformed, geometry.source_path, check_dimensions_in_metres=True
     )
     if has_stopping_issue(report.issues):
         return None, report.issues

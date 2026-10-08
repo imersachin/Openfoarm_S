@@ -58,6 +58,18 @@ class RunLock:
             return None
         return self._busy_issue(self._holder())
 
+    def holder(self) -> dict[str, object] | None:
+        """The lock holder's record, or None if the lock is free or unreadable."""
+        return self._holder() if self.path.exists() else None
+
+    def is_held_by_live_run(self) -> bool:
+        """Whether a live run holds the lock. A stale lock is not live; an
+        unreadable one is treated as live (acquire would refuse it too)."""
+        if not self.path.exists():
+            return False
+        holder = self._holder()
+        return holder is None or not self._is_stale(holder)
+
     def release(self) -> None:
         if self._held:
             self.path.unlink(missing_ok=True)

@@ -598,6 +598,8 @@ Reliability (M9): `core/workflow/run_lock.py`, `core/workflow/run_records.py`,
 - The run lock records the holder's process start time. A lock whose PID now
   belongs to a process started at another time (PID reused, e.g. after a WSL
   restart) is stale; a lock without the field keeps the PID-only rule.
+  `RunLock.holder()` and `is_held_by_live_run()` let a reader (the VAWT
+  service) tell a live run from a stale lock without taking the lock.
 - `OpenFOAMRunner.run`/`run_step` take an optional `on_start(pid)` callback
   (passed to `run` only when given, so older subclasses keep working). Logs
   are flushed as output arrives, so they can be followed during a command.

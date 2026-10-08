@@ -35,7 +35,7 @@ from core.artifacts import ArtifactStore
 from core.artifacts.hashing import files_under, hash_files, sha256_file, sha256_json
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage, has_stopping_issue
 from core.version import APP_VERSION
-from core.workflow.run_lock import RunLock
+from core.workflow.run_lock import RunLock, process_create_time
 from core.workflow.run_records import write_run_record
 from geometry.transformer import ARTIFACT_FORMAT_VERSION, GeometryTransform, write_stl_artifact
 from geometry.validator import TrimeshGeometryValidator
@@ -70,6 +70,7 @@ from vawt.case_generator import (
 from vawt.config import InterfaceType, VawtProjectConfig
 from vawt.operations import DOWNSTREAM, VawtOperation, feature_case, operations_for
 from vawt.preflight import assess
+from vawt.project_store import write_last_meshed
 from vawt.rotor_metrics import compute_rotor_metrics
 from vawt.status import RunState, write_status
 from vawt.validation import ValidationThresholds, check_config, load_rotor
@@ -94,6 +95,7 @@ _EXECUTABLES: Mapping[VawtOperation, tuple[str, ...]] = {
     Op.CHECK_MESH: ("checkMesh",),
 }
 _MESHING = frozenset({Op.OUTER_MESH, Op.ROTOR_MESH, Op.SINGLE_MESH})
+VAWT_EXECUTABLES = tuple(sorted({e for names in _EXECUTABLES.values() for e in names}))
 # OpenFOAM versions the VAWT method was proven on (V0; spec section 19).
 VERIFIED_VERSIONS = ("v2512",)
 
@@ -171,6 +173,7 @@ class _Run:
     reused: list[VawtOperation] = field(default_factory=list)
     issues: list[Issue] = field(default_factory=list)
     commands: list[CommandResult] = field(default_factory=list)
+    record_extra: Mapping[str, Any] = field(default_factory=dict)
     stage: str = "starting"
     step: int = 0  # 1-based index of the last operation reached; 0 before the first
 
@@ -178,13 +181,14 @@ class _Run:
         return self.root / CASES_DIR / name
 
     def status(self, operation: VawtOperation | str, state: RunState = RunState.RUNNING,
-               message: str = "") -> None:
+               message: str = "", command: Mapping[str, Any] | None = None) -> None:
         name = operation.value if isinstance(operation, VawtOperation) else operation
         self.stage = name
         if isinstance(operation, VawtOperation) and operation in self.operations:
             self.step = self.operations.index(operation) + 1
         write_status(self.root, run_id=self.run_id, state=state, stage=name, step=self.step,
-                     total=len(self.operations), started_at=self.started_at, message=message)
+                     total=len(self.operations), started_at=self.started_at, message=message,
+                     command=command)
 
 
 class VawtPipeline:
@@ -223,22 +227,27 @@ class VawtPipeline:
         force: bool = False,
         allow_high_resource_risk: bool = False,
         cancel_event: asyncio.Event | None = None,
+        run_id: str | None = None,
+        record_extra: Mapping[str, Any] | None = None,
     ) -> VawtRunResult:
         """Mesh the configuration, re-running only what is not verifiably current.
 
         force=True ignores every cached result. HIGH RESOURCE RISK stops unless
         allow_high_resource_risk; BLOCKED always stops. Setting cancel_event
-        stops the running command and starts no further step.
+        stops the running command and starts no further step. run_id: chosen
+        by the caller (the service returns it before the run starts), else new.
+        record_extra: added to the run record.
         """
         lock = RunLock(root)
         busy = lock.acquire()
-        run_id = uuid.uuid4().hex
+        run_id = run_id or uuid.uuid4().hex
         if busy is not None:  # another run owns the status file; leave it alone
             return VawtRunResult(False, "Another run is in progress for this project.",
                                  run_id, RunState.FAILED, issues=(busy,))
         clock = time.monotonic()
         run = _Run(root, config, run_id, datetime.now(UTC).isoformat(),
-                   operations_for(config), ArtifactStore(root), cancel_event)
+                   operations_for(config), ArtifactStore(root), cancel_event,
+                   record_extra=dict(record_extra or {}))
         result: VawtRunResult | None = None
         try:
             run.status("starting")
@@ -341,6 +350,8 @@ class VawtPipeline:
         run.status(Op.VALIDATE_MESH)
         run.executed.append(Op.VALIDATE_MESH)
         report_path, succeeded, status = self._validate_mesh(run, layout.final)
+        # The meshes on disk now belong to this configuration (valid or not).
+        write_last_meshed(run.root, run.run_id, config, status)
         return self._result(run, succeeded, f"Mesh validation completed with status: {status}.",
                             RunState.SUCCEEDED if succeeded else RunState.FAILED,
                             report=report_path)
@@ -482,9 +493,18 @@ class VawtPipeline:
                 "RUN_CANCELLED", "The run was cancelled before this step started.",
                 "Start the run again when ready; completed steps are reused."),
                 state=RunState.CANCELLED)
+        logs = run.root / "logs" / case.name
+        command = {"name": step.argv[0], "sub_case": case.name,
+                   "log": (logs / step.log_name).relative_to(run.root).as_posix()}
+        run.status(run.stage, command=command)
+
+        def started(pid: int) -> None:  # lets a later process find an orphaned command
+            run.status(run.stage, command={**command, "pid": pid,
+                                           "pid_create_time": process_create_time(pid)})
+
         result = await self.runner.run_step(
             step, case_root=case, env=self.environment, cancel_event=run.cancel_event,
-            logs_dir=run.root / "logs" / case.name,
+            logs_dir=logs, on_start=started,
         )
         run.commands.append(result)
         if result.status is RunStatus.CANCELLED:
@@ -654,14 +674,15 @@ class VawtPipeline:
 
     def _record(self, run: _Run, result: VawtRunResult | None, clock: float,
                 error: BaseException | None) -> Path:
-        executables = sorted({e for names in _EXECUTABLES.values() for e in names})
         return write_run_record(run.root, {
+            **run.record_extra,
             "run_id": run.run_id,
             "kind": "vawt_mesh",
             "app_version": APP_VERSION,
             "config_sha256": sha256_json(run.config.model_dump(mode="json")),
             "project_name": run.config.project_name,
-            "environment": tool_identity(run.config.openfoam_profile, executables, self._env()),
+            "environment": tool_identity(run.config.openfoam_profile, VAWT_EXECUTABLES,
+                                         self._env()),
             "started_at": run.started_at,
             "finished_at": datetime.now(UTC).isoformat(),
             "duration_seconds": time.monotonic() - clock,

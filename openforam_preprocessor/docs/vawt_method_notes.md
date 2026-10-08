@@ -395,3 +395,31 @@ separate branch.
 - No solver was run: AMI and cell-zone meshes are checked by checkMesh only.
 - Fluent import is not verified (no Fluent available).
 - Timings are from one machine and serial runs.
+
+---
+
+## 12. Running the app from WSL (V4)
+
+Measured on the development machine (Windows 11, WSL 2 in NAT networking
+mode, Ubuntu 24.04, OpenFOAM v2512).
+
+**Windows browser to a server in WSL.** A test HTTP server in WSL bound to
+`127.0.0.1:8765` (`python3 -m http.server --bind 127.0.0.1`) answered from
+Windows at both `http://localhost:8765` and `http://127.0.0.1:8765`
+(`curl.exe --noproxy "*"`). So the app binds `127.0.0.1`, which keeps it off
+the campus network, and the Windows browser still reaches it through WSL's
+localhost forwarding. Windows uses the IITD proxy auto-config
+(`AutoConfigURL`); browsers do not send `localhost` to a proxy. No proxy
+setting is written to any file.
+
+**Project folder location.** The real AMI pipeline on the fixture rotor
+(SIMPLE preset, 107 files written), run twice in each place:
+
+| Project folder | Run 1 | Run 2 |
+|---|---|---|
+| WSL file system (`/root/...`, ext4) | 35.7 s | 36.8 s |
+| Windows drive (`/mnt/c/...`, 9p) | 62.4 s | 61.0 s |
+
+About 1.7 times slower on the Windows drive for this small mesh. This is the
+evidence behind `PROJECT_ON_WINDOWS_DRIVE` and the default
+`~/vawt_projects`.
