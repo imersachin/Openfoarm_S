@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import codecs
+import contextlib
 import shutil
 import time
 import uuid
 from collections import deque
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -79,11 +80,14 @@ class OpenFOAMRunner:
         env: Mapping[str, str] | None = None,
         cancel_event: asyncio.Event | None = None,
         logs_dir: Path | None = None,
+        on_start: Callable[[int], None] | None = None,
     ) -> CommandResult:
         """Run one command, streaming stdout/stderr to separate logs.
 
         The command runs with case_root as its working directory. Logs go to
-        logs_dir (default: case_root/logs).
+        logs_dir (default: case_root/logs), flushed as output arrives so they
+        can be followed while the command runs. on_start, if given, receives
+        the process ID once the process has started.
 
         Never raises for process-level failures: a missing executable, non-zero
         exit, timeout, or cancel_event all produce a structured CommandResult.
@@ -165,6 +169,9 @@ class OpenFOAMRunner:
             )
         except OSError as exc:
             return missing_executable(f"{type(exc).__name__}: {exc}")
+        if on_start is not None:
+            with contextlib.suppress(Exception):  # progress reporting never stops a command
+                on_start(process.pid)
 
         stdout, stderr = process.stdout, process.stderr
         assert stdout is not None and stderr is not None
@@ -248,6 +255,7 @@ class OpenFOAMRunner:
         while chunk := await stream.read(_READ_CHUNK):
             text = decoder.decode(chunk)
             sink.write(text)
+            sink.flush()  # a live log tail sees output without waiting for a buffer
             *lines, pending = (pending + text).split("\n")
             tail.extend(line.rstrip("\r") for line in lines)
             pending = pending[-_READ_CHUNK:]
@@ -291,7 +299,12 @@ class OpenFOAMRunner:
         env: Mapping[str, str] | None = None,
         cancel_event: asyncio.Event | None = None,
         logs_dir: Path | None = None,
+        on_start: Callable[[int], None] | None = None,
     ) -> CommandResult:
+        # on_start is passed only when given, so runners overriding run()
+        # without it keep working.
+        extra: dict[str, Callable[[int], None]] = (
+            {"on_start": on_start} if on_start is not None else {})
         return await self.run(
             step.argv,
             case_root=case_root,
@@ -301,4 +314,5 @@ class OpenFOAMRunner:
             env=env,
             cancel_event=cancel_event,
             logs_dir=logs_dir,
+            **extra,
         )

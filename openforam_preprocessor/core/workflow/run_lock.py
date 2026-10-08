@@ -13,6 +13,16 @@ import psutil
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage
 
 LOCK_PATH = ".preprocessor/run.lock"
+CREATE_TIME_TOLERANCE_S = 1.0
+
+
+def process_create_time(pid: int) -> float | None:
+    """When the process with this PID started (seconds since the epoch), or None
+    if it does not exist or cannot be inspected."""
+    try:
+        return float(psutil.Process(pid).create_time())
+    except (psutil.Error, OSError):
+        return None
 
 
 class RunLock:
@@ -24,7 +34,10 @@ class RunLock:
         """Take the lock; return a BLOCKING issue if another live run holds it.
 
         A lock left by a process that no longer exists on this host is stale
-        and is replaced. A lock from another host is never assumed stale.
+        and is replaced. So is one whose PID now belongs to a process started
+        at another time (the PID was reused, e.g. after a WSL restart); locks
+        written without a start time keep the PID-only rule. A lock from
+        another host is never assumed stale.
         """
         self.path.parent.mkdir(parents=True, exist_ok=True)
         for _ in range(2):
@@ -38,7 +51,9 @@ class RunLock:
                 return self._busy_issue(holder)
             with os.fdopen(handle, "w", encoding="utf-8") as stream:
                 json.dump({"pid": os.getpid(), "host": socket.gethostname(),
-                           "started_at": datetime.now(UTC).isoformat()}, stream)
+                           "started_at": datetime.now(UTC).isoformat(),
+                           "process_create_time": process_create_time(os.getpid())},
+                          stream)
             self._held = True
             return None
         return self._busy_issue(self._holder())
@@ -58,11 +73,15 @@ class RunLock:
     @staticmethod
     def _is_stale(holder: dict[str, object]) -> bool:
         pid = holder.get("pid")
-        return (
-            holder.get("host") == socket.gethostname()
-            and isinstance(pid, int)
-            and not psutil.pid_exists(pid)
-        )
+        if holder.get("host") != socket.gethostname() or not isinstance(pid, int):
+            return False
+        if not psutil.pid_exists(pid):
+            return True
+        recorded = holder.get("process_create_time")
+        if not isinstance(recorded, int | float):
+            return False  # older lock: PID-only rule
+        current = process_create_time(pid)
+        return current is not None and abs(current - recorded) > CREATE_TIME_TOLERANCE_S
 
     def _busy_issue(self, holder: dict[str, object] | None) -> Issue:
         return Issue(

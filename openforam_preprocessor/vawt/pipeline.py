@@ -94,6 +94,8 @@ _EXECUTABLES: Mapping[VawtOperation, tuple[str, ...]] = {
     Op.CHECK_MESH: ("checkMesh",),
 }
 _MESHING = frozenset({Op.OUTER_MESH, Op.ROTOR_MESH, Op.SINGLE_MESH})
+# OpenFOAM versions the VAWT method was proven on (V0; spec section 19).
+VERIFIED_VERSIONS = ("v2512",)
 
 
 @dataclass(frozen=True)
@@ -307,7 +309,8 @@ class VawtPipeline:
         executables = sorted({e for op, runs in may_run.items() if runs
                               for e in _EXECUTABLES[op]})
         if executables:
-            found = validate_environment(config.openfoam_profile, executables, self._env())
+            found = validate_environment(config.openfoam_profile, executables, self._env(),
+                                         verified_versions=VERIFIED_VERSIONS)
             if has_stopping_issue(found):
                 raise _Stop("The OpenFOAM environment is not usable; nothing was run.",
                             *found)

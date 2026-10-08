@@ -17,9 +17,14 @@ _VERSION_PATTERNS = {
 
 
 def validate_environment(
-    profile: OpenFOAMProfile, executables: Iterable[str], env: Mapping[str, str]
+    profile: OpenFOAMProfile, executables: Iterable[str], env: Mapping[str, str],
+    *, verified_versions: Iterable[str] | None = None,
 ) -> tuple[Issue, ...]:
-    """Check the OpenFOAM environment before any command runs."""
+    """Check the OpenFOAM environment before any command runs.
+
+    verified_versions: when given, a version of the right profile that is not
+    in it gets a WARNING (the workflow's commands were proven on those only).
+    """
     issues: list[Issue] = []
     identity = tool_identity(profile, executables, env)
     missing = sorted(name for name, path in identity["executables"].items() if path is None)
@@ -60,6 +65,19 @@ def validate_environment(
             suggested_action="Select the profile matching the installed OpenFOAM, or load "
             "the matching installation.",
             details={"WM_PROJECT_VERSION": version, "profile": profile.value},
+        ))
+    elif verified_versions is not None and version not in (verified := tuple(verified_versions)):
+        issues.append(Issue(
+            category=IssueCategory.OPENFOAM_ENVIRONMENT,
+            severity=IssueSeverity.WARNING,
+            stage=IssueStage.ENVIRONMENT_CHECK,
+            code="OPENFOAM_VERSION_UNVERIFIED",
+            message=f"OpenFOAM {version} has not been verified for this workflow "
+            f"(verified: {', '.join(verified)}).",
+            explanation="Command options, outputs and silent-failure behaviour were "
+            "established on the verified versions only.",
+            suggested_action=f"Use OpenFOAM {verified[0]} if anything fails or looks wrong.",
+            details={"WM_PROJECT_VERSION": version, "verified": list(verified)},
         ))
     return tuple(issues)
 

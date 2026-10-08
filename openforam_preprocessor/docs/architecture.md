@@ -461,6 +461,10 @@ Implementation (M4): `core/workflow/dependency_graph.py` and
   use the tables above; another workflow (VAWT) passes its own operations,
   data-flow, direct-consumer, requires-fresh and active-when tables and
   applicability rule (`vawt/operations.py`). The rules are the same.
+- `ExecutionPlanner(..., propagate_through_inapplicable=False)` stops
+  staleness at operations that do not apply to the configuration (the VAWT
+  planner: a sub-case the layout does not have). The default, used by the
+  generic workflow, is unchanged.
 
 ---
 
@@ -591,6 +595,15 @@ Reliability (M9): `core/workflow/run_lock.py`, `core/workflow/run_records.py`,
   `PATCH_CREATION`).
 - `ResourceEstimator.assess_cells` classifies a cell estimate made by another
   workflow; RAM can follow the peak of steps that run one after another.
+- The run lock records the holder's process start time. A lock whose PID now
+  belongs to a process started at another time (PID reused, e.g. after a WSL
+  restart) is stale; a lock without the field keeps the PID-only rule.
+- `OpenFOAMRunner.run`/`run_step` take an optional `on_start(pid)` callback
+  (passed to `run` only when given, so older subclasses keep working). Logs
+  are flushed as output arrives, so they can be followed during a command.
+- `validate_environment(..., verified_versions=...)` warns
+  (`OPENFOAM_VERSION_UNVERIFIED`) about a version of the right profile that a
+  workflow was not proven on; without the argument nothing changes.
 
 ---
 
