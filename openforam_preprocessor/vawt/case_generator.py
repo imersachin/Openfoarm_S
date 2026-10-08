@@ -631,8 +631,9 @@ class VawtCaseGenerator:
                 "The AMI interface requires an outer domain.",
                 "Enable the outer domain, or use the CELL_ZONE interface.",
             ),)
-        if case_layout(config).single_mesh:
-            effective = zone_cell_size(config)
+        effective = zone_cell_size(config)
+        if case_layout(config).single_mesh and not math.isclose(
+                effective, config.rotating_zone.cell_size, rel_tol=1e-9):
             return (_issue(
                 IssueSeverity.INFO, "ZONE_CELL_SIZE_ADJUSTED",
                 f"In a single mesh the rotating zone gets cells of {effective:.6g} m "

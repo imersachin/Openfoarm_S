@@ -35,6 +35,7 @@ from core.workflow.run_lock import CREATE_TIME_TOLERANCE_S, RunLock, process_cre
 from core.workflow.run_records import list_run_records
 from mesh.estimator import ResourceAssessment, ResourceEstimator, SystemResources
 from openfoam.environment import validate_environment
+from vawt.case_generator import VawtCaseGenerator, zone_cell_size
 from vawt.config import Axis, RotorGeometryConfig, VawtProjectConfig
 from vawt.operations import CACHED, LAYOUT, PLANNER, VawtOperation, plan_changes
 from vawt.pipeline import (
@@ -89,12 +90,14 @@ CODE_SECTIONS: Mapping[str, str] = {
     **dict.fromkeys((
         "ROTOR_AXIS_NOT_CONFIRMED", "ROTOR_OUTSIDE_ZONE", "ZONE_CLEARANCE_SMALL",
         "TOO_FEW_ZONE_CELLS", "INNER_POINT_IN_ROTOR", "INNER_POINT_OUTSIDE_ZONE",
-        "INNER_POINT_UNCHECKED", "AMI_REQUIRES_DOMAIN"), "rotating_zone"),
+        "INNER_POINT_UNCHECKED", "AMI_REQUIRES_DOMAIN", "ZONE_CELL_SIZE_ADJUSTED"),
+        "rotating_zone"),
     **dict.fromkeys(("ZONE_OUTSIDE_DOMAIN", "OUTER_POINT_INVALID"), "domain"),
     "WAKE_OUTSIDE_DOMAIN": "refinement",
     **dict.fromkeys(("ABSOLUTE_LAYER_TOO_THICK", "LAYERS_TOO_THIN_FOR_CELLS",
                      "LAYER_MIN_THICKNESS_TOO_LARGE"), "layers"),
-    **dict.fromkeys(("SCHEMA_VERSION_INVALID", "SCHEMA_VERSION_NEWER"), "project"),
+    **dict.fromkeys(("SCHEMA_VERSION_INVALID", "SCHEMA_VERSION_NEWER",
+                     "VAWT_PROFILE_UNSUPPORTED"), "project"),
 }
 _UNSET_CODES = frozenset({"UNITS_NOT_CHOSEN", "ROTOR_AXIS_NOT_CONFIRMED"})
 
@@ -154,6 +157,10 @@ class ValidationOutcome:
     config: VawtProjectConfig | None
     metrics: RotorMetrics | None
     issues: tuple[Issue, ...]
+    # Rotating-zone cell size the mesh will actually get (m). In a single mesh
+    # it is the domain cell size / 2^n, which can differ from the one entered
+    # (INFO ZONE_CELL_SIZE_ADJUSTED names both).
+    zone_cell_size: float | None = None
 
     @property
     def can_run(self) -> bool:
@@ -224,6 +231,16 @@ class LogTail:
     truncated: bool  # earlier output exists that was not read
     size: int  # bytes in the file
     bytes_read: int = 0
+
+
+def _unique(issues: tuple[Issue, ...]) -> tuple[Issue, ...]:
+    seen: set[tuple[str, str]] = set()
+    kept = []
+    for issue in issues:
+        if (issue.code, issue.message) not in seen:
+            seen.add((issue.code, issue.message))
+            kept.append(issue)
+    return tuple(kept)
 
 
 def _issue(severity: IssueSeverity, code: str, message: str, action: str, *,
@@ -344,12 +361,17 @@ class VawtService:
         config, issues = parse_config(raw)
         if config is None:
             return ValidationOutcome(None, None, issues)
+        # What case generation will report (zone cell size used, profile), before
+        # any run; check_config repeats some of it, so duplicates are dropped.
+        generation = VawtCaseGenerator().issues(config)
+        size = zone_cell_size(config)
         mesh, geometry_issues = self.geometry.get(config.geometry)
         if mesh is None:
-            return ValidationOutcome(config, None, geometry_issues)
+            return ValidationOutcome(config, None, (*geometry_issues, *generation), size)
         metrics = compute_rotor_metrics(mesh.vertices, config.rotor.axis)
         checks = check_config(config, mesh, metrics, self.thresholds)
-        return ValidationOutcome(config, metrics, (*geometry_issues, *checks))
+        return ValidationOutcome(config, metrics,
+                                 _unique((*geometry_issues, *checks, *generation)), size)
 
     def save(self, raw: Any) -> SaveResult:
         """Write a new revision if the configuration is well-formed. Engineering
