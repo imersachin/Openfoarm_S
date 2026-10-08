@@ -20,7 +20,16 @@ from geometry.importer import import_stl
 from geometry.metrics import body_orientations, contains_points
 from geometry.transformer import GeometryTransform
 from geometry.validator import TrimeshGeometryValidator
-from vawt.config import Axis, InterfaceType, LayerSizing, VawtProjectConfig, plane_axes
+from vawt.config import (
+    SCHEMA_VERSION_INVALID,
+    SCHEMA_VERSION_NEWER,
+    VAWT_SCHEMA_VERSION,
+    Axis,
+    InterfaceType,
+    LayerSizing,
+    VawtProjectConfig,
+    plane_axes,
+)
 from vawt.rotor_metrics import RotorMetrics, compute_rotor_metrics
 
 
@@ -69,6 +78,19 @@ _UNSET = frozenset({"missing", "enum", "model_type", "model_attributes_type"})
 def _rename(issue: Issue) -> Issue:
     field = str(issue.details.get("field", ""))
     kind = str(issue.details.get("error_type", ""))
+    if kind == SCHEMA_VERSION_INVALID:
+        return _issue(
+            IssueSeverity.BLOCKING, "SCHEMA_VERSION_INVALID", issue.message,
+            "Set schema_version to a whole number of 1 or more, or remove it to use "
+            f"the current version ({VAWT_SCHEMA_VERSION}).",
+            field="schema_version",
+        )
+    if kind == SCHEMA_VERSION_NEWER:
+        return _issue(
+            IssueSeverity.BLOCKING, "SCHEMA_VERSION_NEWER", issue.message,
+            "Open this configuration with the newer application version that wrote it.",
+            field="schema_version",
+        )
     if field == "geometry.source_units" and kind in _UNSET:
         return _issue(
             IssueSeverity.BLOCKING, "UNITS_NOT_CHOSEN",

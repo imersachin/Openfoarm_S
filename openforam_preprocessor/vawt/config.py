@@ -15,6 +15,7 @@ from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic_core import PydanticCustomError
 
 from core.config.models import (
     Bounds,
@@ -28,6 +29,9 @@ from core.config.models import (
 )
 
 VAWT_SCHEMA_VERSION = 1
+# Error types raised for an unusable schema_version (see parse_config).
+SCHEMA_VERSION_INVALID = "schema_version_invalid"
+SCHEMA_VERSION_NEWER = "schema_version_newer"
 
 _STRICT = ConfigDict(frozen=True, allow_inf_nan=False, extra="forbid")
 _PATCH_NAME = r"^[A-Za-z_][A-Za-z0-9_]*$"
@@ -256,10 +260,20 @@ class VawtProjectConfig(BaseModel):
         if not isinstance(data, dict):
             return data
         version = data.get("schema_version", VAWT_SCHEMA_VERSION)
-        if isinstance(version, int) and version > VAWT_SCHEMA_VERSION:
-            raise ValueError(
-                f"schema_version {version} was written by a newer version of this "
-                f"application (supported: {VAWT_SCHEMA_VERSION}); upgrade the application."
+        # Only a whole number >= 1 is a version; anything else is rejected, never
+        # overwritten (bool is excluded: it is an int subclass).
+        if isinstance(version, bool) or not isinstance(version, int) or version < 1:
+            raise PydanticCustomError(
+                SCHEMA_VERSION_INVALID,
+                "schema_version must be a whole number of 1 or more, got {version!r}.",
+                {"version": version},
+            )
+        if version > VAWT_SCHEMA_VERSION:
+            raise PydanticCustomError(
+                SCHEMA_VERSION_NEWER,
+                "schema_version {version} was written by a newer version of this "
+                "application (supported: {supported}); upgrade the application.",
+                {"version": version, "supported": VAWT_SCHEMA_VERSION},
             )
         return {**data, "schema_version": VAWT_SCHEMA_VERSION}
 

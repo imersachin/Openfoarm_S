@@ -142,6 +142,38 @@ def test_newer_schema_is_rejected_and_missing_version_is_current(
     assert config.schema_version == VAWT_SCHEMA_VERSION
 
 
+@pytest.mark.parametrize("value", [0, -1, 1.0, 1.5, "1", "2", True, None, [1]])
+def test_schema_version_that_is_not_a_whole_number_of_one_or_more_is_rejected(
+    draft: dict[str, Any], value: Any
+) -> None:
+    data = edited(draft, "schema_version", value)
+    assert any(e.endswith("schema_version_invalid") for e in errors(data))
+
+    config, issues = parse_config(data)
+
+    assert config is None
+    assert [(i.code, i.severity.value) for i in issues] == [
+        ("SCHEMA_VERSION_INVALID", "BLOCKING")
+    ]
+    assert issues[0].details["field"] == "schema_version"
+    assert issues[0].suggested_action
+
+
+def test_newer_schema_gets_a_specific_issue(draft: dict[str, Any]) -> None:
+    _, issues = parse_config(edited(draft, "schema_version", VAWT_SCHEMA_VERSION + 1))
+
+    assert [(i.code, i.severity.value) for i in issues] == [
+        ("SCHEMA_VERSION_NEWER", "BLOCKING")
+    ]
+
+
+def test_current_schema_version_is_accepted(draft: dict[str, Any]) -> None:
+    config, issues = parse_config(edited(draft, "schema_version", VAWT_SCHEMA_VERSION))
+
+    assert issues == ()
+    assert config is not None and config.schema_version == VAWT_SCHEMA_VERSION
+
+
 def test_config_is_frozen(draft: dict[str, Any]) -> None:
     config = VawtProjectConfig.model_validate(draft)
     with pytest.raises(ValidationError):

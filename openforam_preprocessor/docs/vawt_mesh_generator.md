@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Proposed. Not started. Requires owner approval before V0. |
+| Status | V1 complete; V0 pending |
 | Place this file at | `openforam_preprocessor/docs/vawt_mesh_generator.md` |
 | Written against | `main` after M9 (commit "Replace placeholder PR template with project checklist") |
 | Replaces | The standalone "Mesh" app (React frontend + WSL backend). That app is reference material only; none of its code is copied. |
@@ -116,6 +116,19 @@ in V1, recorded in the plan, before code is written.
 | 6 | `geometry/validator.py` reports `INWARD_NORMALS` from the total signed volume. A rotor whose blades are inside-out but whose shaft is not passes with only an INFO. | Add a per-body orientation check (additive, new issue code). |
 | 7 | The geometry artifact is written as ASCII STL. | Measure read/hash time on a large rotor in V0. Do not change the format without approval. |
 | 8 | `ProjectService.read_log` reads the whole file, then slices. | VAWT log tail reads the last bytes by seek. |
+
+### 3.4 Integration-point decisions (V1, approved by the owner)
+
+| # | Decision | Implemented in |
+|---|---|---|
+| 1 | `DependencyGraph` and `ExecutionPlanner` accept their dependency tables as arguments. The current module-level tables stay the defaults, so the generic workflow is unchanged (additive). | V3 |
+| 2 | New `IssueStage` members (merge, patch creation, zone creation, surface check, export) are added when an operation first emits them, not before. | V3 |
+| 3 | Sub-case logs live in `<project>/logs/<subcase>/`. New command builders are added to `openfoam/commands.py`; existing builders are unchanged. | V3 |
+| 4 | VAWT has its own generator, `vawt/case_generator.py`, built on the shared formatting helpers. `OpenFOAMMeshCaseGenerator` is not modified. | V2 |
+| 5 | `ResourceEstimator` gains an entry point that takes cell-count inputs directly; `estimate_cells(ProjectConfig)` is unchanged. | V3 |
+| 6 | Per-body orientation: `geometry/metrics.py` (`body_orientations`) reports each closed body; `vawt/validation.py` raises `BODY_INSIDE_OUT` (WARNING). `geometry/validator.py` is unchanged. | V1 (done) |
+| 7 | The ASCII STL artifact format stays as is until V0 measures read/hash time on a large rotor. Any change needs owner approval. | V0 |
+| 8 | `VawtService.log_tail` reads a bounded number of bytes from the end of the log by seek. `ProjectService.read_log` is unchanged. | V4 |
 
 ---
 
@@ -577,6 +590,17 @@ Stop after each. Do not start the next without an explicit instruction.
    here) or a mode inside the existing dashboard?
 6. Largest rotor STL and cell count expected. This sets the display cap and
    whether integration point 7 matters.
+
+Confirmed by the owner during V1:
+
+- Decision 1 (profile): OpenCFD (openfoam.com) is the default profile. The
+  exact version and where it runs are still settled in V0.
+- Decision 2 (`CELL_ZONE`): stays in the configuration, but is not exposed in
+  the UI until a real OpenFOAM run has proven it.
+- Decision 4 (flow direction): inlet on the minimum face of the flow axis.
+
+Decision 5 is reflected in `docs/architecture.md` §3 and §18 (separate entry
+point `app/vawt_app.py`). Decisions 3 and 6 remain open for V0.
 
 ---
 
