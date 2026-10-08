@@ -11,3 +11,6 @@
 # VAWT V0 evidence: OpenFOAM dictionaries (no file extension), captured logs and
 # reproduction scripts.
 openforam_preprocessor/tests/fixtures/vawt/v0/** text eol=lf
+
+# Windows batch files run by cmd.exe.
+*.cmd text eol=crlf

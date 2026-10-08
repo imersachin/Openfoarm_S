@@ -42,6 +42,27 @@ A project directory contains the OpenFOAM case (`system/`, `constant/`),
 `reports/`, `logs/`, uploaded `inputs/`, and `.preprocessor/` (configuration
 history, artifact manifest, run records, run lock).
 
+## Run the VAWT mesh generator
+
+The VAWT app runs inside WSL, where OpenFOAM is installed, and is opened from
+the Windows browser. It serves on `127.0.0.1` only (not on the network).
+
+From Windows, double-click or run `scripts\run_vawt_app.cmd`. Set these
+first if the defaults do not fit (Linux paths):
+
+```bat
+set VAWT_WSL_DISTRO=Ubuntu-24.04
+set VAWT_PYTHON=/path/to/venv/bin/python
+```
+
+Or inside WSL: `bash scripts/run_vawt_app.sh` (same settings as environment
+variables; also `VAWT_PORT`, `VAWT_PROJECTS_DIR`, `OPENFOAM_BASHRC`).
+
+Then open <http://localhost:8501>. Projects are kept in `~/vawt_projects` in
+the WSL file system (Windows: `\\wsl.localhost\<distro>\...`); a project on
+a Windows drive works but is slower and is flagged. Stop the app with Ctrl+C;
+an active run is cancelled first.
+
 ## Test
 
 ```bash
