@@ -306,6 +306,11 @@ Case-generation conventions (approved in M3):
   are rejected in configuration and by the dictionary writer.
 - If `max_cells_per_axis` limits the background cells, generation continues
   with a `BACKGROUND_CELLS_CAPPED` warning that reports the effective cell size.
+- Target version OpenFOAM v2512 (openfoam.com). snappyHexMesh requires
+  `system/fvSchemes` and `system/fvSolution`; they are generated with empty
+  sections and no solver settings (meshing only, not a CFD setup).
+  `meshQualityDict` carries a `FoamFile` header because
+  `checkMesh -meshQuality` reads it on its own; snappyHexMeshDict `#include`s it.
 
 ---
 
@@ -492,8 +497,10 @@ Implementation (M5): `core/artifacts/` and `core/workflow/pipeline.py`.
     transformed STL, tool identity → `.eMesh`;
   - mesh (blockMesh + snappyHexMesh as one unit, because snappy overwrites the
     background mesh in place): all meshing dictionaries, transformed STL,
-    `.eMesh` when used, tool identity → `constant/polyMesh` files;
-  - checkMesh: `constant/polyMesh` files, tool identity → checkMesh log.
+    `.eMesh` when used, tool identity → `constant/polyMesh` files
+    (`fvSchemes` and `fvSolution` are hashed with the meshing dictionaries);
+  - checkMesh: `constant/polyMesh` files, tool identity, checkMesh options →
+    checkMesh log (a result produced with other options is not reused).
 - `constant/polyMesh/sets/` (checkMesh diagnostics) is excluded from mesh hashes.
 - Tool identity: profile, `WM_PROJECT`, `WM_PROJECT_VERSION`, resolved
   executable paths. Unknown values are recorded as `None`.
@@ -658,6 +665,20 @@ Implementation (M6): `mesh/parser.py` and `mesh/validator.py`.
   (VALID / INVALID / UNKNOWN, from checkMesh), `mesh_quality` (WITHIN_LIMITS /
   REVIEW / NOT_EVALUATED, against `mesh.quality`), and `simulation_suitability`
   and `cfd_accuracy`, which are always `NOT_ASSESSED`, with an explanatory note.
+- checkMesh runs with `-allTopology -meshQuality`. The `-allGeometry` checks
+  are **not run**: on OpenFOAM v2512 they report concave cells
+  (`***Concave cells (using face planes)`) on ordinary snappyHexMesh meshes,
+  and every failed check marks the mesh INVALID. The same meshes report
+  `Mesh OK.` without that option. checkMesh exits 0 even when checks fail, so
+  validity always comes from the parsed output, never the exit code.
+
+Known limitations (for later):
+
+- Classify `-allGeometry` checks as quality warnings instead of not running
+  them, so their information is available without affecting validity.
+- The parser reports checkMesh's patch-group summary row (`".*"`, printed by
+  v2512 after the patch table) as a patch.
+- The dashboard uses `use_container_width`, deprecated in Streamlit 1.65.
 
 ---
 

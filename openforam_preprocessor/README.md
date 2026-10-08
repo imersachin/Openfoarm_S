@@ -11,9 +11,12 @@ high-quality mesh does not establish CFD accuracy.
 ## Requirements
 
 - Python 3.11+
-- For meshing: OpenFOAM (openfoam.com / ESI releases such as v2312 are fully
-  supported; openfoam.org releases are supported without feature extraction),
-  with its environment sourced in the shell that starts the application.
+- For meshing: OpenFOAM. The target version is **OpenFOAM v2512**
+  (openfoam.com / OpenCFD), the version the real-OpenFOAM tests run against
+  (Ubuntu 24.04 under WSL2: package `openfoam2512`). Other openfoam.com releases
+  are not verified; openfoam.org releases are supported without feature
+  extraction. Source its environment in the shell that starts the application
+  (`source /usr/lib/openfoam/openfoam2512/etc/bashrc`).
   Geometry preparation, dictionary generation and visualization work without
   OpenFOAM.
 
