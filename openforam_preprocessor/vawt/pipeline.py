@@ -80,6 +80,7 @@ Op = VawtOperation
 GEOMETRY_REPORT = "reports/geometry_report.json"
 PREFLIGHT_REPORT = "reports/resource_preflight.json"
 MESH_REPORT = "reports/mesh_quality_report.json"
+SUPERSEDED_MESH_REPORT = "reports/mesh_quality_report.superseded.json"
 POLY_MESH = "constant/polyMesh"
 _EXCLUDED = frozenset({"sets"})  # checkMesh diagnostics, not part of the mesh
 _REGIONS = re.compile(r"Number of regions:\s*(\d+)")
@@ -169,6 +170,7 @@ class _Run:
     issues: list[Issue] = field(default_factory=list)
     commands: list[CommandResult] = field(default_factory=list)
     stage: str = "starting"
+    step: int = 0  # 1-based index of the last operation reached; 0 before the first
 
     def case(self, name: str) -> Path:
         return self.root / CASES_DIR / name
@@ -177,10 +179,9 @@ class _Run:
                message: str = "") -> None:
         name = operation.value if isinstance(operation, VawtOperation) else operation
         self.stage = name
-        step = (self.operations.index(operation) + 1
-                if isinstance(operation, VawtOperation) and operation in self.operations
-                else len(self.operations))
-        write_status(self.root, run_id=self.run_id, state=state, stage=name, step=step,
+        if isinstance(operation, VawtOperation) and operation in self.operations:
+            self.step = self.operations.index(operation) + 1
+        write_status(self.root, run_id=self.run_id, state=state, stage=name, step=self.step,
                      total=len(self.operations), started_at=self.started_at, message=message)
 
 
@@ -316,7 +317,10 @@ class VawtPipeline:
         if any(may_run.get(op) for op in _MESHING):
             self._preflight(run, rotor_area, allow_risk)
 
-        # 7. OpenFOAM operations, in order.
+        # 7. OpenFOAM operations, in order. The previous mesh report no longer
+        #    describes the meshes once any of them runs; set it aside first.
+        if any(may_run.values()):
+            self._supersede_report(run)
         for op in run.operations:
             if op not in _EXECUTABLES:
                 continue
@@ -600,6 +604,12 @@ class VawtPipeline:
 
     # --- mesh validation --------------------------------------------------------------
 
+    @staticmethod
+    def _supersede_report(run: _Run) -> None:
+        current = run.root / MESH_REPORT
+        if current.is_file():
+            current.replace(run.root / SUPERSEDED_MESH_REPORT)
+
     def _validate_mesh(self, run: _Run, final: str) -> tuple[Path, bool, str]:
         log = run.root / "logs" / final / "04_checkMesh.log"
         metrics = CheckMeshParser().parse_file(log)
@@ -629,6 +639,8 @@ class VawtPipeline:
         path = run.root / MESH_REPORT
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = report.as_dict()
+        payload["run_id"] = run.run_id
+        payload["config_sha256"] = sha256_json(run.config.model_dump(mode="json"))
         payload["regions"] = {"expected": expected,
                               "found": int(found.group(1)) if found else None}
         path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

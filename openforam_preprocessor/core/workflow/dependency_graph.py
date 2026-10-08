@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from enum import StrEnum
 from typing import Generic, TypeVar, overload
 
@@ -157,8 +157,14 @@ class DependencyGraph(Generic[OpT]):
     def unmapped(self, changed_paths: Iterable[str]) -> frozenset[str]:
         return frozenset(p for p in changed_paths if self.direct_consumers(p) is None)
 
-    def closure(self, operations: Iterable[OpT]) -> frozenset[OpT]:
-        """The operations plus everything downstream (including in-place re-runs)."""
+    def closure(self, operations: Iterable[OpT],
+                through: Callable[[OpT], bool] | None = None) -> frozenset[OpT]:
+        """The operations plus everything downstream (including in-place re-runs).
+
+        through, when given, decides which operations pass staleness on: an
+        operation for which it is false is included, but nothing downstream is
+        reached through it.
+        """
         seen: set[OpT] = set()
         stack = list(operations)
         while stack:
@@ -166,19 +172,24 @@ class DependencyGraph(Generic[OpT]):
             if operation in seen:
                 continue
             seen.add(operation)
+            if through is not None and not through(operation):
+                continue
             stack.extend(self.downstream[operation])
             stack.extend(self.requires_fresh.get(operation, ()))
         return frozenset(seen)
 
-    def stale_by_path(self, changed_paths: Iterable[str]) -> dict[OpT, frozenset[str]]:
+    def stale_by_path(self, changed_paths: Iterable[str],
+                      through: Callable[[OpT], bool] | None = None,
+                      ) -> dict[OpT, frozenset[str]]:
         """Each stale operation with the changed paths that made it stale.
 
-        Unmapped paths conservatively invalidate every operation.
+        Unmapped paths conservatively invalidate every operation. through: as
+        in closure().
         """
         reasons: dict[OpT, set[str]] = {}
         for path in sorted(changed_paths):
             direct = self.direct_consumers(path)
-            stale = self.closure(self.operations if direct is None else direct)
+            stale = self.closure(self.operations if direct is None else direct, through)
             for operation in stale:
                 reasons.setdefault(operation, set()).add(path)
         return {op: frozenset(reasons[op]) for op in self.operations if op in reasons}

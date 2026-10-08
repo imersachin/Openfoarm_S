@@ -82,6 +82,7 @@ class ExecutionPlanner(Generic[OpT, ConfigT]):
         *,
         active_when: Mapping[str, Callable[[ConfigT], bool]],
         applicable: Callable[[OpT, ConfigT], bool],
+        propagate_through_inapplicable: bool = True,
     ) -> None: ...
 
     def __init__(
@@ -90,6 +91,7 @@ class ExecutionPlanner(Generic[OpT, ConfigT]):
         *,
         active_when: Mapping[str, Callable[[Any], bool]] | None = None,
         applicable: Callable[[Any, Any], bool] | None = None,
+        propagate_through_inapplicable: bool = True,
     ) -> None:
         # Without arguments OpT/ConfigT are the generic workflow's types (first
         # overload), so its tables and applicability rule fit.
@@ -99,6 +101,9 @@ class ExecutionPlanner(Generic[OpT, ConfigT]):
         self.applicable: Callable[[OpT, ConfigT], bool] = (
             applicable if applicable is not None
             else _engine_applicable)  # type: ignore[assignment]
+        # False: an operation that does not apply to the configuration (e.g. a
+        # sub-case the layout does not have) does not pass staleness downstream.
+        self.propagate_through_inapplicable = propagate_through_inapplicable
 
     def plan(self, changes: _Changes, config: ConfigT) -> ExecutionPlan[OpT]:
         """Plan the minimum work after a configuration change.
@@ -111,7 +116,9 @@ class ExecutionPlanner(Generic[OpT, ConfigT]):
             if path in self.active_when and not self.active_when[path](config)
         )
         active = changes.changed_paths - inactive
-        plan = self._build(self.graph.stale_by_path(active), config,
+        through = (None if self.propagate_through_inapplicable
+                   else lambda op: self.is_applicable(op, config))
+        plan = self._build(self.graph.stale_by_path(active, through), config,
                            self.graph.unmapped(active))
         return replace(plan, inactive_paths=inactive)
 

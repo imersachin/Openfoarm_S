@@ -118,6 +118,10 @@ def _layers_on(sizing: LayerSizing | None) -> Callable[[VawtProjectConfig], bool
     return active
 
 
+def _has_rotor_case(config: VawtProjectConfig) -> bool:
+    return ROTOR in case_layout(config).sub_cases
+
+
 # Settings that reach a dictionary only while another setting enables them.
 ACTIVE_WHEN: Mapping[str, Callable[[VawtProjectConfig], bool]] = {
     "refinement.feature_level": lambda c: c.refinement.extract_features,
@@ -128,7 +132,9 @@ ACTIVE_WHEN: Mapping[str, Callable[[VawtProjectConfig], bool]] = {
     "layers.min_thickness": _layers_on(LayerSizing.RELATIVE),
     "layers.first_layer_thickness": _layers_on(LayerSizing.ABSOLUTE),
     "layers.min_thickness_m": _layers_on(LayerSizing.ABSOLUTE),
-    "rotating_zone.location_in_mesh": lambda c: ROTOR in case_layout(c).sub_cases,
+    # A change arrives per coordinate; the parent entry covers a replaced point.
+    **{f"rotating_zone.location_in_mesh{suffix}": _has_rotor_case
+       for suffix in ("", ".x", ".y", ".z")},
 }
 
 
@@ -159,8 +165,11 @@ def feature_case(config: VawtProjectConfig) -> str:
 GRAPH: DependencyGraph[VawtOperation] = DependencyGraph(
     operations=list(VawtOperation), downstream=DOWNSTREAM, direct_consumers=DIRECT_CONSUMERS,
 )
+# An operation outside the layout (e.g. the outer mesh of a rotor-only project)
+# never runs, so it makes nothing after it stale.
 PLANNER: ExecutionPlanner[VawtOperation, VawtProjectConfig] = ExecutionPlanner(
     GRAPH, active_when=ACTIVE_WHEN, applicable=applicable,
+    propagate_through_inapplicable=False,
 )
 
 
