@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | V1 complete; V0 pending |
+| Status | V0, V1 and V2 complete; V3 next |
 | Place this file at | `openforam_preprocessor/docs/vawt_mesh_generator.md` |
 | Written against | `main` after M9 (commit "Replace placeholder PR template with project checklist") |
 | Replaces | The standalone "Mesh" app (React frontend + WSL backend). That app is reference material only; none of its code is copied. |
@@ -182,6 +182,17 @@ create a module until it has content.
 `cases/outer` and `cases/merged` exist only when the outer domain is enabled.
 One artifact manifest at project level covers all sub-cases.
 
+Sub-cases per mode (method A, owner decision after V0; `vawt/case_generator.py`):
+
+| Mode | Sub-cases, in run order | Final mesh |
+|---|---|---|
+| `AMI` (domain required) | `outer`, `rotor`, `merged` (mergeMeshes + createPatch) | `cases/merged` |
+| `CELL_ZONE` with a domain | `merged` only: one snappyHexMesh pass, cylinder as a zoned surface | `cases/merged` |
+| `CELL_ZONE` without a domain | `rotor` only (zone boundary is a plain patch) | `cases/rotor` |
+
+Switching mode removes the generated dictionaries the new mode does not use
+(only files this application generated).
+
 ---
 
 ## 6. Configuration Model
@@ -312,6 +323,16 @@ Assembly:   merge → interface patches → rotating cell zone           (method
 Check:      checkMesh → structured validation
 Outputs:    previews, Fluent export
 ```
+
+Method A (decided after V0, proven on v2512): `AMI` uses the two-mesh
+sequence above, with the cell zone created by topoSet in the rotor sub-case
+before merging; `CELL_ZONE` with a domain uses a single snappyHexMesh pass
+with the cylinder as a zoned surface. In a single mesh the zone's cells can
+only be the domain cell size / 2^n: the generator uses the smallest n whose
+cells are no larger than `rotating_zone.cell_size` and reports the effective
+size (INFO `ZONE_CELL_SIZE_ADJUSTED`); blade and feature levels count from it.
+Each dictionary depends only on the settings of its own sub-case, which is
+what makes the table below possible (tested for every configuration field).
 
 ### 9.2 Operations are cached independently
 

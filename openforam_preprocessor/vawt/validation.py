@@ -20,6 +20,16 @@ from geometry.importer import import_stl
 from geometry.metrics import body_orientations, contains_points
 from geometry.transformer import GeometryTransform
 from geometry.validator import TrimeshGeometryValidator
+from vawt.case_generator import (
+    MERGED,
+    OUTER,
+    RESERVED_NAMES,
+    ROTOR,
+    Grid,
+    background_grids,
+    case_layout,
+    zone_cell_size,
+)
 from vawt.config import (
     SCHEMA_VERSION_INVALID,
     SCHEMA_VERSION_NEWER,
@@ -39,6 +49,12 @@ class ValidationThresholds:
 
     min_clearance_cells: float = 1.0  # rotor-to-cylinder clearance, in zone cells
     min_cells_across_diameter: float = 10.0  # zone cells across the rotor diameter
+    # Absolute layers: final layer below this fraction of the finest blade cell
+    # (V0 E3a: D/5000 next to D/88 cells added no layers; E3d at 0.3 did).
+    min_final_layer_fraction: float = 0.1
+    # A mesh point closer than this fraction of a cell to a background-cell
+    # face counts as on it (V0 E4: snappyHexMesh rejects points on cell edges).
+    point_face_tolerance_cells: float = 1e-6
 
 
 @dataclass(frozen=True)
@@ -300,7 +316,21 @@ def check_config(config: VawtProjectConfig, mesh: trimesh.Trimesh, metrics: Roto
         if layers.sizing is LayerSizing.ABSOLUTE:
             assert layers.first_layer_thickness is not None
             assert layers.min_thickness_m is not None
-            finest = zone.cell_size / 2 ** config.refinement.blade_max_level
+            finest = zone_cell_size(config) / 2 ** config.refinement.blade_max_level
+            final_layer = layers.first_layer_thickness * layers.expansion_ratio ** (
+                layers.count - 1)
+            if final_layer < thresholds.min_final_layer_fraction * finest:
+                issues.append(_issue(
+                    IssueSeverity.WARNING, "LAYERS_TOO_THIN_FOR_CELLS",
+                    f"The outermost layer ({final_layer:.4g} m) is below "
+                    f"{thresholds.min_final_layer_fraction:g} of the finest blade cell "
+                    f"({finest:.4g} m); snappyHexMesh is likely to add no layers.",
+                    "Increase first_layer_thickness, the expansion ratio or the layer "
+                    "count, or refine the blade cells.",
+                    explanation="The jump from the last layer to the cell next to it "
+                    "fails snappyHexMesh's quality checks, and the layers are removed.",
+                    final_layer_thickness=final_layer, finest_blade_cell=finest,
+                ))
             if layers.first_layer_thickness > finest:
                 issues.append(_issue(
                     IssueSeverity.ERROR, "ABSOLUTE_LAYER_TOO_THICK",
@@ -337,4 +367,66 @@ def check_config(config: VawtProjectConfig, mesh: trimesh.Trimesh, metrics: Roto
                 "Reduce the rotating-zone cell size.",
                 cells_across_diameter=across,
             ))
+
+    issues.extend(_reserved_name_issues(config))
+    issues.extend(_point_on_face_issues(config, thresholds))
     return tuple(issues)
+
+
+def _reserved_name_issues(config: VawtProjectConfig) -> list[Issue]:
+    names = {"geometry.patch_name": config.geometry.patch_name}
+    if config.domain is not None:
+        patches = config.domain.patches
+        names.update({f"domain.patches.{field}": getattr(patches, field)
+                      for field in type(patches).model_fields})
+    return [
+        _issue(
+            IssueSeverity.BLOCKING, "RESERVED_PATCH_NAME",
+            f"'{name}' ({field}) is a name the generated mesh uses itself.",
+            f"Choose another name; reserved: {', '.join(sorted(RESERVED_NAMES))}.",
+            field=field, name=name,
+        )
+        for field, name in names.items() if name in RESERVED_NAMES
+    ]
+
+
+def _faces_hit(grid: Grid, point: np.ndarray, tolerance_cells: float) -> list[str]:
+    """Global axes along which the point lies on a background-cell face plane."""
+    hit = []
+    for index, axis in enumerate("xyz"):
+        spacing = grid.spacing(index)
+        offset = (point[index] - grid.minimum[index]) / spacing
+        if abs(offset - round(offset)) < tolerance_cells:
+            hit.append(axis)
+    return hit
+
+
+def _point_on_face_issues(config: VawtProjectConfig,
+                          thresholds: ValidationThresholds) -> list[Issue]:
+    """Mesh points on background-cell faces or edges (V0 E4)."""
+    layout = case_layout(config)
+    grids = background_grids(config)
+    checks = []
+    if ROTOR in layout.sub_cases:  # the rotor mesh uses the zone's point
+        checks.append(("rotating_zone.location_in_mesh", config.rotating_zone.location_in_mesh,
+                       grids[ROTOR]))
+    if config.domain is not None:  # the outer or single mesh uses the domain's point
+        grid = grids[OUTER] if OUTER in layout.sub_cases else grids[MERGED]
+        checks.append(("domain.location_in_mesh", config.domain.location_in_mesh, grid))
+    issues = []
+    for field, vector, grid in checks:
+        axes = _faces_hit(grid, _point(vector), thresholds.point_face_tolerance_cells)
+        if axes:
+            where = "edge" if len(axes) > 1 else "face"
+            issues.append(_issue(
+                IssueSeverity.ERROR, "MESH_POINT_ON_CELL_FACE",
+                f"{field} lies on a background-cell {where} (planes normal to "
+                f"{', '.join(axes)}); snappyHexMesh may not find the region.",
+                f"Move {field} by a fraction of a cell (for example a quarter) along "
+                f"{', '.join(axes)}.",
+                explanation="snappyHexMesh stops with 'is not inside the mesh or on a "
+                "face or edge' for such points.",
+                field=field, axes=axes,
+                cell_size={a: grid.spacing("xyz".index(a)) for a in axes},
+            ))
+    return issues

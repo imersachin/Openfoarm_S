@@ -17,6 +17,19 @@ def foam_vector(x: float, y: float, z: float) -> str:
     return f"({foam_scalar(x)} {foam_scalar(y)} {foam_scalar(z)})"
 
 
+def foam_header(object_name: str) -> str:
+    """The FoamFile header block OpenFOAM utilities expect at the top of a dictionary."""
+    return f"""\
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      {object_name};
+}}
+"""
+
+
 class OpenFOAMFileWriter:
     GENERATED_HEADER = """\
 /*--------------------------------*- C++ -*----------------------------------*\\

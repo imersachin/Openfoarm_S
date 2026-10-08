@@ -101,13 +101,17 @@ def test_levels_and_layers() -> None:
 
 
 def test_mesh_points() -> None:
+    # V2 (R1): points are moved off the symmetry planes by a fraction of a cell,
+    # because on them they can lie on background-cell edges (V0 E4).
     data = draft()
     inner = data["rotating_zone"]["location_in_mesh"]
     outer = data["domain"]["location_in_mesh"]
+    zone_cell, domain_cell = D / 22, D / 9
 
-    assert (inner["x"], inner["y"], inner["z"]) == pytest.approx((0.625 * D, 0.0, 0.0))
+    assert (inner["x"], inner["y"], inner["z"]) == pytest.approx(
+        (0.625 * D, 0.237 * zone_cell, 0.371 * zone_cell))
     assert outer["x"] == pytest.approx((-3 * D + (-0.75 * D)) / 2)
-    assert (outer["y"], outer["z"]) == pytest.approx((0.0, 0.0))
+    assert (outer["y"], outer["z"]) == pytest.approx((0.237 * domain_cell, 0.371 * domain_cell))
 
 
 def test_without_domain_uses_cell_zone_and_no_wake() -> None:

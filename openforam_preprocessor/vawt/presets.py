@@ -57,6 +57,11 @@ LAYERS = {"count": 3, "expansion_ratio": 1.2, "final_layer_thickness": 0.3,
           "min_thickness": 0.1}
 ABSOLUTE_FIRST_LAYER_PER_D = 1.0 / 5000.0
 INNER_POINT_RADIUS_D = 0.625  # midway between rotor edge (D/2) and zone wall (0.75 D)
+# Mesh points are moved off the symmetry planes by these fractions of a cell:
+# on the planes they can lie on background-cell faces or edges, which
+# snappyHexMesh rejects (V0 E4 location_on_cell_edge). Validation checks the
+# result against the actual background grid.
+POINT_OFFSET_CELLS = (0.237, 0.371)
 
 
 def _vec(values: list[float]) -> dict[str, float]:
@@ -92,9 +97,11 @@ def draft_from_preset(
     zone_axis_min = rotor_lo - ZONE_AXIAL_MARGIN_H * h
     zone_axis_max = rotor_hi + ZONE_AXIAL_MARGIN_H * h
 
+    zone_cell = d / ZONE_CELLS_ACROSS_D
     inner = list(centre)
     inner[u.position] = centre[u.position] + INNER_POINT_RADIUS_D * d
-    inner[a] = (rotor_lo + rotor_hi) / 2.0
+    inner[v.position] = centre[v.position] + POINT_OFFSET_CELLS[0] * zone_cell
+    inner[a] = (rotor_lo + rotor_hi) / 2.0 + POINT_OFFSET_CELLS[1] * zone_cell
 
     draft = copy.deepcopy(base)
     draft["rotor"] = {"axis": axis.value, "flow_axis": flow_axis.value}
@@ -105,7 +112,7 @@ def draft_from_preset(
         "axis_max": float(zone_axis_max),
         "diameter": float(2.0 * zone_radius),
         "interface": (InterfaceType.AMI if include_domain else InterfaceType.CELL_ZONE).value,
-        "cell_size": float(d / ZONE_CELLS_ACROSS_D),
+        "cell_size": float(zone_cell),
         "location_in_mesh": _vec(inner),
     }
 
@@ -127,11 +134,14 @@ def draft_from_preset(
         else:
             lo[a], hi[a] = centre[a] - axial, centre[a] + axial
 
+        domain_cell = d / DOMAIN_CELLS_ACROSS_D
         outer = list(centre)
         outer[f] = (lo[f] + (centre[f] - zone_radius)) / 2.0
+        outer[lat] = centre[lat] + POINT_OFFSET_CELLS[0] * domain_cell
+        outer[a] = centre[a] + POINT_OFFSET_CELLS[1] * domain_cell
         draft["domain"] = {
             "bounds": {"minimum": _vec(lo), "maximum": _vec(hi)},
-            "cell_size": float(d / DOMAIN_CELLS_ACROSS_D),
+            "cell_size": float(domain_cell),
             "patches": dict((base.get("domain") or {}).get("patches") or {}),
             "location_in_mesh": _vec(outer),
         }

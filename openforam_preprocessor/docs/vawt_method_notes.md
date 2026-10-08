@@ -227,6 +227,10 @@ Recommendation: A, because section 9.2's independent caching is named as the
 main source of saved time, and only A keeps it. B is the smaller build if
 caching of the two regions matters less than one code path.
 
+**Decided by the owner after V0: A.** Implemented in V2 (`vawt/case_generator.py`);
+the generated AMI and single-mesh `CELL_ZONE` cases mesh on v2512
+(`tests/integration/test_vawt_case_generation.py`).
+
 ---
 
 ## 5. Requirements found for later milestones
@@ -241,6 +245,13 @@ caching of the two regions matters less than one code path.
 | R6 | Every sub-case needs `system/fvSchemes` and `system/fvSolution` (empty sections suffice) and a `FoamFile` header in `meshQualityDict`. | E1 first run; section 9 | V2 |
 | R7 | Expect `Number of regions: 2` for an AMI mesh; it is not an error. | `merged_flags_none.log` | V3 |
 | R8 | Integration point 7: the ASCII STL artifact is costly for large rotors (section 7). | `baseline/stl_baseline.json` | owner, before V3 |
+| R9 | Run OpenFOAM commands from the case directory. v2512 `mergeMeshes` appends `/processor` to the master case path when the working directory's name ends in "processor" (e.g. `openforam_preprocessor`, `my_preprocessor`; not `my_tool` or `processor_runs`) and then fails: `Cannot find file "points"`. `openfoam/runner.py` already uses `cwd=case_root`. | found in V2 (`test_vawt_case_generation.py`) | V3 |
+
+Done in V2: R1 (presets offset the mesh points; `MESH_POINT_ON_CELL_FACE`
+ERROR against the actual background grids), R2 (`LAYERS_TOO_THIN_FOR_CELLS`
+WARNING, using the zone's effective cell size), R6 (every sub-case gets
+`fvSchemes`, `fvSolution` and a `meshQualityDict` with header). Also in V2:
+`RESERVED_PATCH_NAME` (BLOCKING) for names the generated mesh uses itself.
 
 ---
 
@@ -308,9 +319,11 @@ is 6.2 times the source size. Changing the format needs owner approval
 | 4 | Inlet on the minimum face of the flow axis | Confirmed (owner, V1) |
 | 5 | Separate entry point | `app/vawt_app.py` (architecture sections 3, 18) |
 | 6 | Largest rotor and cell count | **Open.** Measured at 100k and 1M triangles (section 7). |
-| new | Method: A or B (section 4) | **Open** |
-| new | Existing-workflow defects (section 9): fix now, or in V3 | **Open** |
-| new | ASCII artifact format for large rotors (R8) | **Open** |
+| new | Method: A or B (section 4) | **A** (owner, after V0) |
+| new | Existing-workflow defects (section 9): fix now, or in V3 | D1–D3 fixed on `fix/openfoam-v2512-meshing`; D4, D5 left as known limitations (owner) |
+| new | ASCII artifact format for large rotors (R8) | **Open**; may stay open until V3/V7 (owner) |
+
+Decisions 3 and 6 may also stay open until V3/V7 (owner, before V2).
 
 ---
 
@@ -331,6 +344,10 @@ workflow without approval).
 ---
 
 ## 10. Known issues
+
+**Resolved:** fixed on `fix/openfoam-v2512-meshing` (D1–D3), which is merged
+into `v2-vawt-case-generation`; both tests pass there. The record below is
+kept as it was found.
 
 Two existing tests fail on OpenFOAM v2512. They also fail on a clean checkout
 of `main` (`7b623e9`, without any VAWT or V0 files), so V0 did not cause them;
