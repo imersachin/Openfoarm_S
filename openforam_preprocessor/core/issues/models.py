@@ -43,6 +43,10 @@ class IssueStage(StrEnum):
     MESH_VALIDATION = "MESH_VALIDATION"
     OPENFOAM_EXECUTION = "OPENFOAM_EXECUTION"
     VISUALIZATION = "VISUALIZATION"
+    # VAWT workflow (two-mesh assembly)
+    ZONE_CREATION = "ZONE_CREATION"  # topoSet
+    MERGE_MESHES = "MERGE_MESHES"  # mergeMeshes
+    PATCH_CREATION = "PATCH_CREATION"  # createPatch
 
 
 _STOPPING_SEVERITIES = frozenset({IssueSeverity.ERROR, IssueSeverity.BLOCKING})

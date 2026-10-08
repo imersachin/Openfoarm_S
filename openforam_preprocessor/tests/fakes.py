@@ -91,11 +91,12 @@ class FakeOpenFOAMRunner(OpenFOAMRunner):
         timeout_seconds: float | None = None,
         env: Mapping[str, str] | None = None,
         cancel_event: asyncio.Event | None = None,
+        logs_dir: Path | None = None,
     ) -> CommandResult:
         name = argv[0]
         self.calls.append(name)
         self.argv.append(tuple(argv))
-        logs = case_root / "logs"
+        logs = logs_dir if logs_dir is not None else case_root / "logs"
         logs.mkdir(parents=True, exist_ok=True)
         log = logs / log_name
         poly = case_root / "constant" / "polyMesh"

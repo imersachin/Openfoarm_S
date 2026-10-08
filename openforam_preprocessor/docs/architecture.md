@@ -457,6 +457,10 @@ Implementation (M4): `core/workflow/dependency_graph.py` and
 - The plan explains what is stale and why. Execution decisions are made by
   verified artifacts (section 12); a test asserts both agree for every
   configuration field.
+- `DependencyGraph` and `ExecutionPlanner` are generic: with no arguments they
+  use the tables above; another workflow (VAWT) passes its own operations,
+  data-flow, direct-consumer, requires-fresh and active-when tables and
+  applicability rule (`vawt/operations.py`). The rules are the same.
 
 ---
 
@@ -580,6 +584,13 @@ Reliability (M9): `core/workflow/run_lock.py`, `core/workflow/run_records.py`,
 - Versions: `APP_VERSION` (matches `pyproject.toml`, tested) and
   `CONFIG_SCHEMA_VERSION` = 2. Older project files are migrated on load
   (units are never filled in); files from a newer application are rejected.
+- Commands run with the case directory as their working directory. Logs go
+  to `<case>/logs` by default, or to an explicit `logs_dir` (the VAWT
+  workflow uses `<project>/logs/<sub-case>/`). Builders exist for `topoSet`,
+  `mergeMeshes` and `createPatch` (stages `ZONE_CREATION`, `MERGE_MESHES`,
+  `PATCH_CREATION`).
+- `ResourceEstimator.assess_cells` classifies a cell estimate made by another
+  workflow; RAM can follow the peak of steps that run one after another.
 
 ---
 

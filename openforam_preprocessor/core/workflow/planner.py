@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, Generic, Protocol, TypeVar, overload
 
-from core.config.manager import ChangeSet
 from core.config.models import ProjectConfig
-from core.workflow.dependency_graph import DependencyGraph, PipelineOperation
+from core.workflow.dependency_graph import DependencyGraph, OpT, PipelineOperation
+
+ConfigT = TypeVar("ConfigT")
+
+
+class _Changes(Protocol):
+    @property
+    def changed_paths(self) -> frozenset[str]: ...
 
 INITIAL_BUILD = "<initial>"
 
@@ -19,8 +25,16 @@ ACTIVE_WHEN: Mapping[str, Callable[[ProjectConfig], bool]] = {
 }
 
 
+def _engine_applicable(operation: PipelineOperation, config: ProjectConfig) -> bool:
+    # The feature dictionary operation still runs when extraction is
+    # disabled: it removes a stale generated dictionary.
+    if operation is PipelineOperation.EXTRACT_FEATURES:
+        return config.mesh.surface.extract_features
+    return True
+
+
 @dataclass(frozen=True)
-class ExecutionPlan:
+class ExecutionPlan(Generic[OpT]):
     """Stale operations in execution order, with the cause of each.
 
     operations: stale and applicable to the new configuration, ordered.
@@ -31,9 +45,9 @@ class ExecutionPlan:
     inactive_paths: changed settings ignored because they are inactive.
     """
 
-    operations: tuple[PipelineOperation, ...]
-    skipped: tuple[PipelineOperation, ...]
-    reasons: dict[PipelineOperation, frozenset[str]]
+    operations: tuple[OpT, ...]
+    skipped: tuple[OpT, ...]
+    reasons: dict[OpT, frozenset[str]]
     unmapped_paths: frozenset[str] = frozenset()
     inactive_paths: frozenset[str] = frozenset()
 
@@ -51,11 +65,42 @@ class ExecutionPlan:
         }
 
 
-class ExecutionPlanner:
-    def __init__(self, graph: DependencyGraph | None = None) -> None:
-        self.graph = graph or DependencyGraph()
+class ExecutionPlanner(Generic[OpT, ConfigT]):
+    """Plans stale operations. With no arguments it plans the generic workflow;
+    another workflow passes its graph, active-when rules and applicability."""
 
-    def plan(self, changes: ChangeSet, config: ProjectConfig) -> ExecutionPlan:
+    @overload
+    def __init__(
+        self: ExecutionPlanner[PipelineOperation, ProjectConfig],
+        graph: DependencyGraph[PipelineOperation] | None = None,
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        graph: DependencyGraph[OpT],
+        *,
+        active_when: Mapping[str, Callable[[ConfigT], bool]],
+        applicable: Callable[[OpT, ConfigT], bool],
+    ) -> None: ...
+
+    def __init__(
+        self,
+        graph: DependencyGraph[Any] | None = None,
+        *,
+        active_when: Mapping[str, Callable[[Any], bool]] | None = None,
+        applicable: Callable[[Any, Any], bool] | None = None,
+    ) -> None:
+        # Without arguments OpT/ConfigT are the generic workflow's types (first
+        # overload), so its tables and applicability rule fit.
+        self.graph: DependencyGraph[OpT] = graph or DependencyGraph()  # type: ignore[assignment]
+        self.active_when: Mapping[str, Callable[[ConfigT], bool]] = (
+            active_when if active_when is not None else ACTIVE_WHEN)  # type: ignore[assignment]
+        self.applicable: Callable[[OpT, ConfigT], bool] = (
+            applicable if applicable is not None
+            else _engine_applicable)  # type: ignore[assignment]
+
+    def plan(self, changes: _Changes, config: ConfigT) -> ExecutionPlan[OpT]:
         """Plan the minimum work after a configuration change.
 
         config is the new configuration; it decides which stale operations
@@ -63,34 +108,29 @@ class ExecutionPlanner:
         """
         inactive = frozenset(
             path for path in changes.changed_paths
-            if path in ACTIVE_WHEN and not ACTIVE_WHEN[path](config)
+            if path in self.active_when and not self.active_when[path](config)
         )
         active = changes.changed_paths - inactive
         plan = self._build(self.graph.stale_by_path(active), config,
                            self.graph.unmapped(active))
         return replace(plan, inactive_paths=inactive)
 
-    def plan_full(self, config: ProjectConfig) -> ExecutionPlan:
+    def plan_full(self, config: ConfigT) -> ExecutionPlan[OpT]:
         """Plan for a project with no previous state: every applicable operation."""
-        stale = {op: frozenset({INITIAL_BUILD}) for op in PipelineOperation}
+        stale = {op: frozenset({INITIAL_BUILD}) for op in self.graph.operations}
         return self._build(stale, config, frozenset())
 
-    @staticmethod
-    def is_applicable(operation: PipelineOperation, config: ProjectConfig) -> bool:
-        # The feature dictionary operation still runs when extraction is
-        # disabled: it removes a stale generated dictionary.
-        if operation is PipelineOperation.EXTRACT_FEATURES:
-            return config.mesh.surface.extract_features
-        return True
+    def is_applicable(self, operation: OpT, config: ConfigT) -> bool:
+        return self.applicable(operation, config)
 
     def _build(
         self,
-        stale: dict[PipelineOperation, frozenset[str]],
-        config: ProjectConfig,
+        stale: dict[OpT, frozenset[str]],
+        config: ConfigT,
         unmapped: frozenset[str],
-    ) -> ExecutionPlan:
-        # Enum declaration order is a valid topological order of the graph.
-        ordered = [op for op in PipelineOperation if op in stale]
+    ) -> ExecutionPlan[OpT]:
+        # The graph's operation order is a valid topological order.
+        ordered = [op for op in self.graph.operations if op in stale]
         return ExecutionPlan(
             operations=tuple(op for op in ordered if self.is_applicable(op, config)),
             skipped=tuple(op for op in ordered if not self.is_applicable(op, config)),

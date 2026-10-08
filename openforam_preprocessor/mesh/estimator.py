@@ -158,8 +158,25 @@ class ResourceEstimator:
     def assess(
         self, config: ProjectConfig, surface_area_m2: float, system: SystemResources
     ) -> ResourceAssessment:
-        cells = self.estimate_cells(config, surface_area_m2)
-        ram = int(cells.total * self.model.ram_bytes_per_cell)
+        return self.assess_cells(
+            self.estimate_cells(config, surface_area_m2), system, config.mesh.max_global_cells
+        )
+
+    def assess_cells(
+        self,
+        cells: CellEstimate,
+        system: SystemResources,
+        max_global_cells: int,
+        *,
+        peak_cells: int | None = None,
+    ) -> ResourceAssessment:
+        """Classify an estimate made elsewhere (e.g. by another workflow).
+
+        RAM follows peak_cells (default: all cells), for workflows whose
+        meshing steps run one after another; disk always follows all cells.
+        """
+        ram = int((cells.total if peak_cells is None else peak_cells)
+                  * self.model.ram_bytes_per_cell)
         disk = int(cells.total * self.model.disk_bytes_per_cell)
         issues: list[Issue] = []
         statuses = [ResourceStatus.SAFE]
@@ -201,10 +218,10 @@ class ResourceEstimator:
                     f"{_gb(available)} available", reduce,
                     estimated_bytes=needed, available_bytes=available, fraction=fraction)
 
-        if cells.total > config.mesh.max_global_cells:
+        if cells.total > max_global_cells:
             add(ResourceStatus.WARNING, "MAX_GLOBAL_CELLS_EXCEEDED",
                 f"Estimated ~{cells.total:,} cells exceed max_global_cells "
-                f"({config.mesh.max_global_cells:,}); snappyHexMesh will stop refining early",
+                f"({max_global_cells:,}); snappyHexMesh will stop refining early",
                 "Expect less refinement than configured, or raise max_global_cells.")
 
         if cells.total > self.thresholds.serial_cells_warning:

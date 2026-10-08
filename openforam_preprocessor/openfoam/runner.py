@@ -78,8 +78,12 @@ class OpenFOAMRunner:
         timeout_seconds: float | None = None,
         env: Mapping[str, str] | None = None,
         cancel_event: asyncio.Event | None = None,
+        logs_dir: Path | None = None,
     ) -> CommandResult:
         """Run one command, streaming stdout/stderr to separate logs.
+
+        The command runs with case_root as its working directory. Logs go to
+        logs_dir (default: case_root/logs).
 
         Never raises for process-level failures: a missing executable, non-zero
         exit, timeout, or cancel_event all produce a structured CommandResult.
@@ -91,7 +95,7 @@ class OpenFOAMRunner:
 
         timeout = timeout_seconds if timeout_seconds is not None else self.default_timeout_seconds
         run_id = uuid.uuid4().hex
-        logs_dir = case_root / "logs"
+        logs_dir = logs_dir if logs_dir is not None else case_root / "logs"
         logs_dir.mkdir(parents=True, exist_ok=True)
         log_path = logs_dir / log_name
         stderr_log_path = log_path.with_name(f"{log_path.stem}.stderr{log_path.suffix}")
@@ -286,6 +290,7 @@ class OpenFOAMRunner:
         timeout_seconds: float | None = None,
         env: Mapping[str, str] | None = None,
         cancel_event: asyncio.Event | None = None,
+        logs_dir: Path | None = None,
     ) -> CommandResult:
         return await self.run(
             step.argv,
@@ -295,4 +300,5 @@ class OpenFOAMRunner:
             timeout_seconds=timeout_seconds,
             env=env,
             cancel_event=cancel_event,
+            logs_dir=logs_dir,
         )

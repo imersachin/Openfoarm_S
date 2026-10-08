@@ -43,6 +43,28 @@ def check_mesh_step(case_root: Path) -> MeshingStep:
     )
 
 
+def topo_set_step(case_root: Path, log_name: str = "topoSet.log") -> MeshingStep:
+    """Reads system/topoSetDict; writes sets and zones into constant/polyMesh."""
+    return MeshingStep(("topoSet", "-case", str(case_root)), log_name, IssueStage.ZONE_CREATION)
+
+
+def merge_meshes_step(master_case: Path, add_case: Path,
+                      log_name: str = "mergeMeshes.log") -> MeshingStep:
+    """Adds add_case's mesh into master_case's mesh, written into master_case.
+
+    Run it from master_case: OpenFOAM v2512 appends "/processor" to the master
+    path when the working directory's name ends in "processor".
+    """
+    return MeshingStep(("mergeMeshes", "-overwrite", str(master_case), str(add_case)),
+                       log_name, IssueStage.MERGE_MESHES)
+
+
+def create_patch_step(case_root: Path, log_name: str = "createPatch.log") -> MeshingStep:
+    """Reads system/createPatchDict. Exits 0 even when a source patch is missing."""
+    return MeshingStep(("createPatch", "-case", str(case_root), "-overwrite"), log_name,
+                       IssueStage.PATCH_CREATION)
+
+
 def supports_feature_extraction(profile: OpenFOAMProfile) -> bool:
     """Feature extraction is implemented for openfoam.com (ESI) only.
 

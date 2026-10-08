@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from enum import StrEnum
+from typing import Generic, TypeVar, overload
 
 
 class PipelineOperation(StrEnum):
@@ -98,12 +99,57 @@ def _matches(path: str, rule: str) -> bool:
     return path == rule or path.startswith(f"{rule}.") or rule.startswith(f"{path}.")
 
 
-class DependencyGraph:
-    """Maps changed configuration paths to the operations that become stale."""
+OpT = TypeVar("OpT", bound=StrEnum)
 
-    def direct_consumers(self, path: str) -> frozenset[PipelineOperation] | None:
+
+class DependencyGraph(Generic[OpT]):
+    """Maps changed configuration paths to the operations that become stale.
+
+    With no arguments it uses this module's tables (the generic workflow).
+    Another workflow passes its own operations (in execution order) and
+    tables; the rules are the same.
+    """
+
+    @overload
+    def __init__(self: DependencyGraph[PipelineOperation]) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        operations: Sequence[OpT],
+        downstream: Mapping[OpT, frozenset[OpT]],
+        direct_consumers: Mapping[str, frozenset[OpT]],
+        requires_fresh: Mapping[OpT, frozenset[OpT]] | None = None,
+    ) -> None: ...
+
+    def __init__(
+        self,
+        *,
+        operations: Sequence[OpT] | None = None,
+        downstream: Mapping[OpT, frozenset[OpT]] | None = None,
+        direct_consumers: Mapping[str, frozenset[OpT]] | None = None,
+        requires_fresh: Mapping[OpT, frozenset[OpT]] | None = None,
+    ) -> None:
+        if operations is None:
+            self.operations: tuple[OpT, ...] = tuple(PipelineOperation)  # type: ignore[arg-type]
+            self.downstream: Mapping[OpT, frozenset[OpT]] = DOWNSTREAM  # type: ignore[assignment]
+            self.direct_consumer_rules: Mapping[str, frozenset[OpT]] = (
+                DIRECT_CONSUMERS)  # type: ignore[assignment]
+            self.requires_fresh: Mapping[OpT, frozenset[OpT]] = (
+                REQUIRES_FRESH)  # type: ignore[assignment]
+            return
+        if downstream is None or direct_consumers is None:
+            raise ValueError("A custom graph needs downstream and direct_consumers tables.")
+        self.operations = tuple(operations)
+        self.downstream = downstream
+        self.direct_consumer_rules = direct_consumers
+        self.requires_fresh = requires_fresh or {}
+
+    def direct_consumers(self, path: str) -> frozenset[OpT] | None:
         """Operations reading this path directly, or None if the path is unmapped."""
-        matched = [ops for rule, ops in DIRECT_CONSUMERS.items() if _matches(path, rule)]
+        matched = [ops for rule, ops in self.direct_consumer_rules.items()
+                   if _matches(path, rule)]
         if not matched:
             return None
         return frozenset().union(*matched)
@@ -111,34 +157,31 @@ class DependencyGraph:
     def unmapped(self, changed_paths: Iterable[str]) -> frozenset[str]:
         return frozenset(p for p in changed_paths if self.direct_consumers(p) is None)
 
-    @staticmethod
-    def closure(operations: Iterable[PipelineOperation]) -> frozenset[PipelineOperation]:
+    def closure(self, operations: Iterable[OpT]) -> frozenset[OpT]:
         """The operations plus everything downstream (including in-place re-runs)."""
-        seen: set[PipelineOperation] = set()
+        seen: set[OpT] = set()
         stack = list(operations)
         while stack:
             operation = stack.pop()
             if operation in seen:
                 continue
             seen.add(operation)
-            stack.extend(DOWNSTREAM[operation])
-            stack.extend(REQUIRES_FRESH.get(operation, ()))
+            stack.extend(self.downstream[operation])
+            stack.extend(self.requires_fresh.get(operation, ()))
         return frozenset(seen)
 
-    def stale_by_path(
-        self, changed_paths: Iterable[str]
-    ) -> dict[PipelineOperation, frozenset[str]]:
+    def stale_by_path(self, changed_paths: Iterable[str]) -> dict[OpT, frozenset[str]]:
         """Each stale operation with the changed paths that made it stale.
 
         Unmapped paths conservatively invalidate every operation.
         """
-        reasons: dict[PipelineOperation, set[str]] = {}
+        reasons: dict[OpT, set[str]] = {}
         for path in sorted(changed_paths):
             direct = self.direct_consumers(path)
-            stale = self.closure(PipelineOperation if direct is None else direct)
+            stale = self.closure(self.operations if direct is None else direct)
             for operation in stale:
                 reasons.setdefault(operation, set()).add(path)
-        return {op: frozenset(reasons[op]) for op in PipelineOperation if op in reasons}
+        return {op: frozenset(reasons[op]) for op in self.operations if op in reasons}
 
-    def operations_for(self, changed_paths: frozenset[str]) -> frozenset[PipelineOperation]:
+    def operations_for(self, changed_paths: frozenset[str]) -> frozenset[OpT]:
         return frozenset(self.stale_by_path(changed_paths))
