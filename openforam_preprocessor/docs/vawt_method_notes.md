@@ -253,6 +253,13 @@ WARNING, using the zone's effective cell size), R6 (every sub-case gets
 `fvSchemes`, `fvSolution` and a `meshQualityDict` with header). Also in V2:
 `RESERVED_PATCH_NAME` (BLOCKING) for names the generated mesh uses itself.
 
+Done in V3 (`vawt/pipeline.py`): R3 (`MESHED_WRONG_REGION`,
+`ROTATING_ZONE_MISSING` after each meshing operation), R4 (`AMI_PATCH_EMPTY`
+after createPatch), R5 (validity from the parsed checkMesh output), R7
+(exactly 2 regions expected for AMI, 1 otherwise; anything else INVALID),
+R9 (every command runs from its sub-case directory; mergeMeshes from the
+master case).
+
 ---
 
 ## 6. Patch and zone names used
@@ -314,7 +321,7 @@ is 6.2 times the source size. Changing the format needs owner approval
 | # | Decision | Status |
 |---|---|---|
 | 1 | Version and platform | **v2512 (OpenCFD), WSL2 Ubuntu 24.04** (owner, V0) |
-| 2 | `CELL_ZONE` in the first release | In configuration; UI only once proven (owner, V1). E2a now proves the mesh; exposing it is the owner's call. |
+| 2 | `CELL_ZONE` in the first release | In configuration; stays hidden in the UI until a real pipeline run proves it (owner, V1 and V3). Proven so far: the dictionaries mesh on v2512 (V2); the V3 real end-to-end run is AMI only. |
 | 3 | `.msh` or OpenFOAM case as primary deliverable | **Open.** See Q7: the `.msh` loses the rotating zone. |
 | 4 | Inlet on the minimum face of the flow axis | Confirmed (owner, V1) |
 | 5 | Separate entry point | `app/vawt_app.py` (architecture sections 3, 18) |

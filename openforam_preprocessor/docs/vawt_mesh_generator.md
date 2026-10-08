@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | V0, V1 and V2 complete; V3 next |
+| Status | V0 to V3 complete; V4 next |
 | Place this file at | `openforam_preprocessor/docs/vawt_mesh_generator.md` |
 | Written against | `main` after M9 (commit "Replace placeholder PR template with project checklist") |
 | Replaces | The standalone "Mesh" app (React frontend + WSL backend). That app is reference material only; none of its code is copied. |
@@ -333,6 +333,32 @@ cells are no larger than `rotating_zone.cell_size` and reports the effective
 size (INFO `ZONE_CELL_SIZE_ADJUSTED`); blade and feature levels count from it.
 Each dictionary depends only on the settings of its own sub-case, which is
 what makes the table below possible (tested for every configuration field).
+
+Pipeline (V3, `vawt/pipeline.py`, operations and tables in
+`vawt/operations.py`):
+
+- Operations, in order: validate (gate: ERROR or BLOCKING stops before any
+  OpenFOAM command), import geometry, generate dictionaries, outer mesh,
+  rotor features, rotor mesh, single mesh, assembly, checkMesh, mesh
+  validation. Only those of the configuration's layout run.
+- The geometry artifact (ASCII, unchanged format) is written once and copied
+  to every sub-case that reads it; a layout change copies it, never re-encodes.
+- Commands run from their sub-case directory; logs go to `logs/<sub-case>/`.
+- Result checks after each meshing operation: expected patches exist with
+  faces (`MESHED_WRONG_REGION`), the rotating zone exists
+  (`ROTATING_ZONE_MISSING`), the AMI pair has faces (`AMI_PATCH_EMPTY`); all
+  ERROR with a log reference. A failed check leaves no manifest record (the
+  previous one is removed before the operation runs).
+- Region rule: an AMI mesh must have exactly 2 regions (V0 E1: the outer and
+  rotor meshes, 487,630 + 121,296 cells), every other layout exactly 1;
+  anything else is INVALID (`REGION_COUNT_UNEXPECTED`). Every other failed
+  check still makes the mesh INVALID.
+- Resource preflight (`vawt/preflight.py`): arithmetic only; RAM follows the
+  larger of the outer and rotor meshes (they run one after the other).
+- `.preprocessor/status.json` is written atomically at every stage boundary
+  (run ID, stage, step n of m, state, times).
+- A test checks, for every configuration field, that the operations the
+  tables plan are exactly the ones that re-run.
 
 ### 9.2 Operations are cached independently
 
