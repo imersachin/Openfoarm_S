@@ -497,6 +497,10 @@ Implemented in V4 (`vawt/service.py`, `vawt/runtime.py`):
   PID and start time. After an interrupted run, a command still running with
   that PID and start time is reported as `ORPHANED_OPENFOAM_PROCESS`
   (BLOCKING); `terminate_orphan` stops it after confirmation.
+- A run lock with no readable holder, older than 5 s (its process died
+  between creating and writing it), is `LOCK_UNREADABLE`
+  (`RUN_LOCK_UNREADABLE`, BLOCKING, naming the file);
+  `remove_unreadable_lock` removes it after confirmation.
 - After an interruption the interrupted operation re-runs (its record was
   removed before it started); earlier operations are reused only if their
   files verify. The next run's record names the interrupted run.

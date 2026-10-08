@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 import uuid
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
@@ -63,6 +64,9 @@ from vawt.validation import (
 from vawt.workspace import Mount, is_wsl, location_issues, projects_root
 
 LOG_TAIL_BYTES = 64 * 1024
+# A run writes its lock file within microseconds of creating it; an unreadable
+# lock older than this was left by a process that died in between.
+UNREADABLE_LOCK_AGE_S = 5.0
 ORPHAN_TERMINATE_WAIT_S = 10.0
 
 # --- sections ----------------------------------------------------------------------
@@ -196,6 +200,7 @@ class RunView(StrEnum):
     RUNNING = "RUNNING"  # this app process runs it; it can be cancelled from here
     RUNNING_ELSEWHERE = "RUNNING_ELSEWHERE"  # another live process holds the run lock
     INTERRUPTED = "INTERRUPTED"  # the status says running, but no live run holds the lock
+    LOCK_UNREADABLE = "LOCK_UNREADABLE"  # a run lock with no readable holder, left behind
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
@@ -527,7 +532,8 @@ class VawtService:
                 IssueSeverity.INFO, "RUN_ALREADY_ACTIVE",
                 "A run of this project is already active; showing it.",
                 "Follow its progress, or cancel it before starting another."),))
-        if status.state is RunView.RUNNING_ELSEWHERE or status.orphan_pid is not None:
+        if (status.state in (RunView.RUNNING_ELSEWHERE, RunView.LOCK_UNREADABLE)
+                or status.orphan_pid is not None):
             return StartResult(False, status.run_id, status.issues)
         extra = ({"previous_run_interrupted": status.run_id}
                  if status.state is RunView.INTERRUPTED else {})
@@ -559,6 +565,15 @@ class VawtService:
             own = status if status is not None and status.get("run_id") == active.run_id else None
             return self._view(RunView.RUNNING, own, run_id=active.run_id, can_cancel=True)
         lock = RunLock(self.root)
+        if self._unreadable_lock(lock):
+            return self._view(RunView.LOCK_UNREADABLE, status, issues=(_issue(
+                IssueSeverity.BLOCKING, "RUN_LOCK_UNREADABLE",
+                f"The run lock {lock.path} names no run; it was left by a process that "
+                "stopped while creating it.",
+                "Remove the lock (remove_unreadable_lock, after confirming that no run "
+                "of this project is active anywhere), then start the run again.",
+                explanation="No run can start while the lock exists, and the lock does "
+                "not say which process holds it.", lock=str(lock.path)),))
         if lock.is_held_by_live_run():
             running = status if status is not None and status.get("state") == "RUNNING" else None
             return self._view(RunView.RUNNING_ELSEWHERE, running, issues=(_issue(
@@ -610,6 +625,23 @@ class VawtService:
                 "Terminate it (terminate_orphan) or wait for it to end before starting "
                 "another run.", pid=orphan, command=command))
         return self._view(RunView.INTERRUPTED, status, orphan_pid=orphan, issues=tuple(issues))
+
+    @staticmethod
+    def _unreadable_lock(lock: RunLock) -> bool:
+        try:
+            age = time.time() - lock.path.stat().st_mtime
+        except OSError:
+            return False
+        return lock.holder() is None and age > UNREADABLE_LOCK_AGE_S
+
+    def remove_unreadable_lock(self) -> bool:
+        """Remove a run lock that names no run (only after the user confirmed).
+        False, and nothing removed, if the lock is readable, recent or absent."""
+        lock = RunLock(self.root)
+        if not self._unreadable_lock(lock):
+            return False
+        lock.path.unlink(missing_ok=True)
+        return True
 
     def terminate_orphan(self) -> bool:
         """Terminate the OpenFOAM process left by an interrupted run (only after
