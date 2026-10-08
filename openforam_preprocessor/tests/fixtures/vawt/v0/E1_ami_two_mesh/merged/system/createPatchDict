@@ -1,0 +1,40 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      createPatchDict;
+}
+
+// After mergeMeshes: turn the two cylinder patches into a cyclicAMI pair.
+// Form follows etc/caseDicts/annotated/createPatchDict and the cyclicAMI
+// entries of etc/templates/inflowOutflowRotating/system/createBafflesDict (v2512).
+pointSync false;
+
+patches
+(
+    {
+        name AMI1;
+        patchInfo
+        {
+            type            cyclicAMI;
+            matchTolerance  0.0001;
+            neighbourPatch  AMI2;
+            transform       noOrdering;
+        }
+        constructFrom patches;
+        patches (AMI_outer);
+    }
+    {
+        name AMI2;
+        patchInfo
+        {
+            type            cyclicAMI;
+            matchTolerance  0.0001;
+            neighbourPatch  AMI1;
+            transform       noOrdering;
+        }
+        constructFrom patches;
+        patches (AMI_rotor);
+    }
+);

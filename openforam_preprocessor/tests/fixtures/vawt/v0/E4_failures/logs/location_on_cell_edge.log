@@ -1,0 +1,98 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : snappyHexMesh -case <work>/E4/location_on_cell_edge -overwrite
+Date   : Oct 08 2026
+Time   : 04:58:35
+Host   : DESKTOP-162QBLJ
+PID    : 2811
+I/O    : uncollated
+Case   : <work>/E4/location_on_cell_edge
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+Read mesh in = 0.08 s
+
+Overall mesh bounding box  : (-0.875 -0.875 -0.755) (0.875 0.875 0.755)
+Relative tolerance         : 1e-06
+Absolute matching distance : 2.899155e-06
+
+Reading refinement surfaces.
+Read refinement surfaces in = 0 s
+
+Reading refinement shells.
+Read refinement shells in = 0 s
+
+Setting refinement level of surface to be consistent with shells.
+For geometry rotor.stl detected 0 uncached triangles out of 176
+Checked shell refinement in = 0 s
+
+Reading features.
+Read edgeMesh rotor.eMesh
+    points      : 96
+    edges       : 112
+    boundingBox : (-0.51999998 -0.51999998 -0.60000002) (0.51999998 0.51999998 0.60000002)
+
+Refinement level according to distance to "rotor.eMesh" (96 points, 112 edges).
+    level 2 for all cells within 0 metre.
+Read features in = 0 s
+
+
+Determining initial surface intersections
+-----------------------------------------
+
+Edge intersection testing:
+    Number of edges             : 142500
+    Number of edges to retest   : 0
+    Number of intersected edges : 0
+Edge intersection testing:
+    Number of edges             : 142500
+    Number of edges to retest   : 142500
+    Number of intersected edges : 6632
+Calculated surface intersections in = 0.07 s
+
+Initial mesh : cells:46208  faces:142500  points:50193
+Cells per refinement level:
+    0	46208
+Setting refinement level of surface to be consistent with curvature.
+Checked curvature refinement in = 0 s
+
+
+Adding patches for surface regions
+----------------------------------
+
+Patch Type                Region                        
+----- ----                ------                        
+rotor:
+
+1     wall                rotor                         
+
+AMI_rotor:
+
+2     patch               AMI_rotor                     
+
+Added patches in = 0 s
+
+Edge intersection testing:
+    Number of edges             : 142500
+    Number of edges to retest   : 0
+    Number of intersected edges : 6632
+Decomposition method none [1]
+
+Refinement phase
+----------------
+

@@ -1,0 +1,12 @@
+
+
+--> FOAM FATAL IO ERROR: (openfoam-2512)
+Could not open "<work>/E4/no_emesh/constant/triSurface/rotor.eMesh"
+
+file: system/snappyHexMeshDict/castellatedMeshControls/features at line 41 to 42.
+
+    From void Foam::refinementFeatures::read(const Foam::objectRegistry&, const Foam::PtrList<Foam::dictionary>&)
+    in file refinementFeatures/refinementFeatures.C at line 118.
+
+FOAM exiting
+

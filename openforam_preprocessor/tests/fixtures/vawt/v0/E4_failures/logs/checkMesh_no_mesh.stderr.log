@@ -1,0 +1,10 @@
+
+
+--> FOAM FATAL ERROR: (openfoam-2512)
+Cannot find file "points" in directory "polyMesh" in times "constant" down to constant
+
+    From virtual Foam::IOobject Foam::fileOperation::findInstance(const Foam::IOobject&, Foam::scalar, const Foam::word&, bool) const
+    in file global/fileOperations/fileOperation/fileOperation.C at line 1221.
+
+FOAM exiting
+

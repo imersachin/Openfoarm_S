@@ -1,0 +1,111 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+
+// Rotating-zone mesh: rotor walls and the cylinder interface; the mesh point
+// is inside the cylinder and outside the rotor, so only the zone is kept.
+castellatedMesh true;
+snap            true;
+addLayers       true;
+
+geometry
+{
+    rotor.stl
+    {
+        type triSurfaceMesh;
+        name rotor;
+    }
+    AMI_rotor
+    {
+        type    searchableCylinder;
+        point1  (0 0 -0.66);
+        point2  (0 0  0.66);
+        radius  0.78;
+    }
+}
+
+castellatedMeshControls
+{
+    maxLocalCells       2000000;
+    maxGlobalCells      2000000;
+    minRefinementCells  0;
+    nCellsBetweenLevels 2;
+
+    features
+    (
+        {
+            file "rotor.eMesh";
+            level 2;
+        }
+    );
+
+    refinementSurfaces
+    {
+        rotor
+        {
+            level (1 2);
+            patchInfo { type wall; }
+        }
+        AMI_rotor
+        {
+            level (0 0);
+            patchInfo { type patch; }
+        }
+    }
+
+    refinementRegions {}
+
+    resolveFeatureAngle 30;
+    // Preset point (0.65 0 0) lies on a background-cell edge (y = 0 and z = 0
+    // are cell faces for 38 x 32 cells) and snappyHexMesh rejects it; see
+    // E4_failures/logs/location_on_cell_edge*. Offset by a fraction of a cell.
+    locationInMesh      (0.65 0.0113 0.0137);
+    allowFreeStandingZoneFaces false;
+}
+
+snapControls
+{
+    nSmoothPatch        3;
+    tolerance           2.0;
+    nSolveIter          30;
+    nRelaxIter          5;
+    nFeatureSnapIter    10;
+    implicitFeatureSnap false;
+    explicitFeatureSnap true;
+    multiRegionFeatureSnap false;
+}
+
+addLayersControls
+{
+    relativeSizes       true;
+    expansionRatio      1.2;
+    finalLayerThickness 0.3;
+    minThickness        0.1;
+    nGrow               0;
+    featureAngle        30;
+    nRelaxIter          5;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals      3;
+    nSmoothThickness    10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedialAxisAngle  90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter          50;
+
+    layers
+    {
+        rotor { nSurfaceLayers 3; }
+    }
+}
+
+meshQualityControls
+{
+    #include "meshQualityDict"
+}
+
+mergeTolerance 1e-6;

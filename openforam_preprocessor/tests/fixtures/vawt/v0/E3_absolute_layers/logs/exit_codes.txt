@@ -1,0 +1,12 @@
+E3a_01_blockMesh                         exit=0  blockMesh -case <work>/E3/E3a
+E3a_02_surfaceFeatureExtract             exit=0  surfaceFeatureExtract -case <work>/E3/E3a
+E3a_03_snappyHexMesh                     exit=0  snappyHexMesh -case <work>/E3/E3a -overwrite
+E3b_01_blockMesh                         exit=0  blockMesh -case <work>/E3/E3b
+E3b_02_surfaceFeatureExtract             exit=0  surfaceFeatureExtract -case <work>/E3/E3b
+E3b_03_snappyHexMesh                     exit=0  snappyHexMesh -case <work>/E3/E3b -overwrite
+E3c_01_blockMesh                         exit=0  blockMesh -case <work>/E3/E3c
+E3c_02_surfaceFeatureExtract             exit=0  surfaceFeatureExtract -case <work>/E3/E3c
+E3c_03_snappyHexMesh                     exit=1  snappyHexMesh -case <work>/E3/E3c -overwrite
+E3d_01_blockMesh                         exit=0  blockMesh -case <work>/E3/E3d
+E3d_02_surfaceFeatureExtract             exit=0  surfaceFeatureExtract -case <work>/E3/E3d
+E3d_03_snappyHexMesh                     exit=0  snappyHexMesh -case <work>/E3/E3d -overwrite

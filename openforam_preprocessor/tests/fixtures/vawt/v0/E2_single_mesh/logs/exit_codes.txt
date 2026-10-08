@@ -1,0 +1,10 @@
+01_blockMesh                             exit=0  blockMesh -case <work>/E2/cellzone
+02_surfaceFeatureExtract                 exit=0  surfaceFeatureExtract -case <work>/E2/cellzone
+03_snappyHexMesh                         exit=0  snappyHexMesh -case <work>/E2/cellzone -overwrite
+E2a_04_checkMesh                         exit=0  checkMesh -case <work>/E2/cellzone -allGeometry -allTopology -meshQuality
+E2a_05_foamMeshToFluent                  exit=0  foamMeshToFluent -case <work>/E2/cellzone
+E2b_04_createBaffles                     exit=0  createBaffles -case <work>/E2/ami -overwrite
+E2b_05_checkMesh                         exit=0  checkMesh -case <work>/E2/ami -allGeometry -allTopology -meshQuality
+E2b_06_foamMeshToFluent                  exit=0  foamMeshToFluent -case <work>/E2/ami
+E2a_flags_none                           exit=0  checkMesh -case <work>/E2/cellzone
+E2b_flags_none                           exit=0  checkMesh -case <work>/E2/ami

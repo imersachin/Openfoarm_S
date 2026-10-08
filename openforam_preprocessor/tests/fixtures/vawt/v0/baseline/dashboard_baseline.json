@@ -1,0 +1,93 @@
+{
+  "python": "3.12.3",
+  "machine": "Linux-6.18.40.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "rotor_faces": 100352,
+  "repeats": 3,
+  "note": "Wall time of one AppTest script rerun (server side, no browser). All 11 tabs execute on every rerun (st.tabs), so switching tabs is not a separate server interaction.",
+  "interactions": [
+    {
+      "interaction": "first render (empty project path)",
+      "seconds_median": 0.0733,
+      "seconds_all": [
+        0.244,
+        0.0716,
+        0.0733
+      ],
+      "stl_parses": [
+        0
+      ]
+    },
+    {
+      "interaction": "open saved project",
+      "seconds_median": 0.0257,
+      "seconds_all": [
+        0.0251,
+        0.0257,
+        0.0271
+      ],
+      "stl_parses": [
+        0
+      ]
+    },
+    {
+      "interaction": "edit acceptance limit (one field)",
+      "seconds_median": 0.0246,
+      "seconds_all": [
+        0.0246,
+        0.0242,
+        0.0247
+      ],
+      "stl_parses": [
+        0
+      ]
+    },
+    {
+      "interaction": "edit project name (one field)",
+      "seconds_median": 0.0269,
+      "seconds_all": [
+        0.0269,
+        0.0248,
+        0.0629
+      ],
+      "stl_parses": [
+        0
+      ]
+    },
+    {
+      "interaction": "prepare case (geometry + dictionaries)",
+      "seconds_median": 1.565,
+      "seconds_all": [
+        1.807,
+        1.565,
+        1.4262
+      ],
+      "stl_parses": [
+        2
+      ]
+    },
+    {
+      "interaction": "show geometry view",
+      "seconds_median": 0.5221,
+      "seconds_all": [
+        0.6302,
+        0.5221,
+        0.5049
+      ],
+      "stl_parses": [
+        2
+      ]
+    },
+    {
+      "interaction": "edit one field while geometry view is open",
+      "seconds_median": 0.5492,
+      "seconds_all": [
+        0.5617,
+        0.5458,
+        0.5492
+      ],
+      "stl_parses": [
+        2
+      ]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : snappyHexMesh -case <work>/E4/no_emesh -overwrite
+Date   : Oct 08 2026
+Time   : 04:58:39
+Host   : DESKTOP-162QBLJ
+PID    : 2983
+I/O    : uncollated
+Case   : <work>/E4/no_emesh
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+Read mesh in = 0.08 s
+
+Overall mesh bounding box  : (-0.875 -0.875 -0.755) (0.875 0.875 0.755)
+Relative tolerance         : 1e-06
+Absolute matching distance : 2.899155e-06
+
+Reading refinement surfaces.
+Read refinement surfaces in = 0 s
+
+Reading refinement shells.
+Read refinement shells in = 0 s
+
+Setting refinement level of surface to be consistent with shells.
+For geometry rotor.stl detected 0 uncached triangles out of 176
+Checked shell refinement in = 0 s
+
+Reading features.

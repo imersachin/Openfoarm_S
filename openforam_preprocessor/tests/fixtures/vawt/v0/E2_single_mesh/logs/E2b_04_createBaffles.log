@@ -1,0 +1,44 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : createBaffles -case <work>/E2/ami -overwrite
+Date   : Oct 08 2026
+Time   : 04:57:28
+Host   : DESKTOP-162QBLJ
+PID    : 1537
+I/O    : uncollated
+Case   : <work>/E2/ami
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+Reading baffle criteria from createBafflesDict
+
+Not converting faces on non-coupled patches.
+
+Reading geometric fields
+
+Created zone baffleFaces at index 1 with 3776 faces
+Converted 3776 faces into boundary faces in patches 2(AMI1 AMI2)
+
+--> FOAM Warning : 
+    From int main(int, char**)
+    in file createBaffles.C at line 861
+    Setting field on boundary faces to zero.
+You might have to edit these fields.
+Writing mesh to 0
+End
+

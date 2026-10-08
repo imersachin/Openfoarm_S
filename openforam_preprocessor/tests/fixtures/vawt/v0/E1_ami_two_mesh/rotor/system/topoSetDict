@@ -1,0 +1,27 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      topoSetDict;
+}
+
+// Run in the rotor sub-case before merging: every cell of the rotor mesh
+// belongs to the rotating zone, so the zone is exact (no geometric test).
+actions
+(
+    {
+        name    rotatingCells;
+        type    cellSet;
+        action  new;
+        source  boxToCell;
+        box     (-1e3 -1e3 -1e3) (1e3 1e3 1e3);
+    }
+    {
+        name    rotating;
+        type    cellZoneSet;
+        action  new;
+        source  setToCellZone;
+        set     rotatingCells;
+    }
+);

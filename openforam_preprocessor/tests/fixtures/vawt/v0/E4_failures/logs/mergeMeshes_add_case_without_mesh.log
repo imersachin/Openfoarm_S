@@ -1,0 +1,33 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : mergeMeshes -overwrite <work>/E4/merge_master <work>/E4/merge_empty
+Date   : Oct 08 2026
+Time   : 04:58:40
+Host   : DESKTOP-162QBLJ
+PID    : 3017
+I/O    : uncollated
+Case   : /mnt/c/Users/DELL
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Master:      "<work>/E4/merge_master"  region region0
+mesh to add: "<work>/E4/merge_empty"  region region0
+
+Create Times
+Reading master mesh for time = 0
+Create mesh
+
+Reading mesh to add for time = 0
+Create mesh
+

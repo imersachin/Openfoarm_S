@@ -1,0 +1,3 @@
+surfaceCheck_rotor                       exit=0  surfaceCheck rotor.stl
+surfaceCheck_rotor_open                  exit=0  surfaceCheck rotor_open.stl
+surfaceCheck_rotor_inverted              exit=0  surfaceCheck rotor_inverted.stl

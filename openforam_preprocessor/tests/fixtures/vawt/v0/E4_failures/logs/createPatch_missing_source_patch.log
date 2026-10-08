@@ -1,0 +1,86 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : createPatch -case <work>/E4/bad_patch -overwrite
+Date   : Oct 08 2026
+Time   : 04:58:39
+Host   : DESKTOP-162QBLJ
+PID    : 2993
+I/O    : uncollated
+Case   : <work>/E4/bad_patch
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+Reading "system/createPatchDict"
+
+--> FOAM Warning : 
+    From Foam::labelHashSet Foam::polyBoundaryMesh::patchSet(const Foam::UList<Foam::wordRe>&, bool, bool) const
+    in file meshes/polyMesh/polyBoundaryMesh/polyBoundaryMesh.C at line 1158
+    Cannot find any patch names matching AMI_outer
+--> FOAM Warning : 
+    From Foam::labelHashSet Foam::polyBoundaryMesh::patchSet(const Foam::UList<Foam::wordRe>&, bool, bool) const
+    in file meshes/polyMesh/polyBoundaryMesh/polyBoundaryMesh.C at line 1158
+    Cannot find any patch names matching AMI_rotor
+
+
+Adding patches to mesh region0
+
+Adding new patch AMI1 from 
+{
+    type            cyclicAMI;
+    matchTolerance  0.0001;
+    neighbourPatch  AMI2;
+    transform       noOrdering;
+    nFaces          0;
+    startFace       0;
+}
+
+Adding new patch AMI2 from 
+{
+    type            cyclicAMI;
+    matchTolerance  0.0001;
+    neighbourPatch  AMI1;
+    transform       noOrdering;
+    nFaces          0;
+    startFace       0;
+}
+
+
+
+
+Repatching mesh region0
+
+--> FOAM Warning : 
+    From Foam::labelHashSet Foam::polyBoundaryMesh::patchSet(const Foam::UList<Foam::wordRe>&, bool, bool) const
+    in file meshes/polyMesh/polyBoundaryMesh/polyBoundaryMesh.C at line 1152
+    Cannot find any patch or group names matching AMI_outer
+--> FOAM Warning : 
+    From Foam::labelHashSet Foam::polyBoundaryMesh::patchSet(const Foam::UList<Foam::wordRe>&, bool, bool) const
+    in file meshes/polyMesh/polyBoundaryMesh/polyBoundaryMesh.C at line 1152
+    Cannot find any patch or group names matching AMI_rotor
+Doing topology modification to order faces.
+
+Not synchronising points.
+
+Removing patches with no faces in them.
+
+
+
+Writing repatched mesh region0 to 0
+
+End
+

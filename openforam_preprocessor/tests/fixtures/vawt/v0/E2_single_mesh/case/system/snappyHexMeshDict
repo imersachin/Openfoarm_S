@@ -1,0 +1,123 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+
+// Single mesh (spec section 10 alternative), following the v2512 template
+// etc/templates/inflowOutflowRotating: the rotating-zone cylinder is a zoned
+// surface (faceZone + cellZone inside). Background = outer domain, cell D/9;
+// sizes inside the zone can only be D/9 / 2^n (level 1 = D/18, close to D/22).
+castellatedMesh true;
+snap            true;
+addLayers       true;
+
+geometry
+{
+    rotor.stl
+    {
+        type triSurfaceMesh;
+        name rotor;
+    }
+    rotatingZone
+    {
+        type    searchableCylinder;
+        point1  (0 0 -0.66);
+        point2  (0 0  0.66);
+        radius  0.78;
+    }
+    wake
+    {
+        type    searchableBox;
+        min     (-1.56 -1.404 -1.8);
+        max     ( 6.76  1.404  1.8);
+    }
+}
+
+castellatedMeshControls
+{
+    maxLocalCells       4000000;
+    maxGlobalCells      4000000;
+    minRefinementCells  0;
+    nCellsBetweenLevels 2;
+
+    features
+    (
+        {
+            file "rotor.eMesh";
+            level 3;
+        }
+    );
+
+    refinementSurfaces
+    {
+        rotor
+        {
+            level (2 3);
+            patchInfo { type wall; }
+        }
+        rotatingZone
+        {
+            level           (1 1);
+            faceZone        rotatingZone;
+            cellZone        rotating;
+            cellZoneInside  inside;
+        }
+    }
+
+    refinementRegions
+    {
+        rotatingZone { mode inside; levels ((1e15 1)); }
+        wake         { mode inside; levels ((1e15 1)); }
+    }
+
+    resolveFeatureAngle 30;
+    // Outer preset point (-1.95 0 0), offset off cell faces/edges.
+    locationInMesh      (-1.95 0.0131 0.0173);
+    allowFreeStandingZoneFaces false;
+}
+
+snapControls
+{
+    nSmoothPatch        3;
+    tolerance           2.0;
+    nSolveIter          30;
+    nRelaxIter          5;
+    nFeatureSnapIter    10;
+    implicitFeatureSnap false;
+    explicitFeatureSnap true;
+    multiRegionFeatureSnap false;
+}
+
+addLayersControls
+{
+    relativeSizes       true;
+    expansionRatio      1.2;
+    finalLayerThickness 0.3;
+    minThickness        0.1;
+    nGrow               0;
+    featureAngle        30;
+    nRelaxIter          5;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals      3;
+    nSmoothThickness    10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedialAxisAngle  90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter          50;
+
+    layers
+    {
+        rotor { nSurfaceLayers 3; }
+    }
+}
+
+meshQualityControls
+{
+    #include "meshQualityDict"
+}
+
+mergeTolerance 1e-6;

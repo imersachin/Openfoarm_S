@@ -1,0 +1,114 @@
+{
+  "rotor.stl": {
+    "issues": [
+      "INFO MULTIPLE_COMPONENTS"
+    ],
+    "bodies": [
+      {
+        "index": 0,
+        "faces": 12,
+        "closed": true,
+        "inside_out": false
+      },
+      {
+        "index": 1,
+        "faces": 12,
+        "closed": true,
+        "inside_out": false
+      },
+      {
+        "index": 2,
+        "faces": 12,
+        "closed": true,
+        "inside_out": false
+      },
+      {
+        "index": 3,
+        "faces": 128,
+        "closed": true,
+        "inside_out": false
+      },
+      {
+        "index": 4,
+        "faces": 12,
+        "closed": true,
+        "inside_out": false
+      }
+    ]
+  },
+  "rotor_open.stl": {
+    "issues": [
+      "INFO MULTIPLE_COMPONENTS",
+      "WARNING NOT_WATERTIGHT"
+    ],
+    "bodies": [
+      {
+        "index": 0,
+        "faces": 12,
+        "closed": true,
+        "inside_out": false
+      },
+      {
+        "index": 1,
+        "faces": 11,
+        "closed": false,
+        "inside_out": false
+      },
+      {
+        "index": 2,
+        "faces": 12,
+        "closed": true,
+        "inside_out": false
+      },
+      {
+        "index": 3,
+        "faces": 128,
+        "closed": true,
+        "inside_out": false
+      },
+      {
+        "index": 4,
+        "faces": 12,
+        "closed": true,
+        "inside_out": false
+      }
+    ]
+  },
+  "rotor_inverted.stl": {
+    "issues": [
+      "INFO MULTIPLE_COMPONENTS"
+    ],
+    "bodies": [
+      {
+        "index": 0,
+        "faces": 12,
+        "closed": true,
+        "inside_out": true
+      },
+      {
+        "index": 1,
+        "faces": 12,
+        "closed": true,
+        "inside_out": false
+      },
+      {
+        "index": 2,
+        "faces": 12,
+        "closed": true,
+        "inside_out": false
+      },
+      {
+        "index": 3,
+        "faces": 128,
+        "closed": true,
+        "inside_out": false
+      },
+      {
+        "index": 4,
+        "faces": 12,
+        "closed": true,
+        "inside_out": false
+      }
+    ]
+  }
+}

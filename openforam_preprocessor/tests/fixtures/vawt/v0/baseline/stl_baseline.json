@@ -1,0 +1,123 @@
+{
+  "python": "3.12.3",
+  "machine": "Linux-6.18.40.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "repeats": 3,
+  "results": [
+    {
+      "target_faces": 100000,
+      "faces": 100352,
+      "source_binary_bytes": 5017684,
+      "artifact_ascii_bytes": 31551150,
+      "seconds_median": {
+        "import_source_binary": 0.0382,
+        "transform": 0.0091,
+        "encode_ascii": 0.7014,
+        "encode_and_write_artifact": 0.6666,
+        "write_if_unchanged_check": 0.6538,
+        "reimport_artifact_ascii": 0.3256,
+        "hash_source": 0.0023,
+        "hash_artifact": 0.014
+      },
+      "seconds_all": {
+        "import_source_binary": [
+          0.0405,
+          0.0382,
+          0.0351
+        ],
+        "transform": [
+          0.01,
+          0.0091,
+          0.0078
+        ],
+        "encode_ascii": [
+          0.7238,
+          0.6945,
+          0.7014
+        ],
+        "encode_and_write_artifact": [
+          0.6666,
+          0.6518,
+          0.6738
+        ],
+        "write_if_unchanged_check": [
+          0.6509,
+          0.6538,
+          0.6583
+        ],
+        "reimport_artifact_ascii": [
+          0.3256,
+          0.3384,
+          0.308
+        ],
+        "hash_source": [
+          0.0023,
+          0.0024,
+          0.0023
+        ],
+        "hash_artifact": [
+          0.0138,
+          0.015,
+          0.014
+        ]
+      }
+    },
+    {
+      "target_faces": 1000000,
+      "faces": 999424,
+      "source_binary_bytes": 49971284,
+      "artifact_ascii_bytes": 312271095,
+      "seconds_median": {
+        "import_source_binary": 0.4165,
+        "transform": 0.072,
+        "encode_ascii": 7.0855,
+        "encode_and_write_artifact": 7.0675,
+        "write_if_unchanged_check": 7.1707,
+        "reimport_artifact_ascii": 3.5607,
+        "hash_source": 0.0228,
+        "hash_artifact": 0.1436
+      },
+      "seconds_all": {
+        "import_source_binary": [
+          0.4518,
+          0.4153,
+          0.4165
+        ],
+        "transform": [
+          0.0911,
+          0.072,
+          0.063
+        ],
+        "encode_ascii": [
+          7.0308,
+          7.0855,
+          7.2483
+        ],
+        "encode_and_write_artifact": [
+          7.0675,
+          6.9796,
+          7.1634
+        ],
+        "write_if_unchanged_check": [
+          7.177,
+          7.1707,
+          7.089
+        ],
+        "reimport_artifact_ascii": [
+          3.5607,
+          3.6319,
+          3.3385
+        ],
+        "hash_source": [
+          0.0247,
+          0.0228,
+          0.0226
+        ],
+        "hash_artifact": [
+          0.1455,
+          0.1428,
+          0.1436
+        ]
+      }
+    }
+  ]
+}

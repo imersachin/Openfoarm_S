@@ -1,0 +1,11 @@
+
+
+--> FOAM FATAL ERROR: (openfoam-2512)
+"<work>/E4/no_blockMeshDict/system/blockMeshDict"
+
+
+    From int main(int, char**)
+    in file findBlockMeshDict.H at line 81.
+
+FOAM exiting
+

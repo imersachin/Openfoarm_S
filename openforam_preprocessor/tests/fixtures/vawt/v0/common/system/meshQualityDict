@@ -1,0 +1,26 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      meshQualityDict;
+}
+
+// Same values the existing generator writes for its defaults
+// (mesh/generator.py _mesh_quality_dict with SnappyQualityControls defaults).
+// The FoamFile header is required: checkMesh -meshQuality (v2512) reads this
+// file on its own and fails without it; snappyHexMesh #includes it.
+maxNonOrtho             65;
+maxBoundarySkewness     20;
+maxInternalSkewness     4;
+maxConcave              80;
+minVol                  1e-13;
+minTetQuality           1e-15;
+minArea                 -1;
+minTwist                0.02;
+minDeterminant          0.001;
+minFaceWeight           0.05;
+minVolRatio             0.01;
+minTriangleTwist        -1;
+nSmoothScale            4;
+errorReduction          0.75;

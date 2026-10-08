@@ -1,0 +1,13 @@
+
+
+--> FOAM FATAL IO ERROR: (openfoam-2512)
+Entry 'firstLayerThickness' not found in dictionary "<work>/E3/E3c/system/snappyHexMeshDict/addLayersControls"
+
+
+file: system/snappyHexMeshDict/addLayersControls at line 87 to 108.
+
+    From bool Foam::dictionary::readEntry(const Foam::word&, T&, Foam::keyType::option, Foam::IOobjectOption::readOption) const [with T = double]
+    in file ./src/OpenFOAM/lnInclude/dictionaryTemplates.C at line 327.
+
+FOAM exiting
+

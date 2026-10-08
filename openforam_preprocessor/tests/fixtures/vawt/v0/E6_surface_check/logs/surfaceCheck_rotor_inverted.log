@@ -1,0 +1,95 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : surfaceCheck rotor_inverted.stl
+Date   : Oct 08 2026
+Time   : 04:58:41
+Host   : DESKTOP-162QBLJ
+PID    : 3498
+I/O    : uncollated
+Case   : <work>/E6
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Reading surface from "rotor_inverted.stl" ...
+
+Statistics:
+Triangles    : 176 in 1 region(s)
+Vertices     : 98
+Bounding Box : (-0.52 -0.52 -0.6) (0.52 0.52 0.6)
+
+Index	Region	Size
+-----	------	----
+0	patch0	176
+
+
+Surface has no illegal triangles.
+
+Triangle quality (equilateral=1, collapsed=0):
+    0 .. 0.05  : 0.363636
+    0.05 .. 0.1  : 0.0909091
+    0.1 .. 0.15  : 0
+    0.15 .. 0.2  : 0
+    0.2 .. 0.25  : 0
+    0.25 .. 0.3  : 0.545455
+    0.3 .. 0.35  : 0
+    0.35 .. 0.4  : 0
+    0.4 .. 0.45  : 0
+    0.45 .. 0.5  : 0
+    0.5 .. 0.55  : 0
+    0.55 .. 0.6  : 0
+    0.6 .. 0.65  : 0
+    0.65 .. 0.7  : 0
+    0.7 .. 0.75  : 0
+    0.75 .. 0.8  : 0
+    0.8 .. 0.85  : 0
+    0.85 .. 0.9  : 0
+    0.9 .. 0.95  : 0
+    0.95 .. 1  : 0
+
+    min 0.00754518 for triangle 13
+    max 0.297476 for triangle 8
+
+Edges:
+    min 0.00588103 for edge 21 points (0.0212132 0.0212132 -0.6)(0.0249441 0.0166671 -0.6)
+    max 1.20001 for edge 11 points (0.0277164 0.0114805 -0.6)(0.0294236 0.00585271 0.6)
+
+Checking for points less than 1e-6 of bounding box ((1.04 1.04 1.2) metre) apart.
+Found 0 nearby points.
+
+Surface is closed. All edges connected to two faces.
+
+Number of unconnected parts : 5
+Splitting surface into parts ...
+
+Wrote zoning to "./rotor_inverted.vtp"
+
+writing part 0 size 128 to "./rotor_inverted_0.obj"
+writing part 1 size 12 to "./rotor_inverted_1.obj"
+writing part 2 size 12 to "./rotor_inverted_2.obj"
+writing part 3 size 12 to "./rotor_inverted_3.obj"
+writing part 4 size 12 to "./rotor_inverted_4.obj"
+
+Number of zones (connected area with consistent normal) : 5
+More than one normal orientation.
+Wrote zoning to "./rotor_inverted.vtp"
+
+writing part 0 size 128 to "./rotor_inverted_normal_0.obj"
+writing part 1 size 12 to "./rotor_inverted_normal_1.obj"
+writing part 2 size 12 to "./rotor_inverted_normal_2.obj"
+writing part 3 size 12 to "./rotor_inverted_normal_3.obj"
+writing part 4 size 12 to "./rotor_inverted_normal_4.obj"
+
+
+End
+

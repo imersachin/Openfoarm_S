@@ -1,0 +1,16 @@
+outer_01_blockMesh                       exit=0  blockMesh -case <work>/E1/outer
+outer_02_snappyHexMesh                   exit=0  snappyHexMesh -case <work>/E1/outer -overwrite
+outer_03_checkMesh                       exit=0  checkMesh -case <work>/E1/outer -allGeometry -allTopology -meshQuality
+rotor_01_blockMesh                       exit=0  blockMesh -case <work>/E1/rotor
+rotor_02_surfaceFeatureExtract           exit=0  surfaceFeatureExtract -case <work>/E1/rotor
+rotor_03_snappyHexMesh                   exit=0  snappyHexMesh -case <work>/E1/rotor -overwrite
+rotor_04_topoSet                         exit=0  topoSet -case <work>/E1/rotor
+rotor_05_checkMesh                       exit=0  checkMesh -case <work>/E1/rotor -allGeometry -allTopology -meshQuality
+merged_01_mergeMeshes                    exit=0  mergeMeshes -overwrite <work>/E1/merged <work>/E1/rotor
+merged_02_createPatch                    exit=0  createPatch -case <work>/E1/merged -overwrite
+merged_03_checkMesh                      exit=0  checkMesh -case <work>/E1/merged -allGeometry -allTopology -meshQuality
+merged_04_foamMeshToFluent               exit=0  foamMeshToFluent -case <work>/E1/merged
+merged_flags_none                        exit=0  checkMesh -case <work>/E1/merged
+merged_flags_meshQuality                 exit=0  checkMesh -case <work>/E1/merged -meshQuality
+merged_flags_allTopology                 exit=0  checkMesh -case <work>/E1/merged -allTopology
+merged_flags_allGeometry                 exit=0  checkMesh -case <work>/E1/merged -allGeometry

@@ -1,0 +1,97 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+
+// Outer (stationary) mesh: the rotating-zone cylinder is a surface; the mesh
+// point is outside it, so the cylinder volume is removed (spec section 10 Q3).
+castellatedMesh true;
+snap            true;
+addLayers       false;
+
+geometry
+{
+    AMI_outer
+    {
+        type    searchableCylinder;
+        point1  (0 0 -0.66);
+        point2  (0 0  0.66);
+        radius  0.78;
+    }
+    wake
+    {
+        type    searchableBox;
+        min     (-1.56 -1.404 -1.8);
+        max     ( 6.76  1.404  1.8);
+    }
+}
+
+castellatedMeshControls
+{
+    maxLocalCells       2000000;
+    maxGlobalCells      2000000;
+    minRefinementCells  0;
+    nCellsBetweenLevels 2;
+
+    features ();
+
+    refinementSurfaces
+    {
+        AMI_outer
+        {
+            level (1 1);
+            patchInfo { type patch; }
+        }
+    }
+
+    refinementRegions
+    {
+        wake { mode inside; levels ((1e15 1)); }
+    }
+
+    resolveFeatureAngle 30;
+    locationInMesh      (-1.95 0 0);
+    allowFreeStandingZoneFaces false;
+}
+
+snapControls
+{
+    nSmoothPatch        3;
+    tolerance           2.0;
+    nSolveIter          30;
+    nRelaxIter          5;
+    nFeatureSnapIter    10;
+    implicitFeatureSnap false;
+    explicitFeatureSnap false;
+    multiRegionFeatureSnap false;
+}
+
+addLayersControls
+{
+    relativeSizes       true;
+    expansionRatio      1.2;
+    finalLayerThickness 0.3;
+    minThickness        0.1;
+    nGrow               0;
+    featureAngle        30;
+    nRelaxIter          5;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals      3;
+    nSmoothThickness    10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedialAxisAngle  90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter          50;
+    layers {}
+}
+
+meshQualityControls
+{
+    #include "meshQualityDict"
+}
+
+mergeTolerance 1e-6;

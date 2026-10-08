@@ -1,0 +1,78 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : blockMesh -case <work>/E1/outer
+Date   : Oct 08 2026
+Time   : 04:54:15
+Host   : DESKTOP-162QBLJ
+PID    : 838
+I/O    : uncollated
+Case   : <work>/E1/outer
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Creating block mesh from "system/blockMeshDict"
+Creating block edges
+No non-planar block faces defined
+Creating topology blocks
+
+Creating topology patches - from boundary section
+
+Creating block mesh topology
+
+Check topology
+
+	Basic statistics
+		Number of internal faces : 0
+		Number of boundary faces : 6
+		Number of defined boundary faces : 6
+		Number of undefined boundary faces : 0
+	Checking patch -> block consistency
+
+Creating block offsets
+Creating merge list (topological search)...
+
+Creating polyMesh from blockMesh
+Creating patches
+Creating cells
+Creating points with scale (1 1 1)
+    Block 0 cell size :
+        i : 0.11555556 .. 0.11555556
+        j : 0.11555556 .. 0.11555556
+        k : 0.11368421 .. 0.11368421
+
+No patch pairs to merge
+
+Writing polyMesh with 0 cellZones
+----------------
+Mesh Information
+----------------
+  boundingBox: (-3.12 -1.56 -2.16) (7.28 1.56 2.16)
+  nPoints: 99372
+  nCells: 92340
+  nFaces: 283896
+  nInternalFaces: 270144
+----------------
+Patches
+----------------
+  patch 0 (start: 270144 size: 1026) name: inlet
+  patch 1 (start: 271170 size: 1026) name: outlet
+  patch 2 (start: 272196 size: 3420) name: lateral_min
+  patch 3 (start: 275616 size: 3420) name: lateral_max
+  patch 4 (start: 279036 size: 2430) name: axial_min
+  patch 5 (start: 281466 size: 2430) name: axial_max
+
+End
+

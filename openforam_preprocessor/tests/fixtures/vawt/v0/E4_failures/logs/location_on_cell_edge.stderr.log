@@ -1,0 +1,11 @@
+
+
+--> FOAM FATAL ERROR: (openfoam-2512)
+Point (0.65 0 0) is not inside the mesh or on a face or edge.
+Bounding box of the mesh:(-0.875 -0.875 -0.755) (0.875 0.875 0.755)
+
+    From static Foam::labelList Foam::refinementParameters::findCells(bool, const Foam::polyMesh&, const Foam::pointField&)
+    in file snappyHexMeshDriver/refinementParameters/refinementParameters.C at line 249.
+
+FOAM exiting
+

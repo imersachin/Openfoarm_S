@@ -1,0 +1,11 @@
+location_on_cell_edge                    exit=1  snappyHexMesh -case <work>/E4/location_on_cell_edge -overwrite
+location_in_rotor                        exit=0  snappyHexMesh -case <work>/E4/location_in_rotor -overwrite
+location_in_rotor_checkMesh              exit=0  checkMesh -case <work>/E4/location_in_rotor
+blockMesh_missing_dict                   exit=1  blockMesh -case <work>/E4/no_blockMeshDict
+surfaceFeatureExtract_missing_stl        exit=1  surfaceFeatureExtract -case <work>/E4/no_stl
+snappyHexMesh_missing_eMesh              exit=1  snappyHexMesh -case <work>/E4/no_emesh -overwrite
+createPatch_missing_source_patch         exit=0  createPatch -case <work>/E4/bad_patch -overwrite
+createBaffles_missing_faceZone           exit=1  createBaffles -case <work>/E4/bad_zone -overwrite
+mergeMeshes_add_case_without_mesh        exit=1  mergeMeshes -overwrite <work>/E4/merge_master <work>/E4/merge_empty
+checkMesh_no_mesh                        exit=1  checkMesh -case <work>/E4/no_mesh
+foamMeshToFluent_no_mesh                 exit=1  foamMeshToFluent -case <work>/E4/no_mesh

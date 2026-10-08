@@ -1,0 +1,10 @@
+
+
+--> FOAM FATAL ERROR: (openfoam-2512)
+No surfaces specified/found for entry: rotor.stl
+
+    From int main(int, char**)
+    in file surfaceFeatureExtract.C at line 308.
+
+FOAM exiting
+

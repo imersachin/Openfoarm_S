@@ -1,0 +1,11 @@
+
+
+--> FOAM FATAL ERROR: (openfoam-2512)
+Cannot find faceZone rotatingZone
+Valid zones are 1(baffleFaces)
+
+    From virtual void Foam::faceSelections::faceZoneSelection::select(Foam::label, Foam::labelList&, Foam::boolList&) const
+    in file faceSelection/faceZoneSelection.C at line 77.
+
+FOAM exiting
+
