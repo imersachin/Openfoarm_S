@@ -7,6 +7,9 @@ inside the checks.
 
 from __future__ import annotations
 
+import hashlib
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,7 +20,7 @@ from pydantic import ValidationError
 from core.config.validation import issues_from_validation_error
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage, has_stopping_issue
 from geometry.importer import import_stl
-from geometry.metrics import body_orientations, contains_points
+from geometry.metrics import BodyOrientation, body_orientations, contains_points
 from geometry.transformer import GeometryTransform
 from geometry.validator import TrimeshGeometryValidator
 from vawt.case_generator import (
@@ -76,6 +79,51 @@ def _issue(severity: IssueSeverity, code: str, message: str, action: str, *,
     return Issue(category=category, severity=severity, stage=stage, code=code,
                  message=message, explanation=explanation, suggested_action=action,
                  details=details)
+
+
+# --- per-body orientation, cached per rotor ---------------------------------------
+#
+# body_orientations splits the rotor into bodies, which is most of the cost of
+# validating a large rotor, yet it depends only on the geometry. Its result is
+# kept per rotor: the key is a hash of the transformed geometry (the vertices
+# and faces the artifact is written from) and BODY_ORIENTATION_VERSION, so a
+# changed rotor or a changed check always recomputes.
+
+# Raise whenever geometry.metrics.body_orientations changes what it reports.
+BODY_ORIENTATION_VERSION = 1
+_ORIENTATION_CACHE_SIZE = 8
+_orientations: OrderedDict[str, tuple[BodyOrientation, ...]] = OrderedDict()
+_orientations_lock = threading.Lock()
+
+
+def geometry_sha256(mesh: trimesh.Trimesh) -> str:
+    """Hash of the geometry as meshed: vertex coordinates and faces, exactly."""
+    digest = hashlib.sha256()
+    for array in (np.ascontiguousarray(mesh.vertices, dtype=np.float64),
+                  np.ascontiguousarray(mesh.faces, dtype=np.int64)):
+        digest.update(str(array.shape).encode())
+        digest.update(array.tobytes())
+    return digest.hexdigest()
+
+
+def cached_body_orientations(mesh: trimesh.Trimesh) -> tuple[BodyOrientation, ...]:
+    """body_orientations(mesh), reused for the same geometry and check version."""
+    key = f"{BODY_ORIENTATION_VERSION}:{geometry_sha256(mesh)}"
+    with _orientations_lock:
+        if key in _orientations:
+            _orientations.move_to_end(key)
+            return _orientations[key]
+    result = body_orientations(mesh)
+    with _orientations_lock:
+        _orientations[key] = result
+        while len(_orientations) > _ORIENTATION_CACHE_SIZE:
+            _orientations.popitem(last=False)
+    return result
+
+
+def clear_orientation_cache() -> None:
+    with _orientations_lock:
+        _orientations.clear()
 
 
 # --- configuration parsing ------------------------------------------------------
@@ -309,7 +357,7 @@ def check_config(config: VawtProjectConfig, mesh: trimesh.Trimesh, metrics: Roto
             category=IssueCategory.GEOMETRY,
         ))
 
-    for body in body_orientations(mesh):
+    for body in cached_body_orientations(mesh):
         if body.inside_out:
             issues.append(_issue(
                 IssueSeverity.WARNING, "BODY_INSIDE_OUT",

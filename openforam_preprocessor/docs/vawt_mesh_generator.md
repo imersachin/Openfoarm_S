@@ -604,6 +604,12 @@ V5 notes: Streamlit 1.65 imports plotly itself when it is imported, so
 mechanism 10 is held as "the VAWT UI adds no plotly module" (tested);
 `trimesh` loads with the validation code the section status needs.
 
+V5 measurement, Apply on a setup section with a 100,000-triangle rotor (whole
+page including its rerun, headless test harness): 578-586 ms; 236-237 ms after
+the per-rotor cache of the blade-orientation check (`vawt/validation.py`,
+keyed on the geometry hash and `BODY_ORIENTATION_VERSION`). The 200 ms target
+is not yet met; V7 measures again in a real browser session.
+
 ### 14.2 Budgets
 
 These are targets. V0 measures the current dashboard as a baseline; V7 measures
