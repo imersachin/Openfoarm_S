@@ -1,0 +1,13 @@
+# Line endings.
+#
+# Text is stored with LF (as it already is). Files that bash or OpenFOAM read
+# inside WSL/Linux must also be LF in the working tree, whatever a Windows
+# checkout's core.autocrlf is: with CRLF, bash fails ($'\r') and the OpenFOAM
+# dictionaries and captured logs no longer match what the tools wrote.
+* text=auto
+
+*.sh text eol=lf
+
+# VAWT V0 evidence: OpenFOAM dictionaries (no file extension), captured logs and
+# reproduction scripts.
+openforam_preprocessor/tests/fixtures/vawt/v0/** text eol=lf
