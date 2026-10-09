@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | V0 to V4 complete; V5 implemented, real-browser check pending |
+| Status | V0 to V5 complete (V5 real-browser check passed; see vawt_method_notes §13) |
 | Place this file at | `openforam_preprocessor/docs/vawt_mesh_generator.md` |
 | Written against | `main` after M9 (commit "Replace placeholder PR template with project checklist") |
 | Replaces | The standalone "Mesh" app (React frontend + WSL backend). That app is reference material only; none of its code is copied. |

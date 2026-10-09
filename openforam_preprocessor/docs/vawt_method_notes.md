@@ -423,3 +423,40 @@ setting is written to any file.
 About 1.7 times slower on the Windows drive for this small mesh. This is the
 evidence behind `PROJECT_ON_WINDOWS_DRIVE` and the default
 `~/vawt_projects`.
+
+---
+
+## 13. Real-browser check (V5)
+
+Decision D4: the owner opens the app in their own Windows browser, started
+with `scripts\run_vawt_app.cmd`, and confirms what they see against the
+checklist. These were the checklist items:
+- create a project;
+- upload the STL with units m;
+- apply the preset, axis z and flow x;
+- check that no CELL_ZONE or interface field is shown;
+- Save, giving revision 1;
+- Review shows SAFE;
+- Start, with the status strip updating every 1.5 s;
+- F5 re-attaches to the run;
+- a second tab works;
+- Cancel works;
+- a second run ends VALID;
+- History, Logs and Export work;
+- Ctrl+C during a run, then a restart, shows CANCELLED;
+- no red error boxes appear.
+
+**First attempt: failed.** The page crashed with `ModuleNotFoundError: No
+module named 'vawt.config'`.
+- **Cause:** `streamlit run` puts `app/` first on `sys.path`, so `vawt`
+  resolved to the UI package `app/vawt` instead of the engine package.
+- **Why the tests missed it:** the in-process AppTest suite runs with the
+  engine already imported, so it did not reproduce the crash.
+- **Fix:** commit 800a2dd renamed `app/vawt` to `app/vawt_ui`.
+- **Regression test:** `tests/integration/test_streamlit_run_real.py` drives
+  a real `streamlit run` server over the browser's websocket protocol and
+  fails on any uncaught exception. It also fails if a name in `app/`
+  shadows an importable module.
+
+**Second attempt (2026-10-09, `v5-vawt-ui` at 800a2dd): passed**, as the
+owner reported. With this, V5 is complete.
