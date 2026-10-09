@@ -119,6 +119,7 @@ openforam_preprocessor/
 │   └── commands.py
 ├── visualization/
 ├── vawt/                   VAWT mesh generator workflow (docs/vawt_mesh_generator.md)
+├── machines/               rotating-machinery workflow (docs/rotating_machinery.md)
 ├── storage/
 └── tests/
     ├── unit/
