@@ -5,9 +5,11 @@ issue; BLOCKING and ERROR stop a run. Thresholds are parameters.
 
 - parse_config: model errors as issues, with named codes for choices not made.
 - check_config: rules between sections; reads no files.
+- check_rotating_walls: rotating-wall regions against the surfaces holding them.
 - check_geometry: rules that need the bodies' surfaces (load_bodies).
 
-Imported surfaces (imported domain parts and zones) are not read here. Their
+Imported surfaces (imported domain parts and zones) are read here only for
+their region names, to place rotating walls. Their
 closedness, region names, the binary-STL check and the containment of bodies
 in them come with the imported-domain reader (G2) and zones (G3); a
 configuration that uses them gets an INFO issue saying so.
@@ -48,7 +50,9 @@ from machines.config import (
     RotatingZone,
     SourceKind,
     StlSource,
+    box_face,
 )
+from machines.domains import stl_region_names
 from machines.presets import DOMAIN_CHOICES
 from vawt.case_generator import RESERVED_NAMES
 from vawt.config import (
@@ -630,7 +634,7 @@ def check_geometry(config: MachineProjectConfig, meshes: Mapping[str, trimesh.Tr
         points, spacing = surface_points(mesh, limits.sample_spacing_cells * min(cells),
                                          limits.max_sample_points) if cells else (
             np.asarray(mesh.vertices, dtype=float), 0.0)
-        issues.extend(_domain_body_issues(config, body.name, points))
+        issues.extend(_domain_body_issues(config, body.name, body.motion, points))
         for _, zone, cylinder in zones:
             issues.extend(_zone_body_issues(body.name, body.motion, body.zone, zone,
                                             cylinder.signed_distance(points), spacing,
@@ -644,7 +648,29 @@ def _geometry_issue(severity: IssueSeverity, code: str, message: str, action: st
     return _issue(severity, code, message, action, category=IssueCategory.GEOMETRY, **details)
 
 
-def _domain_body_issues(config: MachineProjectConfig, name: str,
+def _crossed_faces(config: MachineProjectConfig, outside: np.ndarray) -> list[str]:
+    """Faces of the generated domain that the points outside it lie beyond."""
+    domain = config.domain
+    if isinstance(domain, BoxDomain):
+        lo = _point(domain.bounds.minimum)[0]
+        hi = _point(domain.bounds.maximum)[0]
+        beyond = {face_name: bool(np.any(test)) for axis in Axis for face_name, test in (
+            (box_face(axis, False), outside[:, axis.position] <= lo[axis.position]),
+            (box_face(axis, True), outside[:, axis.position] >= hi[axis.position]))}
+        return [face for face in BOX_FACES if beyond[face]]
+    assert isinstance(domain, CylinderDomain)
+    cylinder = _Cylinder.of_domain(domain)
+    u, v = plane_axes(cylinder.axis)
+    along = outside[:, cylinder.axis.position]
+    radial = np.hypot(outside[:, u.position] - cylinder.centre_u,
+                      outside[:, v.position] - cylinder.centre_v)
+    beyond = {"axis_min": bool(np.any(along <= cylinder.axis_min)),
+              "axis_max": bool(np.any(along >= cylinder.axis_max)),
+              "side": bool(np.any(radial >= cylinder.radius))}
+    return [face for face in CYLINDER_FACES if beyond[face]]
+
+
+def _domain_body_issues(config: MachineProjectConfig, name: str, motion: Motion,
                         points: np.ndarray) -> list[Issue]:
     distance = _domain_signed_distance(config, points)
     if distance is None:
@@ -655,14 +681,35 @@ def _domain_body_issues(config: MachineProjectConfig, name: str,
             f"Body '{name}' lies outside the domain.",
             "Enlarge or move the domain, or check the body's units and transform.",
             body=name)]
-    if distance.max() >= 0.0:
+    if distance.max() < 0.0:
+        return []
+    faces = _crossed_faces(config, points[distance >= 0.0])
+    patches = [config.patch_for(SourceKind.DOMAIN_FACE, face) for face in faces]
+    details: dict[str, Any] = {
+        "body": name, "faces": faces, "patches": [p.name for p in patches if p is not None],
+        "outside": float(distance.max())}
+    where = ", ".join(faces)
+    if motion is Motion.ROTATING:
         return [_geometry_issue(
-            IssueSeverity.WARNING, "BODY_CROSSES_DOMAIN_BOUNDARY",
-            f"Body '{name}' reaches through the domain boundary; the part outside is "
-            "not meshed.",
-            "Intended for a pole or tower through a domain face; otherwise enlarge the "
-            "domain.", body=name, outside=float(distance.max()))]
-    return []
+            IssueSeverity.BLOCKING, "ROTATING_BODY_CROSSES_DOMAIN_BOUNDARY",
+            f"Rotating body '{name}' reaches through the domain boundary ({where}).",
+            "Enlarge the domain; a rotating body lies entirely inside it.", **details)]
+    # A split body counts as stationary: only its stationary part can reach the domain.
+    flow = [p.name for p in patches
+            if p is not None and p.type in (PatchType.INLET, PatchType.OUTLET)]
+    if flow:
+        return [_geometry_issue(
+            IssueSeverity.ERROR, "BODY_CROSSES_INLET_OUTLET",
+            f"Body '{name}' reaches through the domain boundary at {where}, through "
+            f"the inlet or outlet ({', '.join(flow)}).",
+            "Enlarge the domain, or move the body; a body may pass only through wall "
+            "or slip faces.", **details)]
+    return [_geometry_issue(
+        IssueSeverity.WARNING, "BODY_CROSSES_DOMAIN_BOUNDARY",
+        f"Body '{name}' reaches through the domain boundary at {where}; the part "
+        "outside is not meshed.",
+        "Intended for a pole or tower through a wall or slip face; otherwise enlarge "
+        "the domain.", **details)]
 
 
 def _zone_body_issues(name: str, motion: Motion, own_zone: str | None, zone: RotatingZone,
@@ -749,6 +796,50 @@ def _mesh_point_issues(config: MachineProjectConfig, name: str,
 
 # --- everything -----------------------------------------------------------------------------
 
+def region_owners(config: MachineProjectConfig) -> dict[str, str]:
+    """Imported region name -> the configuration path of the surface holding it.
+
+    Files whose region names cannot be read (missing, binary) are left out;
+    the imported-domain checks (G2) report them.
+    """
+    surfaces: list[tuple[str, ImportedSurface]] = [
+        (f"rotating_zones.{i}", z.shape) for i, z in enumerate(config.rotating_zones)
+        if isinstance(z.shape, ImportedZone)]
+    if isinstance(config.domain, ImportedDomain):
+        surfaces.extend((f"domain.parts.{i}", p) for i, p in enumerate(config.domain.parts))
+    owners: dict[str, str] = {}
+    for owner, surface in surfaces:
+        names = surface.file_regions()
+        if names is None:
+            names = tuple(name for f in surface.files
+                          for name in stl_region_names(f.source_path) or ())
+        owners.update((name, owner) for name in names)
+    return owners
+
+
+def check_rotating_walls(config: MachineProjectConfig) -> tuple[Issue, ...]:
+    """Every rotating-wall region lies in a rotating zone (an imported zone).
+
+    A body's rotating wall is covered by BODY_PATCH_TYPE_MISMATCH and
+    ROTATING_BODY_OUTSIDE_ZONE; a domain face by ROTATING_WALL_ON_DOMAIN.
+    """
+    walls = [(i, p) for i, p in enumerate(config.patches)
+             if p.type is PatchType.ROTATING_WALL and p.source.kind is SourceKind.REGION]
+    if not walls:
+        return ()
+    owners = region_owners(config)
+    return tuple(
+        _issue(IssueSeverity.ERROR, "ROTATING_WALL_OUTSIDE_ZONE",
+               f"Rotating-wall patch '{patch.name}' comes from region "
+               f"'{patch.source.ref}' of a stationary domain part ({owner}).",
+               "Make the patch a WALL, or import the region as part of a rotating zone.",
+               explanation="A rotating wall moves with its zone; a stationary part's "
+               "mesh does not move.",
+               field=f"patches.{i}.type", patch=patch.name, owner=owner)
+        for i, patch in walls
+        if (owner := owners.get(patch.source.ref, "")).startswith("domain.parts."))
+
+
 def validate_machine(raw: Any,
                      thresholds: MachineThresholds | None = None) -> MachineValidationResult:
     """Parse the configuration, load the bodies, and run every check."""
@@ -757,5 +848,5 @@ def validate_machine(raw: Any,
         return MachineValidationResult(None, issues)
     meshes, loaded = load_bodies(config)
     return MachineValidationResult(config, (
-        *check_config(config, thresholds), *loaded,
+        *check_config(config, thresholds), *check_rotating_walls(config), *loaded,
         *check_geometry(config, meshes, thresholds)))

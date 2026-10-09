@@ -396,3 +396,61 @@ def test_thresholds_are_configuration(hawt: dict[str, Any]) -> None:
     assert [i.code for i in check_config(near)] == ["ZONE_CLEARANCE_SMALL"]
     assert check_config(near, MachineThresholds(min_clearance_cells=0.4)) == ()
 
+
+
+# --- bodies crossing the domain boundary (owner decision after G1) -------------------------
+
+def test_stationary_pole_through_slip_faces_warns_naming_them(tmp_path: Path) -> None:
+    issues = found(configs.pole(tmp_path, motion="STATIONARY", hole_diameter=0.16))
+
+    assert [(i.code, i.severity.value, i.details["faces"], i.details["patches"])
+            for i in issues] == [("BODY_CROSSES_DOMAIN_BOUNDARY", "WARNING",
+                                  ["z_min", "z_max"], ["side_z_min", "side_z_max"])]
+    assert "z_min" in issues[0].message and "z_max" in issues[0].message
+
+
+def test_stationary_pole_through_an_inlet_is_an_error(tmp_path: Path) -> None:
+    data = configs.pole(tmp_path, motion="STATIONARY", hole_diameter=0.16)
+    data["patches"][6]["type"] = "INLET"  # z_min (x_min stays the other inlet)
+
+    issues = found(data)
+
+    assert [(i.code, i.severity.value, i.details["faces"]) for i in issues] == [
+        ("BODY_CROSSES_INLET_OUTLET", "ERROR", ["z_min", "z_max"])]
+
+
+def test_split_pole_counts_as_stationary_at_the_domain(tmp_path: Path) -> None:
+    issues = found(configs.pole(tmp_path, motion="SPLIT"))
+
+    assert summary(issues) == [("BODY_CROSSES_DOMAIN_BOUNDARY", "WARNING")]
+
+
+def test_rotating_body_through_the_domain_is_blocking(hawt: dict[str, Any]) -> None:
+    # Blade tips reach r = 0.5007; a domain of radius 0.5 cuts them.
+    issues = found(edited(hawt, "domain.diameter", 1.0))
+
+    crossing = [i for i in issues if i.code == "ROTATING_BODY_CROSSES_DOMAIN_BOUNDARY"]
+    assert [(i.severity.value, i.details["faces"]) for i in crossing] == [
+        ("BLOCKING", ["side"])]
+
+
+# --- rotating walls lie inside a rotating zone (owner decision after G1) --------------------
+
+def test_francis_rotating_wall_of_a_stationary_part_is_an_error(
+        francis: dict[str, Any]) -> None:
+    issues = found(edited(francis, "patches.4.type", "ROTATING_WALL"))  # vanes, guide part
+
+    wrong = [i for i in issues if i.code == "ROTATING_WALL_OUTSIDE_ZONE"]
+    assert [(i.severity.value, i.details["patch"], i.details["owner"]) for i in wrong] == [
+        ("ERROR", "vanes", "domain.parts.1")]
+
+
+def test_francis_runner_blades_are_a_rotating_wall_inside_the_runner(
+        francis: dict[str, Any]) -> None:
+    assert "ROTATING_WALL_OUTSIDE_ZONE" not in [i.code for i in found(francis)]
+
+
+def test_rotating_wall_from_a_file_per_patch_part_is_an_error(duct: dict[str, Any]) -> None:
+    issues = found(edited(duct, "patches.2.type", "ROTATING_WALL"))
+
+    assert ("ROTATING_WALL_OUTSIDE_ZONE", "ERROR") in summary(issues)

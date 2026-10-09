@@ -93,8 +93,12 @@ All 13 architectural invariants stay. Two are added:
 
 ### 3.1 Rules
 
-- Every body lies inside the domain.
-- A rotating body lies entirely inside its rotating zone.
+- Every body lies inside the domain. A stationary body may reach through a
+  wall or slip face (a pole or tower; the part outside is not meshed), never
+  through an inlet or outlet; a rotating body never reaches through any face
+  (section 10).
+- A rotating body lies entirely inside its rotating zone, and every rotating
+  wall lies inside a rotating zone.
 - A stationary body must not cross an interface. A pole that passes through
   the rotating zone uses one of two methods, chosen per machine (section 17):
   a split pole whose inner part rotates, or a stationary pole inside the hole
@@ -197,7 +201,13 @@ migrate automatically and mesh identically (section 12).
 MachineProjectConfig
 ├── schema_version, project_name, openfoam_profile
 ├── machine                    VAWT | VAWT_POLE | HAWT | FRANCIS | CUSTOM
-├── bodies[]                   name, STL source, units, transform, rotating: bool, zone
+├── flow_axis                  main flow direction (axis minimum → maximum); required
+│                              for VAWT and VAWT_POLE, where the box faces and the
+│                              preset depend on it
+├── bodies[]                   name, STL source, units, transform, motion
+│                              (STATIONARY | ROTATING | SPLIT), zone. May be empty
+│                              when the rotating walls are regions of imported
+│                              surfaces (a Francis runner's blades)
 ├── rotating_zones[]           name, shape: CYLINDER | IMPORTED, axis, centre, size or STL,
 │                              cell size, rotation (section 9.3)
 ├── domain
@@ -326,10 +336,15 @@ real run on v2512.
 | Duplicate or invalid patch names | BLOCKING |
 | No inlet, or no outlet | BLOCKING |
 | A patch without a type | BLOCKING |
-| Body outside the domain | BLOCKING |
+| Body entirely outside the domain | BLOCKING |
+| Rotating body crossing the domain boundary | BLOCKING |
+| Stationary body crossing an inlet or outlet face | ERROR |
+| Stationary body crossing a wall or slip face (a pole or tower; the part outside is not meshed) | WARNING, naming the face |
 | Rotating body not fully inside its zone | BLOCKING |
+| A rotating-wall patch not inside a rotating zone | ERROR |
 | Stationary body crossing an interface | BLOCKING |
-| Rotating zones overlapping | BLOCKING |
+| Rotating zones overlapping (zones on the same axis, exact) | BLOCKING |
+| Rotating zones on different axes whose bounding boxes overlap (bounding box only) | WARNING |
 | Zone clearance to domain or other bodies below a configurable fraction of the cell size | WARNING |
 | Rotation speed zero or direction not set | BLOCKING (G6) |
 | Time step gives more than a configurable rotation angle per step | WARNING (G6) |
@@ -511,3 +526,17 @@ Evidence: `docs/rotating_machinery_notes.md` and `tests/fixtures/machines/g0/`.
    evidence. G0 evidence so far: 1° per step gave a maximum Courant number of
    2.5–7.0 on the G0 meshes. The propeller tutorial uses `maxCo 2` with an
    adjustable time step.
+
+## 19. Decisions After G1 (owner)
+
+1. **Body crossing the domain boundary** (section 10): a rotating body →
+   BLOCKING; a stationary body through an inlet or outlet face → ERROR;
+   through a wall or slip face → WARNING naming the face. A split body
+   counts as stationary here: only its stationary part can reach the domain.
+   G0 R5's pole runs through the box's z faces (z ±2.3 against ±2.16).
+2. **A rotating-wall patch lies inside a rotating zone**, otherwise ERROR: a
+   region of an imported domain part (stationary) cannot be a rotating wall.
+   A body's rotating wall is covered by the body checks.
+3. **Configuration** (section 6): `flow_axis` is a field; `bodies` may be
+   empty when the rotating walls are imported regions; zones on different
+   axes are compared by bounding box only, so their overlap is a WARNING.
