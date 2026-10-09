@@ -12,5 +12,8 @@
 # reproduction scripts.
 openforam_preprocessor/tests/fixtures/vawt/v0/** text eol=lf
 
+# Rotating-machinery G0 evidence: same reasons.
+openforam_preprocessor/tests/fixtures/machines/g0/** text eol=lf
+
 # Windows batch files run by cmd.exe.
 *.cmd text eol=crlf
