@@ -28,6 +28,7 @@ from typing import Any, TypeVar
 import numpy as np
 import trimesh
 from pydantic import ValidationError
+from scipy.spatial import cKDTree
 
 from core.config.validation import issues_from_validation_error
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage, has_stopping_issue
@@ -36,6 +37,7 @@ from machines.config import (
     BOX_FACES,
     CYLINDER_FACES,
     MACHINE_SCHEMA_VERSION,
+    BodyConfig,
     BoxDomain,
     CylinderDomain,
     CylinderZone,
@@ -64,12 +66,14 @@ from machines.domains import (
 )
 from machines.presets import DOMAIN_CHOICES
 from machines.vawt_migration import NotVawtConvertible, to_vawt
+from machines.zones import generated_names
 from vawt.case_generator import RESERVED_NAMES, Grid
 from vawt.config import (
     SCHEMA_VERSION_INVALID,
     SCHEMA_VERSION_NEWER,
     Axis,
     InterfaceType,
+    LayerSizing,
     RotorGeometryConfig,
     Vec3,
     plane_axes,
@@ -357,6 +361,15 @@ def _name_issues(config: MachineProjectConfig) -> list[Issue]:
                 f"'{patch.name}' (patches.{i}.name) is a name the generated mesh uses itself.",
                 f"Choose another name; reserved: {', '.join(sorted(RESERVED_PATCH_NAMES))}.",
                 field=f"patches.{i}.name", name=patch.name))
+    generated = generated_names(config)
+    for i, patch in enumerate(config.patches):
+        if patch.name in generated:
+            issues.append(_blocking(
+                "RESERVED_PATCH_NAME",
+                f"'{patch.name}' (patches.{i}.name) is the name of the "
+                f"{generated[patch.name]}, which the pipeline creates.",
+                "Choose another patch name, or rename the zone or body.",
+                field=f"patches.{i}.name", name=patch.name))
     zones = {z.name for z in config.rotating_zones}
     for i, body in enumerate(config.bodies):
         if body.zone is not None and body.zone not in zones:
@@ -617,10 +630,23 @@ def _imported_notice(config: MachineProjectConfig) -> list[Issue]:
         return []
     return [_issue(
         IssueSeverity.INFO, "IMPORTED_SURFACES_NOT_CHECKED",
-        "Whether bodies and zones lie inside the imported surfaces is not checked yet.",
-        "Check the placement of bodies and zones against the imported surfaces.",
-        explanation="The imported files themselves (regions, closedness, binary STL) "
-        "are checked by check_imported.")]
+        "check_config does not read the imported surfaces: their files and the placement "
+        "of bodies and zones in them are checked by validate_machine.",
+        "Run validate_machine for the full checks.",
+        explanation="check_imported checks the files; check_imported_placement checks "
+        "bodies and zones against imported domain parts. Imported zones are meshed "
+        "and checked from G5.")]
+
+
+def _imported_zone_notice(config: MachineProjectConfig) -> list[Issue]:
+    names = [z.name for z in config.rotating_zones if isinstance(z.shape, ImportedZone)]
+    if not names:
+        return []
+    return [_issue(
+        IssueSeverity.INFO, "IMPORTED_SURFACES_NOT_CHECKED",
+        f"Imported rotating zones ({', '.join(names)}) are not checked against bodies, "
+        "and are meshed, from G5.", "Check the bodies' placement in these zones.",
+        zones=names)]
 
 
 # --- geometry -----------------------------------------------------------------------------
@@ -741,10 +767,19 @@ def _domain_body_issues(config: MachineProjectConfig, name: str, motion: Motion,
     if distance.max() < 0.0:
         return []
     faces = _crossed_faces(config, points[distance >= 0.0])
-    patches = [config.patch_for(SourceKind.DOMAIN_FACE, face) for face in faces]
+    return _crossing_issues(config, name, motion, faces, SourceKind.DOMAIN_FACE, "faces",
+                            outside=float(distance.max()))
+
+
+def _crossing_issues(config: MachineProjectConfig, name: str, motion: Motion,
+                     faces: list[str], kind: SourceKind, label: str,
+                     **extra: Any) -> list[Issue]:
+    """Owner decision 1 after G1: rotating -> BLOCKING; stationary through an inlet
+    or outlet -> ERROR; through wall or slip faces -> WARNING naming them."""
+    patches = [config.patch_for(kind, face) for face in faces]
     details: dict[str, Any] = {
-        "body": name, "faces": faces, "patches": [p.name for p in patches if p is not None],
-        "outside": float(distance.max())}
+        "body": name, label: faces, "patches": [p.name for p in patches if p is not None],
+        **extra}
     where = ", ".join(faces)
     if motion is Motion.ROTATING:
         return [_geometry_issue(
@@ -767,7 +802,6 @@ def _domain_body_issues(config: MachineProjectConfig, name: str, motion: Motion,
         "outside is not meshed.",
         "Intended for a pole or tower through a wall or slip face; otherwise enlarge "
         "the domain.", **details)]
-
 
 def _zone_body_issues(name: str, motion: Motion, own_zone: str | None, zone: RotatingZone,
                       distance: np.ndarray, spacing: float,
@@ -849,6 +883,165 @@ def _mesh_point_issues(config: MachineProjectConfig, name: str,
         f"{field} lies inside body '{name}'.", f"Move {field} into the fluid.",
         field=field, body=name)
         for (field, _), hit in zip(points, inside, strict=True) if hit]
+
+
+# --- bodies and zones in imported domain parts (G3) -----------------------------------------
+
+def check_imported_placement(config: MachineProjectConfig, surfaces: Iterable[SurfaceInfo],
+                             meshes: Mapping[str, trimesh.Trimesh],
+                             thresholds: MachineThresholds | None = None) -> tuple[Issue, ...]:
+    """Bodies and cylinder zones against the closed imported domain parts: the
+    rules of section 10 for generated domains, with the crossed faces named by
+    the nearest region."""
+    if not isinstance(config.domain, ImportedDomain):
+        return ()
+    limits = thresholds or MachineThresholds()
+    parts = [s for s in surfaces if s.owner.startswith("domain.parts.") and s.closed]
+    if len(parts) != len(config.domain.parts):
+        return ()  # an unreadable or open part is already BLOCKING
+    unions = [p.union() for p in parts]
+    cell = min(p.cell_size for p in config.domain.parts)
+
+    def inside(points: np.ndarray) -> np.ndarray:
+        hit = np.zeros(len(points), dtype=bool)
+        for union in unions:
+            hit |= contains_points(points, union.vertices, union.faces)
+        return hit
+
+    regions = [(r.name, r.mesh) for p in parts for r in p.regions]
+    region_points = [surface_points(m, limits.sample_spacing_cells * cell,
+                                    limits.max_sample_points)[0] for _, m in regions]
+    tree = cKDTree(np.vstack(region_points))
+    owner = np.repeat(np.arange(len(regions)), [len(p) for p in region_points])
+
+    issues: list[Issue] = []
+    for body in config.bodies:
+        mesh = meshes.get(body.name)
+        if mesh is None:
+            continue
+        points, _ = surface_points(mesh, limits.sample_spacing_cells * cell,
+                                   limits.max_sample_points)
+        hit = inside(points)
+        if not hit.any():
+            issues.append(_geometry_issue(
+                IssueSeverity.BLOCKING, "BODY_OUTSIDE_DOMAIN",
+                f"Body '{body.name}' lies outside the imported domain.",
+                "Move the body, or check its units and transform.", body=body.name))
+            continue
+        if hit.all():
+            continue
+        _, nearest = tree.query(points[~hit])
+        names = sorted({regions[owner[i]][0] for i in np.atleast_1d(nearest)})
+        issues.extend(_crossing_issues(config, body.name, body.motion, names,
+                                       SourceKind.REGION, "regions"))
+    for i, zone in enumerate(config.rotating_zones):
+        cylinder = _Cylinder.of_zone(zone)
+        if cylinder is None:
+            continue
+        if not inside(cylinder.end_circles(limits.zone_circle_points)).all():
+            issues.append(_blocking(
+                "ZONE_OUTSIDE_DOMAIN",
+                f"Rotating zone '{zone.name}' is not inside the imported domain.",
+                "Move or resize the zone.", field=f"rotating_zones.{i}"))
+    return tuple(issues)
+
+
+# --- layers per body (F7) ---------------------------------------------------------------------
+
+def _layer_total(first_or_final: float, ratio: float, count: int, *, outward: bool) -> float:
+    """As vawt.validation: total thickness of `count` layers growing by `ratio`."""
+    return first_or_final * float(sum(ratio ** (k if outward else -k) for k in range(count)))
+
+
+def _case_cell(config: MachineProjectConfig, body: BodyConfig) -> float | None:
+    """The cell size a body's surface is refined from (its zone, or the domain)."""
+    if body.motion is not Motion.STATIONARY:
+        zone = config.zone(body.zone or "")
+        return zone.cell_size if zone else None
+    domain = config.domain
+    if isinstance(domain, BoxDomain | CylinderDomain):
+        return domain.cell_size
+    if isinstance(domain, ImportedDomain):
+        return min(p.cell_size for p in domain.parts)  # the finest part: conservative
+    return None
+
+
+def check_layers(config: MachineProjectConfig,
+                 thresholds: MachineThresholds | None = None) -> tuple[Issue, ...]:
+    """The VAWT layer checks for every body with layers, and one layer sizing
+    per meshed case. A VAWT project the VAWT workflow meshes gets the VAWT
+    checks instead (check_vawt)."""
+    if _vawt_convertible(config):
+        return ()
+    limits = (thresholds or MachineThresholds()).vawt
+    issues: list[Issue] = []
+    cases: dict[str, set[LayerSizing]] = {}
+    for i, body in enumerate(config.bodies):
+        layers = body.layers
+        if not layers.enabled:
+            continue
+        field_ = f"bodies.{i}.layers"
+        for case in ([f"zone '{body.zone}'"] if body.motion is Motion.ROTATING else
+                     ["the domain"] if body.motion is Motion.STATIONARY else
+                     [f"zone '{body.zone}'", "the domain"]):
+            cases.setdefault(case, set()).add(layers.sizing)
+        cell = _case_cell(config, body)
+        if cell is None:
+            continue
+        finest = cell / 2 ** body.refinement.max_level
+        if layers.sizing is LayerSizing.ABSOLUTE:
+            assert layers.first_layer_thickness is not None
+            assert layers.min_thickness_m is not None
+            final = layers.first_layer_thickness * layers.expansion_ratio ** (layers.count - 1)
+            if final < limits.min_final_layer_fraction * finest:
+                issues.append(_issue(
+                    IssueSeverity.WARNING, "LAYERS_TOO_THIN_FOR_CELLS",
+                    f"The outermost layer of body '{body.name}' ({final:.4g} m) is below "
+                    f"{limits.min_final_layer_fraction:g} of its finest cell ({finest:.4g} m); "
+                    "snappyHexMesh is likely to add no layers.",
+                    "Increase first_layer_thickness, the expansion ratio or the layer count, "
+                    "or refine the body's cells.", field=field_, body=body.name,
+                    final_layer_thickness=final, finest_cell=finest))
+            if layers.first_layer_thickness > finest:
+                issues.append(_issue(
+                    IssueSeverity.ERROR, "ABSOLUTE_LAYER_TOO_THICK",
+                    f"The first layer of body '{body.name}' ({layers.first_layer_thickness:g} m) "
+                    f"is thicker than its finest cell ({finest:g} m).",
+                    "Reduce first_layer_thickness or the body's refinement.", field=field_,
+                    body=body.name, finest_cell=finest))
+            limited = _layer_total(layers.first_layer_thickness, layers.expansion_ratio,
+                                   layers.count, outward=True)
+            minimum = layers.min_thickness_m
+        else:
+            limited = _layer_total(layers.final_layer_thickness, layers.expansion_ratio,
+                                   layers.count, outward=False)
+            minimum = layers.min_thickness
+        if minimum > limited:
+            issues.append(_issue(
+                IssueSeverity.ERROR, "LAYER_MIN_THICKNESS_TOO_LARGE",
+                f"The minimum layer thickness of body '{body.name}' ({minimum:g}) exceeds the "
+                f"total layer thickness it limits ({limited:.4g}); layers would never be added.",
+                "Lower the minimum thickness, or add or thicken layers.", field=field_,
+                body=body.name, total_layer_thickness=limited))
+    for case, sizings in cases.items():
+        if len(sizings) > 1:
+            issues.append(_blocking(
+                "LAYER_SIZING_MIXED",
+                f"Bodies meshed together in {case} mix RELATIVE and ABSOLUTE layer sizing.",
+                "Use one layer sizing for all bodies with layers in this mesh.",
+                explanation="snappyHexMesh sets relative or absolute sizing once per mesh.",
+                case=case))
+    return tuple(issues)
+
+
+def _vawt_convertible(config: MachineProjectConfig) -> bool:
+    if config.machine is not MachineType.VAWT:
+        return False
+    try:
+        to_vawt(config)
+    except NotVawtConvertible:
+        return False
+    return True
 
 
 # --- everything -----------------------------------------------------------------------------
@@ -1055,11 +1248,14 @@ def validate_machine(raw: Any,
     surfaces = read_imported(config)
     owners = surface_owners(surfaces)
     meshes, loaded = load_bodies(config)
+    configured = [i for i in check_config(config, thresholds, owners)
+                  if i.code != "IMPORTED_SURFACES_NOT_CHECKED"]  # checked below
     return MachineValidationResult(config, _unique((
-        *check_config(config, thresholds, owners), *check_imported(config, surfaces, thresholds),
-        *check_rotating_walls(config, owners), *loaded,
+        *configured, *check_imported(config, surfaces, thresholds),
+        *check_rotating_walls(config, owners), *check_layers(config, thresholds), *loaded,
         *check_geometry(config, meshes, thresholds),
-        *check_vawt(config, meshes, thresholds))))
+        *check_imported_placement(config, surfaces, meshes, thresholds),
+        *check_vawt(config, meshes, thresholds), *_imported_zone_notice(config))))
 
 
 # VAWT checks with no machine equivalent. The others (rotor in the zone, mesh

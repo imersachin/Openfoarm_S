@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | G0 complete on synthetic geometry (`docs/rotating_machinery_notes.md`); real-geometry items wait for section 17. G1 (configuration) and G2 (domains and patches) complete. G3 not started. |
+| Status | G0 complete on synthetic geometry (`docs/rotating_machinery_notes.md`); real-geometry items wait for section 17. G1 (configuration), G2 (domains and patches) and G3 (bodies and zones) complete. G4 not started. |
 | Place this file at | `openforam_preprocessor/docs/rotating_machinery.md` |
 | Builds on | `docs/vawt_mesh_generator.md` (V0–V5). V5 must be complete first. |
 | Replaces | Nothing. The VAWT workflow becomes one preset of this one. |
@@ -340,6 +340,10 @@ real run on v2512.
 | An imported part's mesh point outside its surface | BLOCKING |
 | A mesh point on a background-cell face or edge (V0 E4) | ERROR |
 | A joint between two regions of the same part | BLOCKING |
+| A patch named like a generated one (interfaces, `<body>_rotating`) | BLOCKING |
+| Layer checks per body (first layer thicker than the finest cell; minimum thickness above the total) | ERROR |
+| Outermost layer far thinner than the finest cell | WARNING |
+| Bodies meshed together mixing RELATIVE and ABSOLUTE layer sizing | BLOCKING |
 | No inlet, or no outlet | BLOCKING |
 | A patch without a type | BLOCKING |
 | Body entirely outside the domain | BLOCKING |
@@ -574,3 +578,34 @@ E1–E6, approved before G2. Evidence: `tests/integration/test_machine_domains_r
    VAWT checks (AMI without domain, wake outside the domain, mesh point on a
    cell face, layer checks, inside-out bodies, zone cells); `to_vawt` refuses a
    renamed zone or body and reports model errors as `NotVawtConvertible`.
+
+## 21. Decisions for G3 (owner)
+
+F1–F7, approved before G3. Evidence: `tests/integration/test_machine_assembly_real.py`
+(OpenFOAM v2512).
+
+1. **F1 Cases:** `domain` (or `domain_<part>`), one `zone_<name>` per cylinder
+   zone, and `merged` (mergeMeshes, createPatch, checkMesh, postProcess).
+   `machines.assembly.meshing_steps` gives the order.
+2. **F2 Interface names:** `<zone>_<outer|inner>_stat` and `_rot` are the
+   cyclicAMI pairs. The meshes first carry them as `<name>_src`: createPatch
+   moves faces into an existing patch without changing its type, so the pairs
+   must be new patches.
+3. **F3 Split body:** its inner part is `<body>_rotating` (wall). Both parts get
+   about the same cell size: the domain side's levels are raised by
+   round(log2(domain cell / zone cell)). The split pole still starts at AMI
+   sum(weights) 0.52 (G0: 0.83), so the AMI WARNING fires for it. Where a body
+   crosses an interface the weights stay low; this is G8 work.
+4. **F4 Zone surfaces:** generated STL for every cylinder zone (`segments`,
+   default 96), regions `outer` and `inner`. The hole's wall is refined to
+   `hole_level` (default 2, as G0 R5) on the zone side and to the same cell
+   size on the domain side. Without it the hole pair's weights fell to 0.24;
+   with it they are 0.99997–1.004, and the face counts (2592, 4480) equal G0's.
+5. **F5 AMI weights:** `postProcess -dict system/amiWeightsDict -constant` on
+   the merged mesh; WARNING outside 0.85–1.5 (configurable). Starting position
+   only.
+6. **F6 Scope:** imported zones and joints are G5. Bodies and cylinder zones
+   are checked against imported domain parts; a crossing names the nearest
+   region and follows section 19, decision 1.
+7. **F7 Layers:** per body, per-patch values in snappyHexMesh; one sizing per
+   mesh. Verified: two layered bodies in one zone both got their layers.

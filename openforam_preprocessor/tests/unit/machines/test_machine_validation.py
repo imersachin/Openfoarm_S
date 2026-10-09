@@ -105,7 +105,9 @@ def test_francis_needs_the_imported_surface_checks_later(francis: dict[str, Any]
 
 
 def test_duct_with_files_per_patch_passes(duct: dict[str, Any]) -> None:
-    assert summary(found(duct)) == [("IMPORTED_SURFACES_NOT_CHECKED", "INFO")]
+    # G3: the duct's zone is checked against the imported part, so nothing is left
+    # unchecked (the INFO stays for imported zones only).
+    assert summary(found(duct)) == []
 
 
 # --- bodies, zones and the interface (section 3.1) ----------------------------------------

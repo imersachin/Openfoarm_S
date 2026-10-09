@@ -209,6 +209,11 @@ class CylinderZone(CylinderGeometry):
     kind: Literal["CYLINDER"]
     # Annular zone: a stationary body (pole) passes through the hole.
     hole_diameter: PositiveFloat | None = None
+    # Facets around the generated zone surface (decision F4; as the cylinder domain).
+    segments: int = Field(default=96, ge=24, le=4096)
+    # Refinement of the hole's interface in the zone mesh; the domain side gets the
+    # same cell size. G0 R5 used 2: coarser left AMI weights near 0.24 (G3 test).
+    hole_level: int = Field(default=2, ge=0, le=10)
 
     @model_validator(mode="after")
     def validate_hole(self) -> CylinderZone:

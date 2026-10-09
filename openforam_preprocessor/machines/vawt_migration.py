@@ -146,6 +146,8 @@ def to_vawt(config: MachineProjectConfig) -> VawtProjectConfig:
         raise refuse(f"the VAWT rotating zone is named '{ZONE_NAME}', not '{zone.name}'")
     if not isinstance(shape, CylinderZone) or shape.hole_diameter is not None:
         raise refuse("the rotating zone must be a cylinder without a hole")
+    if shape.segments != CylinderZone.model_fields["segments"].default:
+        raise refuse("VAWT meshes an exact cylinder; zone segments cannot be set")
     if config.flow_axis is None or config.flow_axis is zone.axis:
         raise refuse("the flow axis must be set and differ from the rotor axis")
     if config.joints:
