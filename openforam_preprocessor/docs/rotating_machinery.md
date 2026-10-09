@@ -96,8 +96,10 @@ All 13 architectural invariants stay. Two are added:
 - Every body lies inside the domain.
 - A rotating body lies entirely inside its rotating zone.
 - A stationary body must not cross an interface. A pole that passes through
-  the rotating zone has to be split: the part inside rotates (or is a separate
-  stationary body inside a zone hole); the decision is per machine (section 17).
+  the rotating zone uses one of two methods, chosen per machine (section 17):
+  a split pole whose inner part rotates, or a stationary pole inside the hole
+  of an annular zone. A split pole's inner part is never held stationary
+  (section 18, decision 4).
 - Rotating zones do not overlap.
 - Each patch has exactly one type.
 
@@ -154,7 +156,9 @@ proven in G0 on real OpenFOAM:
 2. A box background mesh cut to the cylinder by snappyHexMesh, using the
    cylinder as the domain surface
 
-G0 records which one is used, with evidence.
+G0 records which one is used, with evidence. **Used: method 2**, a box cut by
+snappyHexMesh, patches from the cylinder surface's regions (section 18,
+decision 1).
 
 ### 5.3 Imported domain
 
@@ -295,9 +299,10 @@ later milestone, approved separately.
 
 ### 9.6 Time controls
 
-- Time step from rotation: degrees of rotation per step (default chosen in G6
-  from evidence), converted to seconds from the rotation speed; or from a
-  maximum Courant number.
+- Time step: limited by **both** a number of degrees of rotation per step
+  (converted to seconds from the rotation speed) **and** a maximum Courant
+  number. Both are configurable; G6 sets their defaults with evidence
+  (section 18, decision 5).
 - End time in rotor revolutions; write interval in revolutions or degrees.
 - Defaults are starting values and are labelled as such.
 
@@ -316,8 +321,8 @@ real run on v2512.
 | Check | Severity |
 |---|---|
 | Any STL units not chosen | BLOCKING |
-| Imported domain not closed | BLOCKING |
-| Binary STL given as named regions | ERROR, with the fix |
+| Imported domain not closed (the union of its surfaces) | BLOCKING |
+| Binary STL given as named regions (detected by size, not by a leading "solid") | ERROR, with the fix |
 | Duplicate or invalid patch names | BLOCKING |
 | No inlet, or no outlet | BLOCKING |
 | A patch without a type | BLOCKING |
@@ -340,9 +345,20 @@ Thresholds are configuration, never constants.
   case setup; export. Each cached separately, as in VAWT V3.
 - Case setup is its own operation. Changing physics re-runs case setup only;
   the mesh is reused (invariant 14).
-- Result checks from V3 extend to every zone: wrong region, empty interface
-  patches, missing cell zones, region count equal to the number of
-  disconnected zones (evidence from G0).
+- Every joint between separately meshed parts is a cyclicAMI pair,
+  stationary joints included. `stitchMesh` is not used (section 18,
+  decision 3).
+- Result checks from V3 extend to every zone (section 18, decisions 2 and 4).
+
+| Result check | Severity |
+|---|---|
+| An expected patch (at least inlet and outlet) missing or without faces | ERROR |
+| The kept region is not the intended one (e.g. a background-block patch still has faces) | ERROR |
+| An interface patch without faces; a missing cell zone | ERROR |
+| Region count ≠ separately meshed parts (each joined only by AMI) | INVALID (as V3 `REGION_COUNT_UNEXPECTED`) |
+| AMI sum(weights) of any pair outside a configurable range (default 0.85–1.5) | WARNING |
+
+What a change re-runs:
 
 | Changed setting | Re-runs | Reused |
 |---|---|---|
@@ -448,3 +464,50 @@ G0 needs real geometry, one set per machine:
 - A VAWT rotor with pole, ideally the J-blade design
 
 Each with its units, rotation axis and rotation direction.
+
+---
+
+## 18. Decisions After G0 (owner)
+
+Evidence: `docs/rotating_machinery_notes.md` and `tests/fixtures/machines/g0/`.
+
+1. **Cylinder domain:** a box background cut to the cylinder by
+   snappyHexMesh (G0 R1 method b). It is the same path as the box and imported
+   domains; patch names and types come from the cylinder surface's regions.
+   The O-grid is not used.
+2. **R2's silent failures never pass.** In G0 both exited 0 and passed
+   checkMesh.
+   - Before meshing: a binary STL declared as named regions is an ERROR; an
+     open union of domain surfaces is BLOCKING (section 10).
+   - After meshing: every expected patch (at least inlet and outlet) exists
+     and has faces, and the kept region is the intended one; otherwise ERROR
+     (section 11).
+   - Both cases are tested in the milestone that builds them.
+3. **Every joint between separately meshed parts is a cyclicAMI pair**,
+   stationary joints included. `stitchMesh` is not used: in G0 it joined only
+   conformal discs, and on non-conformal ones it exited 0 with an invalid
+   mesh.
+4. **Pole:** two methods are kept, chosen per machine when the real geometry
+   is ready:
+   - a split pole whose inner part rotates;
+   - a stationary pole inside an annular zone.
+
+   The split pole with its inner part held stationary is dropped. **AMI
+   sum(weights) becomes a result check** (section 11): a WARNING when any
+   pair's minimum or maximum is outside a configurable range.
+   - **Default range 0.85–1.5,** from G0. Every G0 mesh with no body crossing
+     an interface stayed within 0.90–1.35 over all steps (V0 E1: 0.99–1.37).
+     The split pole, with different pole resolution on the two sides, started
+     at 0.83 and fell to 0.72.
+   - **These are mesh-consistency flags, not accuracy limits.**
+   - **How to compute them:** `postProcess -dict <dict with an AMIWeights
+     function object> -constant` gives the weights on the finished mesh with
+     no solver and no fields. Verified on the G0 R3 mesh: exit 0, the same
+     values as the solver's first AMI build.
+   - This measures the starting rotor position only. Positions during
+     rotation are not checked.
+5. **Time step (G6):** limited by both degrees of rotation per step and a
+   maximum Courant number, both configurable. G6 sets the defaults with
+   evidence. G0 evidence so far: 1° per step gave a maximum Courant number of
+   2.5–7.0 on the G0 meshes. The propeller tutorial uses `maxCo 2` with an
+   adjustable time step.
