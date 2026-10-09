@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | G0 complete on synthetic geometry (`docs/rotating_machinery_notes.md`); real-geometry items wait for section 17. G1 (configuration), G2 (domains and patches) and G3 (bodies and zones) complete. G4 not started. |
+| Status | G0 complete on synthetic geometry (`docs/rotating_machinery_notes.md`); real-geometry items wait for section 17. G1 (configuration), G2 (domains and patches), G3 (bodies and zones) and G4 (HAWT preset and pipeline, synthetic rotor) complete. G5 not started. |
 | Place this file at | `openforam_preprocessor/docs/rotating_machinery.md` |
 | Builds on | `docs/vawt_mesh_generator.md` (V0–V5). V5 must be complete first. |
 | Replaces | Nothing. The VAWT workflow becomes one preset of this one. |
@@ -395,10 +395,10 @@ What a change re-runs:
 | Patch type only | Case setup | All meshes |
 | Body geometry or units | Everything downstream of that body | Other bodies |
 
-Open point (G4/G6): G2 meshes with the patch types (snappy `patchInfo`,
-blockMesh boundary), as VAWT and G0 do. For a type-only change to re-run case
-setup only, case setup must set the boundary types itself and the mesh cache
-must not depend on them.
+Patch types (G4, decision H3): the domain and zone meshes are built with plain
+patches; the assembly sets the final types (`foamDictionary` on the merged
+boundary). A type-only change re-runs the assembly and checks, never a domain
+or zone mesh. G6 case setup may take this step over.
 
 ---
 
@@ -609,3 +609,31 @@ F1–F7, approved before G3. Evidence: `tests/integration/test_machine_assembly_
    region and follows section 19, decision 1.
 7. **F7 Layers:** per body, per-patch values in snappyHexMesh; one sizing per
    mesh. Verified: two layered bodies in one zone both got their layers.
+
+## 22. Decisions for G4 (owner)
+
+H1–H6, approved before G4. Evidence: `tests/integration/test_hawt_pipeline_real.py`
+(OpenFOAM v2512) and `tests/unit/machines/test_machine_pipeline.py`.
+
+1. **H1 HAWT preset values** (`machines/presets/hawt.py`): the G0 R3 test values,
+   each stored with its source, "G0 R3 test value; unverified, not a
+   recommendation": 2D upstream, 5D downstream, radius 2D, domain cells D/8;
+   zone 1.2D, axial margin 0.04D, cells D/40. Replacing them with cited values
+   changes only that table.
+   The rotor is measured about its rotation axis (`hawt_rotor`): the axis passes
+   through the area-weighted centroid of the surface (exact for a rotationally
+   symmetric rotor; can be given instead), and D is the swept diameter. The
+   bounding box used for VAWT puts a 3-blade rotor's centre 0.125 m off the
+   axis. On the G0 rotor the preset reproduces G0 R3's domain and zone.
+2. **H2 Pipeline** (`machines/pipeline.py`, `machines/operations.py`): built on
+   the V3 pieces; VAWT keeps its own. One cached operation per domain case and
+   per zone case, then assembly and checks. Verified on real OpenFOAM: a
+   second run reuses every operation; a patch-type change re-runs only the
+   assembly and checks; a body's refinement re-runs its zone mesh, the
+   assembly and checks, and reuses the domain mesh.
+3. **H3 Patch types:** see section 11.
+4. **H4 Project store:** `.preprocessor/machines/` (project, history,
+   last_meshed).
+5. **H5 Service layer:** G7.
+6. **H6 Real geometry:** G4 ran on the synthetic G0 HAWT rotor; no real HAWT
+   STL yet. The same test runs on one when it is provided.

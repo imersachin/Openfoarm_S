@@ -104,6 +104,9 @@ class MachineThresholds:
     # A mesh point closer than this fraction of a cell to a background-cell face
     # counts as on it (V0 E4), as in the VAWT checks.
     point_face_tolerance_cells: float = 1e-6
+    # AMI sum(weights) outside this range is a WARNING after meshing (section 18,
+    # decision 4): mesh-consistency flags from G0, not accuracy limits.
+    ami_weights_range: tuple[float, float] = (0.85, 1.5)
     # The VAWT checks run for a VAWT project that converts to the VAWT model.
     vawt: ValidationThresholds = field(default_factory=ValidationThresholds)
 
@@ -1238,6 +1241,33 @@ def _unique(issues: Iterable[Issue]) -> tuple[Issue, ...]:
     return tuple(kept)
 
 
+@dataclass(frozen=True)
+class CheckedConfig:
+    """Every check on a parsed configuration, with what was read for them
+    (reused by the pipeline: bodies and surfaces are read once)."""
+
+    issues: tuple[Issue, ...]
+    meshes: dict[str, trimesh.Trimesh]
+    surfaces: tuple[SurfaceInfo, ...]
+
+
+def check_all(config: MachineProjectConfig,
+              thresholds: MachineThresholds | None = None) -> CheckedConfig:
+    """Read the imported surfaces, load the bodies, and run every check."""
+    surfaces = read_imported(config)
+    owners = surface_owners(surfaces)
+    meshes, loaded = load_bodies(config)
+    configured = [i for i in check_config(config, thresholds, owners)
+                  if i.code != "IMPORTED_SURFACES_NOT_CHECKED"]  # checked below
+    issues = _unique((
+        *configured, *check_imported(config, surfaces, thresholds),
+        *check_rotating_walls(config, owners), *check_layers(config, thresholds), *loaded,
+        *check_geometry(config, meshes, thresholds),
+        *check_imported_placement(config, surfaces, meshes, thresholds),
+        *check_vawt(config, meshes, thresholds), *_imported_zone_notice(config)))
+    return CheckedConfig(issues, meshes, tuple(surfaces))
+
+
 def validate_machine(raw: Any,
                      thresholds: MachineThresholds | None = None) -> MachineValidationResult:
     """Parse the configuration, read the imported surfaces, load the bodies,
@@ -1245,18 +1275,7 @@ def validate_machine(raw: Any,
     config, issues = parse_config(raw)
     if config is None:
         return MachineValidationResult(None, issues)
-    surfaces = read_imported(config)
-    owners = surface_owners(surfaces)
-    meshes, loaded = load_bodies(config)
-    configured = [i for i in check_config(config, thresholds, owners)
-                  if i.code != "IMPORTED_SURFACES_NOT_CHECKED"]  # checked below
-    return MachineValidationResult(config, _unique((
-        *configured, *check_imported(config, surfaces, thresholds),
-        *check_rotating_walls(config, owners), *check_layers(config, thresholds), *loaded,
-        *check_geometry(config, meshes, thresholds),
-        *check_imported_placement(config, surfaces, meshes, thresholds),
-        *check_vawt(config, meshes, thresholds), *_imported_zone_notice(config))))
-
+    return MachineValidationResult(config, check_all(config, thresholds).issues)
 
 # VAWT checks with no machine equivalent. The others (rotor in the zone, mesh
 # points, zone in the domain, clearances, reserved names) are machine checks too.

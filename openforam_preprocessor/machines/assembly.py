@@ -46,10 +46,12 @@ from machines.config import (
     LayersConfig,
     MachineProjectConfig,
     Motion,
+    PatchType,
     RotatingZone,
     SourceKind,
 )
 from machines.domains import SurfaceInfo
+from machines.patches import openfoam_type
 from machines.zones import (
     INNER,
     SOURCE_SUFFIX,
@@ -90,6 +92,8 @@ class MachineCases:
     zones: tuple[DomainCase, ...]
     merged: DomainCase
     interfaces: tuple[Interface, ...]
+    # Patch -> OpenFOAM type to set on the merged mesh (untyped meshes, H3).
+    retype: dict[str, str] = field(default_factory=dict)
 
     @property
     def all(self) -> tuple[DomainCase, ...]:
@@ -352,10 +356,11 @@ def _level_offset(coarse: float, fine: float) -> int:
     return max(0, round(math.log2(coarse / fine)))
 
 
-def _body_surface(body: BodyConfig, mesh: trimesh.Trimesh, patch: str, offset: int) -> Surface:
+def _body_surface(body: BodyConfig, mesh: trimesh.Trimesh, patch: str, offset: int,
+                  kind: str = "wall") -> Surface:
     r = body.refinement
     return Surface(
-        stem=patch, regions={patch: "wall"},
+        stem=patch, regions={patch: kind},
         level=(r.min_level + offset, r.max_level + offset),
         features=r.feature_level + offset if r.extract_features else None,
         mesh=_stl([(patch, mesh)]))
@@ -396,7 +401,7 @@ def _cylinder_zones(config: MachineProjectConfig) -> list[RotatingZone]:
 
 def _domain_content(config: MachineProjectConfig, zones: Sequence[RotatingZone],
                     bodies: Sequence[BodyConfig], meshes: Mapping[str, trimesh.Trimesh],
-                    cell: float) -> _Content:
+                    cell: float, wall: str = "wall") -> _Content:
     content = _Content()
     for zone in zones:
         shape = zone.shape
@@ -411,8 +416,8 @@ def _domain_content(config: MachineProjectConfig, zones: Sequence[RotatingZone],
         if body.motion is Motion.SPLIT:  # the same cell size on both sides of the zone (F3)
             own = config.zone(body.zone or "")
             offset = _level_offset(cell, own.cell_size) if own else 0
-        content.surfaces.append(_body_surface(body, meshes[body.name], patch, offset))
-        content.expected[patch] = "wall"
+        content.surfaces.append(_body_surface(body, meshes[body.name], patch, offset, wall))
+        content.expected[patch] = wall
         if body.layers.enabled:
             content.layered.append((patch, body.layers))
     return content
@@ -468,16 +473,18 @@ def _zone_point(zone: RotatingZone) -> np.ndarray:
 
 
 def _domain_cases(config: MachineProjectConfig, zones: Sequence[RotatingZone],
-                  surfaces: Sequence[SurfaceInfo],
-                  meshes: Mapping[str, trimesh.Trimesh]) -> tuple[DomainCase, ...]:
+                  surfaces: Sequence[SurfaceInfo], meshes: Mapping[str, trimesh.Trimesh],
+                  typed: bool) -> tuple[DomainCase, ...]:
     domain = config.domain
-    base = DomainCaseGenerator().render(config, surfaces)
+    wall = "wall" if typed else "patch"
+    # Untyped (H3): every face and region meshed as a plain patch.
+    base = DomainCaseGenerator().render(config if typed else _untyped(config), surfaces)
     stationary = _stationary(config)
     if isinstance(domain, BoxDomain):
-        content = _domain_content(config, zones, stationary, meshes, domain.cell_size)
+        content = _domain_content(config, zones, stationary, meshes, domain.cell_size, wall)
         return (_with_content(base[0], config, content, domain.location_in_mesh, None),)
     if isinstance(domain, CylinderDomain):
-        content = _domain_content(config, zones, stationary, meshes, domain.cell_size)
+        content = _domain_content(config, zones, stationary, meshes, domain.cell_size, wall)
         return (_with_content(base[0], config, content, domain.location_in_mesh,
                               _own_surface(base[0], DOMAIN_CASE)),)
     if not isinstance(domain, ImportedDomain):
@@ -494,14 +501,15 @@ def _domain_cases(config: MachineProjectConfig, zones: Sequence[RotatingZone],
         if not part_zones and not part_bodies:
             result.append(case)
             continue
-        content = _domain_content(config, part_zones, part_bodies, meshes, part.cell_size)
+        content = _domain_content(config, part_zones, part_bodies, meshes, part.cell_size,
+                                  wall)
         result.append(_with_content(case, config, content, part.location_in_mesh,
                                     _own_surface(case, part.name)))
     return tuple(result)
 
 
 def _zone_case(config: MachineProjectConfig, zone: RotatingZone,
-               meshes: Mapping[str, trimesh.Trimesh]) -> DomainCase:
+               meshes: Mapping[str, trimesh.Trimesh], wall: str) -> DomainCase:
     grid = zone_grid(zone)
     shape = zone.shape
     assert isinstance(shape, CylinderZone)
@@ -512,8 +520,8 @@ def _zone_case(config: MachineProjectConfig, zone: RotatingZone,
         if body.zone != zone.name:
             continue
         patch = _patch_of(config, body) if body.motion is Motion.ROTATING else split_patch(body)
-        surfaces.append(_body_surface(body, meshes[body.name], patch, 0))
-        expected[patch] = "wall"
+        surfaces.append(_body_surface(body, meshes[body.name], patch, 0, wall))
+        expected[patch] = wall
         if body.layers.enabled:
             layered.append((patch, body.layers))
     stems = [s.stem for s in surfaces if s.features is not None]
@@ -530,11 +538,25 @@ def _zone_case(config: MachineProjectConfig, zone: RotatingZone,
                       expected, (), cut=True)
 
 
+def final_types(config: MachineProjectConfig) -> dict[str, str]:
+    """The OpenFOAM type of every configured and generated (split) patch."""
+    types = {p.name: openfoam_type(p.type) for p in config.patches}
+    types.update({split_patch(b): "wall" for b in config.bodies if b.motion is Motion.SPLIT})
+    return types
+
+
+def _untyped(config: MachineProjectConfig) -> MachineProjectConfig:
+    return config.model_copy(update={"patches": tuple(
+        p.model_copy(update={"type": PatchType.SLIP}) for p in config.patches)})
+
+
 def _merged_case(config: MachineProjectConfig, domain: Sequence[DomainCase],
                  zones: Sequence[DomainCase], pairs: Sequence[Interface]) -> DomainCase:
+    types = final_types(config)
     expected: dict[str, str] = {}
     for case in (*domain, *zones):
-        expected.update({n: t for n, t in case.expected.items() if not n.endswith(SOURCE_SUFFIX)})
+        expected.update({n: types.get(n, t) for n, t in case.expected.items()
+                         if not n.endswith(SOURCE_SUFFIX)})
     for face in pairs:
         expected[face.stationary] = CYCLIC_AMI
         expected[face.rotating] = CYCLIC_AMI
@@ -549,17 +571,25 @@ class MachineCaseGenerator:
     """Every case of a machine: domain, one per zone, merged (F1)."""
 
     def render(self, config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
-               meshes: Mapping[str, trimesh.Trimesh]) -> MachineCases:
-        """`surfaces`: read_imported(config); `meshes`: load_bodies(config)."""
+               meshes: Mapping[str, trimesh.Trimesh], *, typed: bool = True) -> MachineCases:
+        """`surfaces`: read_imported(config); `meshes`: load_bodies(config).
+
+        typed=False (H3): the domain and zone meshes have plain patches only, and
+        the merged case sets the final types (retype), so a change of patch type
+        alone re-runs only the assembly.
+        """
         zones = _cylinder_zones(config)
         missing = [b.name for b in config.bodies if b.name not in meshes]
         if missing:
             raise ValueError(f"Bodies not loaded: {', '.join(missing)}.")
-        domain = _domain_cases(config, zones, surfaces, meshes)
-        zone_cases = tuple(_zone_case(config, zone, meshes) for zone in zones)
+        wall = "wall" if typed else "patch"
+        domain = _domain_cases(config, zones, surfaces, meshes, typed)
+        zone_cases = tuple(_zone_case(config, zone, meshes, wall) for zone in zones)
         pairs = tuple(face for zone in zones for face in interfaces(zone))
-        return MachineCases(domain, zone_cases, _merged_case(config, domain, zone_cases, pairs),
-                            pairs)
+        merged = _merged_case(config, domain, zone_cases, pairs)
+        retype = {} if typed else {n: t for n, t in merged.expected.items()
+                                   if t not in ("patch", CYCLIC_AMI)}
+        return MachineCases(domain, zone_cases, merged, pairs, retype)
 
     @staticmethod
     def write(project_root: Path, cases: MachineCases) -> tuple[str, ...]:
@@ -606,6 +636,10 @@ def meshing_steps(cases: MachineCases) -> tuple[Step, ...]:
                           ("mergeMeshes", "-overwrite", ".", f"../{case.name}")))
     steps.append(Step("merged_createPatch", "run", merged, ("createPatch", "-overwrite",
                                                              "-case", ".")))
+    for patch, kind in cases.retype.items():  # H3: final types on the merged mesh
+        steps.append(Step(f"merged_type_{patch}", "run", merged, (
+            "foamDictionary", "constant/polyMesh/boundary", "-entry",
+            f"entry0/{patch}/type", "-set", kind)))
     steps.append(Step("merged_checkMesh", "run", merged,
                       ("checkMesh", "-case", ".", "-allTopology", "-meshQuality")))
     steps.append(Step("merged_amiWeights", "run", merged,
