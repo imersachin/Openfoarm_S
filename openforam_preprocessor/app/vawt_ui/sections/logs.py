@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from app.vawt import state
+from app.vawt_ui import state
 
 
 def render(ctx: state.Context) -> None:

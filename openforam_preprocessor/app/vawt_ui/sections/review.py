@@ -5,7 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from app.components.widgets import render_issues
-from app.vawt import state
+from app.vawt_ui import state
 from mesh.estimator import ResourceStatus
 from vawt.operations import VawtOperation
 

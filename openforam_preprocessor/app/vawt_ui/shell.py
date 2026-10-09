@@ -17,8 +17,8 @@ from typing import Any
 import streamlit as st
 
 from app.components.widgets import render_issues
-from app.vawt import state
-from app.vawt.sections import (
+from app.vawt_ui import state
+from app.vawt_ui.sections import (
     domain,
     export,
     geometry,
@@ -32,7 +32,7 @@ from app.vawt.sections import (
     rotating_zone,
     run,
 )
-from app.vawt.sections.common import live
+from app.vawt_ui.sections.common import live
 from vawt.service import RunStatusView, RunView, SectionState, VawtService
 from vawt.workspace import create_project, list_projects, projects_root
 

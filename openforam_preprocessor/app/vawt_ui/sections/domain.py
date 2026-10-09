@@ -9,8 +9,8 @@ from __future__ import annotations
 import streamlit as st
 
 from app.components.widgets import float_field, text_field, vector_field
-from app.vawt import state
-from app.vawt.sections.common import apply_form, section_header, section_issues
+from app.vawt_ui import state
+from app.vawt_ui.sections.common import apply_form, section_header, section_issues
 
 PATCHES = (("inlet", "Inlet (minimum face of the flow axis)"),
            ("outlet", "Outlet (maximum face)"), ("lateral_min", "Lateral min"),

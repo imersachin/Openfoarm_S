@@ -10,14 +10,17 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# `streamlit run app/vawt_app.py` only puts app/ on sys.path.
+# `streamlit run app/vawt_app.py` puts app/ first on sys.path; the repository
+# root is there only with `python -m streamlit`. So nothing in app/ may be
+# named like a top-level package (app/vawt_ui, not app/vawt; tested in
+# tests/integration/test_streamlit_run_real.py).
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 import streamlit as st  # noqa: E402
 
-from app.vawt import shell  # noqa: E402
+from app.vawt_ui import shell  # noqa: E402
 
 st.set_page_config(page_title="VAWT Mesh Generator", layout="wide")
 shell.main()

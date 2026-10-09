@@ -12,8 +12,8 @@ from app.components.widgets import (
     text_field,
     vector_field,
 )
-from app.vawt import state
-from app.vawt.sections.common import apply_form, section_header, section_issues
+from app.vawt_ui import state
+from app.vawt_ui.sections.common import apply_form, section_header, section_issues
 from core.config.models import LengthUnit
 from vawt.config import Axis
 

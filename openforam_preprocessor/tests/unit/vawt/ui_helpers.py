@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from app.vawt import state
+from app.vawt_ui import state
 from mesh.estimator import SystemResources
 from tests.fakes import PLENTY, openfoam_env
 from tests.fakes_vawt import VAWT_TOOLS, FakeVawtRunner

@@ -13,8 +13,8 @@ from app.components.widgets import (
     int_field,
     vector_field,
 )
-from app.vawt import state
-from app.vawt.sections.common import apply_form, section_header, section_issues
+from app.vawt_ui import state
+from app.vawt_ui.sections.common import apply_form, section_header, section_issues
 
 
 def number_fields(draft: dict[str, Any], prefix: str) -> None:

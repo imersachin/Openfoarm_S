@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 import trimesh
 
-from app.vawt.sections import common
+from app.vawt_ui.sections import common
 from tests.fixtures.vawt.rotor import rotor_mesh
 from tests.unit.vawt.test_vawt_service import GatedRunner
 from tests.unit.vawt.ui_helpers import (

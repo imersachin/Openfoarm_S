@@ -94,7 +94,7 @@ openforam_preprocessor/
 │   ├── pages/
 │   ├── components/
 │   ├── vawt_app.py         VAWT entry point (see docs/vawt_mesh_generator.md)
-│   └── vawt/               VAWT UI shell and sections
+│   └── vawt_ui/            VAWT UI shell and sections
 ├── core/
 │   ├── config/
 │   ├── workflow/

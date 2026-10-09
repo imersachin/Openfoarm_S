@@ -6,9 +6,9 @@ from __future__ import annotations
 import streamlit as st
 
 from app.components.widgets import render_issues
-from app.vawt import state
-from app.vawt.sections.common import confirm, live
-from app.vawt.sections.review import ALLOW_HIGH_RISK, OPERATION_LABELS
+from app.vawt_ui import state
+from app.vawt_ui.sections.common import confirm, live
+from app.vawt_ui.sections.review import ALLOW_HIGH_RISK, OPERATION_LABELS
 from mesh.estimator import ResourceStatus
 from vawt.operations import operations_for
 from vawt.service import RunView

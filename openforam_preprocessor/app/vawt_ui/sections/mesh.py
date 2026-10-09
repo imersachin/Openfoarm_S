@@ -8,9 +8,9 @@ from typing import Any
 
 import streamlit as st
 
-from app.vawt import state
-from app.vawt.sections.common import apply_form
-from app.vawt.sections.refinement import number_fields
+from app.vawt_ui import state
+from app.vawt_ui.sections.common import apply_form
+from app.vawt_ui.sections.refinement import number_fields
 from vawt.service import SectionState
 
 ASSESSMENTS = (("mesh_validity", "Mesh validity"), ("mesh_quality", "Mesh quality"),

@@ -13,7 +13,7 @@ from typing import Any
 import psutil
 import pytest
 
-from app.vawt import shell
+from app.vawt_ui import shell
 from core.workflow.run_lock import LOCK_PATH, process_create_time
 from mesh.estimator import SystemResources
 from tests.unit.vawt.test_vawt_service import GatedRunner, write_running_status
@@ -374,7 +374,7 @@ def test_ui_adds_no_plotly_modules_at_start() -> None:
     # Streamlit 1.65 imports plotly itself; the VAWT UI must not add to that
     # (e.g. plotly.graph_objects through the generic visualization code).
     probe = ("import sys, streamlit; before = {m for m in sys.modules if 'plotly' in m}; "
-             "import app.vawt.shell, app.vawt.state; "
+             "import app.vawt_ui.shell, app.vawt_ui.state; "
              "print(sorted({m for m in sys.modules if 'plotly' in m} - before))")
     result = subprocess.run([sys.executable, "-c", probe], cwd=REPO, capture_output=True,
                             text=True, env={**os.environ, "PYTHONPATH": str(REPO)},

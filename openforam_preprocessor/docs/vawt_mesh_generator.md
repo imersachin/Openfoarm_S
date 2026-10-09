@@ -60,7 +60,7 @@ needs a matching edit before the milestone that depends on it.
 |---|---|---|
 | `CLAUDE.md` §3 | "Before VAWT work, also read `docs/vawt_mesh_generator.md`." | V0 |
 | `CLAUDE.md` §19 | Milestone list V0–V7 from section 18 below | V0 |
-| `docs/architecture.md` §3 | `vawt/` package and `app/vawt/` in the target tree | V1 |
+| `docs/architecture.md` §3 | `vawt/` package and `app/vawt_ui/` in the target tree | V1 |
 | `docs/architecture.md` §18 | A second UI entry point; section navigation instead of one tab strip | V5 |
 
 ### 2.3 Rules specific to this workflow
@@ -562,7 +562,7 @@ Implemented in V4 (`vawt/service.py`, `vawt/runtime.py`):
   shown separately; the last two are always NOT_ASSESSED.
 - Advanced users can view generated dictionaries and raw logs.
 
-Implemented in V5 (`app/vawt_app.py`, `app/vawt/`):
+Implemented in V5 (`app/vawt_app.py`, `app/vawt_ui/`):
 
 - Sidebar navigation grouped Setup / Run / Results / Tools. Only the active
   section's `render()` runs (tested). Marks are the service's states

@@ -8,7 +8,7 @@ from contextlib import contextmanager
 import streamlit as st
 
 from app.components.widgets import render_issues
-from app.vawt import state
+from app.vawt_ui import state
 from vawt.service import SectionState
 
 REFRESH_S = 1.5  # status and log refresh while a run is active (spec 14.2: 1-2 s)

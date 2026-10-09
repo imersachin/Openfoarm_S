@@ -5,8 +5,8 @@ from __future__ import annotations
 import streamlit as st
 
 from app.components.widgets import bool_field, float_field, int_field, select_field
-from app.vawt import state
-from app.vawt.sections.common import apply_form, section_header, section_issues
+from app.vawt_ui import state
+from app.vawt_ui.sections.common import apply_form, section_header, section_issues
 from vawt.config import LayerSizing
 
 SIZING_LABELS = {"RELATIVE": "Relative to the local cell size",
