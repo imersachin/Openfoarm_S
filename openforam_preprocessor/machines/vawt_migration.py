@@ -12,6 +12,8 @@ snappy `wall` and every other type as `patch`, as VAWT does today.
 
 from __future__ import annotations
 
+from pydantic import ValidationError
+
 from machines.config import (
     BodyConfig,
     BodyRefinement,
@@ -125,7 +127,9 @@ def to_vawt(config: MachineProjectConfig) -> VawtProjectConfig:
     Raises NotVawtConvertible when the configuration uses anything the VAWT
     workflow cannot mesh: another machine, more than one body or zone, a
     stationary or split body, an annular or imported zone, a cylinder or
-    imported domain, joints, or patches other than the VAWT set.
+    imported domain, joints, patches other than the VAWT set, or names VAWT
+    would change (the zone is always ZONE_NAME, "rotating"; the body is named after
+    its patch). Never raises pydantic's ValidationError.
     """
     def refuse(reason: str) -> NotVawtConvertible:
         return NotVawtConvertible(f"Not a VAWT project configuration: {reason}.")
@@ -138,6 +142,8 @@ def to_vawt(config: MachineProjectConfig) -> VawtProjectConfig:
     shape = zone.shape
     if body.motion is not Motion.ROTATING or body.zone != zone.name:
         raise refuse("the body must rotate in the rotating zone")
+    if zone.name != ZONE_NAME:
+        raise refuse(f"the VAWT rotating zone is named '{ZONE_NAME}', not '{zone.name}'")
     if not isinstance(shape, CylinderZone) or shape.hole_diameter is not None:
         raise refuse("the rotating zone must be a cylinder without a hole")
     if config.flow_axis is None or config.flow_axis is zone.axis:
@@ -149,6 +155,8 @@ def to_vawt(config: MachineProjectConfig) -> VawtProjectConfig:
     rotor = config.patch_for(SourceKind.BODY, body.name)
     if rotor is None or rotor.type is not PatchType.ROTATING_WALL:
         raise refuse("the body needs one ROTATING_WALL patch")
+    if rotor.name != body.name:
+        raise refuse(f"the body '{body.name}' must be named after its patch '{rotor.name}'")
     expected = 1
     domain = None
     if config.domain is not None:
@@ -167,6 +175,17 @@ def to_vawt(config: MachineProjectConfig) -> VawtProjectConfig:
     if len(config.patches) != expected:
         raise refuse("patches other than the rotor and the six box faces")
 
+    try:
+        return _vawt_config(config, axes, domain, rotor.name)
+    except ValidationError as exc:  # e.g. a rotor patch named like a domain patch
+        raise refuse(f"the VAWT model rejects it ({exc.error_count()} error(s))") from exc
+
+
+def _vawt_config(config: MachineProjectConfig, axes: RotorAxes, domain: DomainConfig | None,
+                 patch_name: str) -> VawtProjectConfig:
+    body, zone = config.bodies[0], config.rotating_zones[0]
+    shape = zone.shape
+    assert isinstance(shape, CylinderZone)
     source, refinement = body.source, body.refinement
     return VawtProjectConfig(
         schema_version=config.schema_version,
@@ -175,7 +194,7 @@ def to_vawt(config: MachineProjectConfig) -> VawtProjectConfig:
         geometry=RotorGeometryConfig(
             source_path=source.source_path, source_units=source.source_units,
             scale=source.scale, rotation_deg=source.rotation_deg,
-            translation=source.translation, patch_name=rotor.name),
+            translation=source.translation, patch_name=patch_name),
         rotor=axes,
         rotating_zone=RotatingZoneConfig(
             centre_u=shape.centre_u, centre_v=shape.centre_v, axis_min=shape.axis_min,

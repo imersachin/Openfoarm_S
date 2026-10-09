@@ -22,7 +22,7 @@ import math
 import re
 from collections import Counter
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
 import numpy as np
@@ -49,12 +49,22 @@ from machines.config import (
     PatchType,
     RotatingZone,
     SourceKind,
+    StlFormat,
     StlSource,
     box_face,
 )
-from machines.domains import stl_region_names
+from machines.domains import (
+    BACKGROUND_PATCH,
+    SurfaceInfo,
+    box_grid,
+    cylinder_grid,
+    read_imported,
+    stl_region_names,
+    surface_grid,
+)
 from machines.presets import DOMAIN_CHOICES
-from vawt.case_generator import RESERVED_NAMES
+from machines.vawt_migration import NotVawtConvertible, to_vawt
+from vawt.case_generator import RESERVED_NAMES, Grid
 from vawt.config import (
     SCHEMA_VERSION_INVALID,
     SCHEMA_VERSION_NEWER,
@@ -64,7 +74,13 @@ from vawt.config import (
     Vec3,
     plane_axes,
 )
-from vawt.validation import UNSET_ERROR_TYPES, load_rotor_geometry
+from vawt.rotor_metrics import compute_rotor_metrics
+from vawt.validation import (
+    UNSET_ERROR_TYPES,
+    ValidationThresholds,
+    load_rotor_geometry,
+)
+from vawt.validation import check_config as check_vawt_config
 
 
 @dataclass(frozen=True)
@@ -81,6 +97,15 @@ class MachineThresholds:
     max_sample_points: int = 2_000_000  # per body; spacing is widened beyond it
     # Points on a zone's end circles used to test the zone against the domain.
     zone_circle_points: int = 720
+    # A mesh point closer than this fraction of a cell to a background-cell face
+    # counts as on it (V0 E4), as in the VAWT checks.
+    point_face_tolerance_cells: float = 1e-6
+    # The VAWT checks run for a VAWT project that converts to the VAWT model.
+    vawt: ValidationThresholds = field(default_factory=ValidationThresholds)
+
+
+# Patch names the generated meshes use themselves.
+RESERVED_PATCH_NAMES = RESERVED_NAMES | {BACKGROUND_PATCH}
 
 
 @dataclass(frozen=True)
@@ -258,25 +283,49 @@ def _imported_surfaces(config: MachineProjectConfig) -> list[ImportedSurface]:
     return surfaces
 
 
-def _known_regions(config: MachineProjectConfig) -> set[str] | None:
-    """Every imported region name, when all are known without reading files."""
-    regions: set[str] = set()
-    for surface in _imported_surfaces(config):
+Owners = Mapping[str, str]  # imported region name -> configuration path of its surface
+
+
+def _stem_owners(config: MachineProjectConfig) -> dict[str, str] | None:
+    """Region owners known without reading files (every surface one file per
+    patch), or None."""
+    owners: dict[str, str] = {}
+    for owner, surface in _owned_surfaces(config):
         names = surface.file_regions()
         if names is None:
             return None
-        regions.update(names)
-    return regions
+        owners.update((name, owner) for name in names)
+    return owners
+
+
+def _owned_surfaces(config: MachineProjectConfig) -> list[tuple[str, ImportedSurface]]:
+    surfaces: list[tuple[str, ImportedSurface]] = [
+        (f"rotating_zones.{i}", z.shape) for i, z in enumerate(config.rotating_zones)
+        if isinstance(z.shape, ImportedZone)]
+    if isinstance(config.domain, ImportedDomain):
+        surfaces.extend((f"domain.parts.{i}", p) for i, p in enumerate(config.domain.parts))
+    return surfaces
+
+
+def _known_regions(config: MachineProjectConfig, owners: Owners | None) -> set[str] | None:
+    """Every imported region name, when known (read, or from file names)."""
+    known = owners if owners is not None else _stem_owners(config)
+    return None if known is None else set(known)
 
 
 # --- check_config -----------------------------------------------------------------------
 
-def check_config(config: MachineProjectConfig,
-                 thresholds: MachineThresholds | None = None) -> tuple[Issue, ...]:
-    """Rules between sections (section 10), without reading any STL file."""
+def check_config(config: MachineProjectConfig, thresholds: MachineThresholds | None = None,
+                 owners: Owners | None = None) -> tuple[Issue, ...]:
+    """Rules between sections (section 10), without reading any STL file.
+
+    owners: the imported regions as read (read_imported); without it, region
+    names are known only for surfaces given one file per patch.
+    """
     limits = thresholds or MachineThresholds()
-    return (*_name_issues(config), *_machine_issues(config), *_patch_issues(config),
-            *_joint_issues(config), *_zone_issues(config, limits), *_imported_notice(config))
+    return (*_name_issues(config), *_machine_issues(config), *_patch_issues(config, owners),
+            *_joint_issues(config, owners), *_zone_issues(config, limits),
+            *_grid_point_issues(config, limits), *_imported_notice(config))
 
 
 _T = TypeVar("_T", str, tuple[SourceKind, str])
@@ -302,11 +351,11 @@ def _name_issues(config: MachineProjectConfig) -> list[Issue]:
             "PATCH_NAME_DUPLICATE", f"Two patches are named '{name}'.",
             "Rename one of them; a patch name is used once.", name=name))
     for i, patch in enumerate(config.patches):
-        if patch.name in RESERVED_NAMES:
+        if patch.name in RESERVED_PATCH_NAMES:
             issues.append(_blocking(
                 "RESERVED_PATCH_NAME",
                 f"'{patch.name}' (patches.{i}.name) is a name the generated mesh uses itself.",
-                f"Choose another name; reserved: {', '.join(sorted(RESERVED_NAMES))}.",
+                f"Choose another name; reserved: {', '.join(sorted(RESERVED_PATCH_NAMES))}.",
                 field=f"patches.{i}.name", name=patch.name))
     zones = {z.name for z in config.rotating_zones}
     for i, body in enumerate(config.bodies):
@@ -363,7 +412,7 @@ def _machine_issues(config: MachineProjectConfig) -> list[Issue]:
     return issues
 
 
-def _patch_issues(config: MachineProjectConfig) -> list[Issue]:
+def _patch_issues(config: MachineProjectConfig, owners: Owners | None) -> list[Issue]:
     issues = []
     domain = config.domain
     faces: tuple[str, ...] = ()
@@ -371,7 +420,7 @@ def _patch_issues(config: MachineProjectConfig) -> list[Issue]:
         faces = BOX_FACES
     elif isinstance(domain, CylinderDomain):
         faces = CYLINDER_FACES
-    regions = _known_regions(config)
+    regions = _known_regions(config, owners)
     has_imported = bool(_imported_surfaces(config))
     bodies = {b.name: b for b in config.bodies}
 
@@ -446,7 +495,7 @@ def _patch_issues(config: MachineProjectConfig) -> list[Issue]:
     return issues
 
 
-def _joint_issues(config: MachineProjectConfig) -> list[Issue]:
+def _joint_issues(config: MachineProjectConfig, owners: Owners | None) -> list[Issue]:
     if not config.joints:
         return []
     if not isinstance(config.domain, ImportedDomain):
@@ -455,7 +504,8 @@ def _joint_issues(config: MachineProjectConfig) -> list[Issue]:
             "Joints are listed, but the domain is not imported.",
             "Remove the joints, or import the domain parts they join.", field="joints")]
     issues = []
-    regions = _known_regions(config)
+    known = owners if owners is not None else _stem_owners(config)
+    regions = None if known is None else set(known)
     patch_regions = {p.source.ref for p in config.patches if p.source.kind is SourceKind.REGION}
     names = [name for joint in config.joints for name in (joint.first, joint.second)]
     for i, joint in enumerate(config.joints):
@@ -463,6 +513,12 @@ def _joint_issues(config: MachineProjectConfig) -> list[Issue]:
             issues.append(_blocking(
                 "JOINT_INVALID", f"Joint {i} joins region '{joint.first}' to itself.",
                 "Name the two coincident regions of the two parts.", field=f"joints.{i}"))
+        elif known is not None and known.get(joint.first, "a") == known.get(joint.second, "b"):
+            issues.append(_blocking(
+                "JOINT_SAME_PART",
+                f"Joint {i} joins two regions of the same surface ({known[joint.first]}).",
+                "A joint joins coincident regions of two separately meshed parts.",
+                field=f"joints.{i}"))
     for name in sorted(set(names)):
         if regions is not None and name not in regions:
             issues.append(_blocking(
@@ -561,9 +617,10 @@ def _imported_notice(config: MachineProjectConfig) -> list[Issue]:
         return []
     return [_issue(
         IssueSeverity.INFO, "IMPORTED_SURFACES_NOT_CHECKED",
-        "Imported domain and zone surfaces are not checked yet: closedness, region "
-        "names, binary STL, and whether bodies lie inside them.",
-        "These checks come with the imported-domain reader.")]
+        "Whether bodies and zones lie inside the imported surfaces is not checked yet.",
+        "Check the placement of bodies and zones against the imported surfaces.",
+        explanation="The imported files themselves (regions, closedness, binary STL) "
+        "are checked by check_imported.")]
 
 
 # --- geometry -----------------------------------------------------------------------------
@@ -797,18 +854,14 @@ def _mesh_point_issues(config: MachineProjectConfig, name: str,
 # --- everything -----------------------------------------------------------------------------
 
 def region_owners(config: MachineProjectConfig) -> dict[str, str]:
-    """Imported region name -> the configuration path of the surface holding it.
+    """Imported region name -> the configuration path of the surface holding it,
+    from the region names alone (no geometry is read).
 
     Files whose region names cannot be read (missing, binary) are left out;
-    the imported-domain checks (G2) report them.
+    check_imported reports them.
     """
-    surfaces: list[tuple[str, ImportedSurface]] = [
-        (f"rotating_zones.{i}", z.shape) for i, z in enumerate(config.rotating_zones)
-        if isinstance(z.shape, ImportedZone)]
-    if isinstance(config.domain, ImportedDomain):
-        surfaces.extend((f"domain.parts.{i}", p) for i, p in enumerate(config.domain.parts))
     owners: dict[str, str] = {}
-    for owner, surface in surfaces:
+    for owner, surface in _owned_surfaces(config):
         names = surface.file_regions()
         if names is None:
             names = tuple(name for f in surface.files
@@ -817,7 +870,16 @@ def region_owners(config: MachineProjectConfig) -> dict[str, str]:
     return owners
 
 
-def check_rotating_walls(config: MachineProjectConfig) -> tuple[Issue, ...]:
+def surface_owners(surfaces: Iterable[SurfaceInfo]) -> dict[str, str] | None:
+    """Region owners of read surfaces; None when a file could not be read."""
+    surfaces = list(surfaces)
+    if not all(s.readable for s in surfaces):
+        return None
+    return {region.name: s.owner for s in surfaces for region in s.regions}
+
+
+def check_rotating_walls(config: MachineProjectConfig,
+                         owners: Owners | None = None) -> tuple[Issue, ...]:
     """Every rotating-wall region lies in a rotating zone (an imported zone).
 
     A body's rotating wall is covered by BODY_PATCH_TYPE_MISMATCH and
@@ -827,7 +889,7 @@ def check_rotating_walls(config: MachineProjectConfig) -> tuple[Issue, ...]:
              if p.type is PatchType.ROTATING_WALL and p.source.kind is SourceKind.REGION]
     if not walls:
         return ()
-    owners = region_owners(config)
+    known = owners if owners is not None else region_owners(config)
     return tuple(
         _issue(IssueSeverity.ERROR, "ROTATING_WALL_OUTSIDE_ZONE",
                f"Rotating-wall patch '{patch.name}' comes from region "
@@ -837,16 +899,194 @@ def check_rotating_walls(config: MachineProjectConfig) -> tuple[Issue, ...]:
                "mesh does not move.",
                field=f"patches.{i}.type", patch=patch.name, owner=owner)
         for i, patch in walls
-        if (owner := owners.get(patch.source.ref, "")).startswith("domain.parts."))
+        if (owner := known.get(patch.source.ref, "")).startswith("domain.parts."))
+
+
+# --- imported surfaces (section 5.3; decisions E3, E4) ----------------------------------------
+
+def _owned_by(config: MachineProjectConfig, owner: str) -> tuple[str, Vec3, float]:
+    """(name, mesh point, cell size) of an imported part or zone."""
+    section, index = owner.rsplit(".", 1)
+    if section == "domain.parts":
+        assert isinstance(config.domain, ImportedDomain)
+        part = config.domain.parts[int(index)]
+        return part.name, part.location_in_mesh, part.cell_size
+    zone = config.rotating_zones[int(index)]
+    return zone.name, zone.location_in_mesh, zone.cell_size
+
+
+def check_imported(config: MachineProjectConfig, surfaces: Iterable[SurfaceInfo],
+                   thresholds: MachineThresholds | None = None) -> tuple[Issue, ...]:
+    """The imported files as read: readable, region names, binary STL given as
+    named regions, closed (each part on its own, E4), and the mesh point."""
+    limits = thresholds or MachineThresholds()
+    surfaces = list(surfaces)
+    issues: list[Issue] = []
+    for surface in surfaces:
+        for f in surface.files:
+            if f.error is not None:
+                issues.append(_blocking(
+                    "IMPORTED_FILE_UNREADABLE", f"{f.path.name} of {surface.owner} cannot be "
+                    f"read: {f.error}.", "Check the file and export it again.",
+                    category=IssueCategory.INPUT, stage=IssueStage.GEOMETRY_IMPORT,
+                    owner=surface.owner, file=str(f.path)))
+            elif f.binary and surface.format is StlFormat.NAMED_REGIONS:
+                issues.append(_issue(
+                    IssueSeverity.ERROR, "BINARY_STL_AS_NAMED_REGIONS",
+                    f"{f.path.name} is binary STL, which stores no region names: the "
+                    f"whole surface would become one patch, '{f.path.stem}'.",
+                    "Export ASCII STL with one named region per patch, or one STL file "
+                    "per patch.", category=IssueCategory.INPUT,
+                    stage=IssueStage.GEOMETRY_IMPORT,
+                    explanation="Detected by the file size (84 + 50 bytes per triangle), "
+                    "not by a leading 'solid'. In G0 such a mesh lost its inlet and outlet "
+                    "and still passed checkMesh.", owner=surface.owner, file=str(f.path)))
+        if surface.readable and surface.open_edges:
+            issues.append(_blocking(
+                "IMPORTED_SURFACE_OPEN",
+                f"The surfaces of {surface.owner} ('{surface.name}') do not join into a "
+                f"closed surface ({surface.open_edges} open edges).",
+                "Add the missing surfaces, or close the gaps in CAD.",
+                category=IssueCategory.GEOMETRY, stage=IssueStage.GEOMETRY_VALIDATION,
+                explanation="snappyHexMesh then meshes through the gap into the background "
+                "box, exits 0, and checkMesh passes (G0 R2).",
+                owner=surface.owner, open_edges=surface.open_edges))
+        issues.extend(_imported_point_issues(config, surface, limits))
+
+    names = [r.name for s in surfaces for r in s.regions]
+    for name in sorted(set(names)):
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) or len(name) > 64:
+            issues.append(_blocking(
+                "REGION_NAME_INVALID", f"Region name '{name}' is not a valid OpenFOAM name.",
+                "Rename the region (letters, digits, underscores; not starting with a "
+                "digit), or the file for one file per patch.", region=name))
+        elif name in RESERVED_PATCH_NAMES:
+            issues.append(_blocking(
+                "REGION_NAME_RESERVED",
+                f"Region name '{name}' is a name the generated mesh uses itself.",
+                f"Rename the region; reserved: {', '.join(sorted(RESERVED_PATCH_NAMES))}.",
+                region=name))
+    for name in _duplicates(names):
+        issues.append(_blocking(
+            "REGION_NAME_DUPLICATE", f"Region name '{name}' is used more than once.",
+            "Give every region of every imported surface its own name (patches and "
+            "joints refer to regions by name).", region=name,
+            owners=sorted({s.owner for s in surfaces for r in s.regions if r.name == name})))
+    return tuple(issues)
+
+
+def _imported_point_issues(config: MachineProjectConfig, surface: SurfaceInfo,
+                           limits: MachineThresholds) -> list[Issue]:
+    name, point, cell_size = _owned_by(config, surface.owner)
+    field = f"{surface.owner}.location_in_mesh"
+    if not surface.closed:
+        return []
+    union = surface.union()
+    issues = []
+    if not contains_points(_point(point), union.vertices, union.faces)[0]:
+        code = ("INNER_POINT_OUTSIDE_ZONE" if surface.owner.startswith("rotating_zones")
+                else "PART_POINT_OUTSIDE")
+        issues.append(_blocking(
+            code, f"The mesh point of '{name}' is not inside its imported surface.",
+            f"Move {field} inside the surface.", field=field,
+            explanation="snappyHexMesh keeps the region holding the mesh point; outside "
+            "the surface it keeps the background box instead."))
+    grid = surface_grid(surface, cell_size)
+    if grid is not None:
+        issues.extend(_on_face(field, point, grid, limits))
+    return issues
+
+
+# --- mesh points on background-cell faces (V0 E4) ------------------------------------------
+
+def _on_face(field: str, point: Vec3, grid: Grid, limits: MachineThresholds) -> list[Issue]:
+    hit = []
+    for index, axis in enumerate("xyz"):
+        offset = ((point.x, point.y, point.z)[index] - grid.minimum[index]) / grid.spacing(index)
+        if abs(offset - round(offset)) < limits.point_face_tolerance_cells:
+            hit.append(axis)
+    if not hit:
+        return []
+    where = "edge" if len(hit) > 1 else "face"
+    return [_issue(
+        IssueSeverity.ERROR, "MESH_POINT_ON_CELL_FACE",
+        f"{field} lies on a background-cell {where} (planes normal to {', '.join(hit)}); "
+        "snappyHexMesh may not find the region.",
+        f"Move {field} by a fraction of a cell (for example a quarter) along "
+        f"{', '.join(hit)}.",
+        explanation="snappyHexMesh stops with 'is not inside the mesh or on a face or "
+        "edge' for such points.", field=field, axes=hit)]
+
+
+def _grid_point_issues(config: MachineProjectConfig, limits: MachineThresholds) -> list[Issue]:
+    domain = config.domain
+    if isinstance(domain, BoxDomain):
+        return _on_face("domain.location_in_mesh", domain.location_in_mesh, box_grid(domain),
+                        limits)
+    if isinstance(domain, CylinderDomain):
+        return _on_face("domain.location_in_mesh", domain.location_in_mesh,
+                        cylinder_grid(domain), limits)
+    return []
+
+
+# --- everything -----------------------------------------------------------------------------
+
+def _unique(issues: Iterable[Issue]) -> tuple[Issue, ...]:
+    """Drop an issue repeating an earlier one's code and field (the VAWT checks
+    report some machine findings again)."""
+    seen: set[tuple[str, str]] = set()
+    kept = []
+    for issue in issues:
+        key = (issue.code, str(issue.details.get("field", "")))
+        if key[1] and key in seen:
+            continue
+        seen.add(key)
+        kept.append(issue)
+    return tuple(kept)
 
 
 def validate_machine(raw: Any,
                      thresholds: MachineThresholds | None = None) -> MachineValidationResult:
-    """Parse the configuration, load the bodies, and run every check."""
+    """Parse the configuration, read the imported surfaces, load the bodies,
+    and run every check."""
     config, issues = parse_config(raw)
     if config is None:
         return MachineValidationResult(None, issues)
+    surfaces = read_imported(config)
+    owners = surface_owners(surfaces)
     meshes, loaded = load_bodies(config)
-    return MachineValidationResult(config, (
-        *check_config(config, thresholds), *check_rotating_walls(config), *loaded,
-        *check_geometry(config, meshes, thresholds)))
+    return MachineValidationResult(config, _unique((
+        *check_config(config, thresholds, owners), *check_imported(config, surfaces, thresholds),
+        *check_rotating_walls(config, owners), *loaded,
+        *check_geometry(config, meshes, thresholds),
+        *check_vawt(config, meshes, thresholds))))
+
+
+# VAWT checks with no machine equivalent. The others (rotor in the zone, mesh
+# points, zone in the domain, clearances, reserved names) are machine checks too.
+VAWT_ONLY_CHECKS = frozenset({
+    "AMI_REQUIRES_DOMAIN", "WAKE_OUTSIDE_DOMAIN", "MESH_POINT_ON_CELL_FACE",
+    "ABSOLUTE_LAYER_TOO_THICK", "LAYER_MIN_THICKNESS_TOO_LARGE", "LAYERS_TOO_THIN_FOR_CELLS",
+    "TOO_FEW_ZONE_CELLS", "BODY_INSIDE_OUT",
+})
+
+
+def check_vawt(config: MachineProjectConfig, meshes: Mapping[str, trimesh.Trimesh],
+               thresholds: MachineThresholds | None = None) -> tuple[Issue, ...]:
+    """The VAWT checks for a VAWT project that the VAWT workflow would mesh.
+
+    Such a project is held to everything vawt.validation checks (G1 review).
+    """
+    if config.machine is not MachineType.VAWT:
+        return ()
+    try:
+        vawt = to_vawt(config)
+    except NotVawtConvertible:
+        return ()
+    mesh = meshes.get(config.bodies[0].name)
+    if mesh is None:
+        return ()
+    metrics = compute_rotor_metrics(mesh.vertices, vawt.rotor.axis)
+    limits = (thresholds or MachineThresholds()).vawt
+    return tuple(i for i in check_vawt_config(vawt, mesh, metrics, limits)
+                 if i.code in VAWT_ONLY_CHECKS)

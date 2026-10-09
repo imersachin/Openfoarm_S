@@ -101,7 +101,7 @@ def francis(directory: Path) -> dict[str, Any]:
                       "files": [stl(directory / "runner.stl")], "origin": vec(0, 0, 0)},
             "cell_size": 0.02, "location_in_mesh": vec(0.2013, 0.0113, 0.0013)}],
         "domain": {"kind": "IMPORTED", "parts": [
-            part("casing", (0.0113, 0.0113, -0.45)), part("guide", (0.0113, 0.0113, -0.2)),
+            part("casing", (0.0113, 0.0113, -0.4513)), part("guide", (0.0113, 0.0113, -0.2)),
             part("draft", (0.0113, 0.0113, 0.5))]},
         "patches": [patch("inlet", "INLET", "REGION", "inlet"),
                     patch("outlet", "OUTLET", "REGION", "outlet"),

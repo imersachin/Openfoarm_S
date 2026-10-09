@@ -252,6 +252,8 @@ class CylinderDomain(CylinderGeometry):
     axis: Axis
     cell_size: PositiveFloat
     location_in_mesh: Vec3
+    # Facets around the generated surface (decision E2; G0 R1 used 96).
+    segments: int = Field(default=96, ge=24, le=4096)
 
 
 class DomainPart(ImportedSurface):

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | G0 complete on synthetic geometry (`docs/rotating_machinery_notes.md`); real-geometry items wait for section 17. G1 (configuration) complete. G2 not started. |
+| Status | G0 complete on synthetic geometry (`docs/rotating_machinery_notes.md`); real-geometry items wait for section 17. G1 (configuration) and G2 (domains and patches) complete. G3 not started. |
 | Place this file at | `openforam_preprocessor/docs/rotating_machinery.md` |
 | Builds on | `docs/vawt_mesh_generator.md` (V0–V5). V5 must be complete first. |
 | Replaces | Nothing. The VAWT workflow becomes one preset of this one. |
@@ -178,9 +178,10 @@ The app lists the regions it found and their areas, and the user assigns each
 a type. A binary STL uploaded as "named regions" is reported as having one
 region, with the suggested fix (export ASCII, or one file per patch).
 
-Validation: the union of all domain regions is closed; region names are
-valid OpenFOAM patch names; no two regions share a name; every body lies
-inside.
+Validation: the union of each part's regions is closed (each part on its own,
+section 20); region names are valid OpenFOAM patch names and not reserved;
+no two regions share a name, across all imported surfaces; each part's mesh
+point lies inside its surface; every body lies inside (G3).
 
 ### 5.4 Choice per machine
 
@@ -334,6 +335,11 @@ real run on v2512.
 | Imported domain not closed (the union of its surfaces) | BLOCKING |
 | Binary STL given as named regions (detected by size, not by a leading "solid") | ERROR, with the fix |
 | Duplicate or invalid patch names | BLOCKING |
+| Imported region name invalid, reserved, or used twice (across all parts) | BLOCKING |
+| Imported file unreadable | BLOCKING |
+| An imported part's mesh point outside its surface | BLOCKING |
+| A mesh point on a background-cell face or edge (V0 E4) | ERROR |
+| A joint between two regions of the same part | BLOCKING |
 | No inlet, or no outlet | BLOCKING |
 | A patch without a type | BLOCKING |
 | Body entirely outside the domain | BLOCKING |
@@ -368,6 +374,8 @@ Thresholds are configuration, never constants.
 | Result check | Severity |
 |---|---|
 | An expected patch (at least inlet and outlet) missing or without faces | ERROR |
+| A patch meshed with the wrong OpenFOAM type | ERROR |
+| A patch that was not generated (has faces) | WARNING |
 | The kept region is not the intended one (e.g. a background-block patch still has faces) | ERROR |
 | An interface patch without faces; a missing cell zone | ERROR |
 | Region count ≠ separately meshed parts (each joined only by AMI) | INVALID (as V3 `REGION_COUNT_UNEXPECTED`) |
@@ -382,6 +390,11 @@ What a change re-runs:
 | Domain size or patch names | Domain mesh, assembly, check, case setup | Zone meshes |
 | Patch type only | Case setup | All meshes |
 | Body geometry or units | Everything downstream of that body | Other bodies |
+
+Open point (G4/G6): G2 meshes with the patch types (snappy `patchInfo`,
+blockMesh boundary), as VAWT and G0 do. For a type-only change to re-run case
+setup only, case setup must set the boundary types itself and the mesh cache
+must not depend on them.
 
 ---
 
@@ -540,3 +553,24 @@ Evidence: `docs/rotating_machinery_notes.md` and `tests/fixtures/machines/g0/`.
 3. **Configuration** (section 6): `flow_axis` is a field; `bodies` may be
    empty when the rotating walls are imported regions; zones on different
    axes are compared by bounding box only, so their overlap is a WARNING.
+
+## 20. Decisions for G2 (owner)
+
+E1–E6, approved before G2. Evidence: `tests/integration/test_machine_domains_real.py`.
+
+1. **E1 Background box:** a cylinder domain or imported part is cut from a
+   block around its bounding box with 2 cells of margin, plus half a cell so
+   that the surface never lies on a background-cell plane (G0 R1 and R2 used
+   the half-cell offset): 2.5 cells in all. Cell size: the domain's or part's.
+   `background` is a reserved name; snappyHexMesh removes the patch once it is
+   empty.
+2. **E2 Cylinder facets:** `segments`, default 96 (G0 R1), 24–4096.
+3. **E3 Region names** are unique across all imported surfaces: patches and
+   joints refer to regions by name alone.
+4. **E4 Closedness** is checked per part; the parts are not checked as a
+   whole.
+5. **E5 Region names are only suggested as types**, never applied.
+6. **E6 G1 review findings fixed first:** a migrated VAWT project keeps the
+   VAWT checks (AMI without domain, wake outside the domain, mesh point on a
+   cell face, layer checks, inside-out bodies, zone cells); `to_vawt` refuses a
+   renamed zone or body and reports model errors as `NotVawtConvertible`.
