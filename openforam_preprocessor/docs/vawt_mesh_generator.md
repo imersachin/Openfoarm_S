@@ -149,7 +149,7 @@ openforam_preprocessor/
 │   └── service.py          the only interface the UI calls
 ├── app/
 │   ├── vawt_app.py         Streamlit entry point
-│   └── vawt/
+│   └── vawt_ui/
 │       ├── shell.py        header, navigation, status strip
 │       └── sections/       one module per section
 └── tests/
