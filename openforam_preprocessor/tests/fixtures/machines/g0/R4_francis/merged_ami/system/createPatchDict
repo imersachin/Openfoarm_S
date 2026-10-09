@@ -1,0 +1,86 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      createPatchDict;
+}
+
+// R4a: the stationary joint (casing/guide) and both sliding interfaces as cyclicAMI.
+// Entries as tutorials/incompressible/pimpleFoam/RAS/propeller/system/createPatchDict and V0 E1.
+pointSync false;
+patches
+(
+    {
+        name S1;
+        patchInfo
+        {
+            type            cyclicAMI;
+            matchTolerance  0.0001;
+            neighbourPatch  S2;
+            transform       noOrdering;
+        }
+        constructFrom patches;
+        patches (casing_out);
+    }
+    {
+        name S2;
+        patchInfo
+        {
+            type            cyclicAMI;
+            matchTolerance  0.0001;
+            neighbourPatch  S1;
+            transform       noOrdering;
+        }
+        constructFrom patches;
+        patches (guide_in);
+    }
+    {
+        name AMI1;
+        patchInfo
+        {
+            type            cyclicAMI;
+            matchTolerance  0.0001;
+            neighbourPatch  AMI2;
+            transform       noOrdering;
+        }
+        constructFrom patches;
+        patches (guide_out);
+    }
+    {
+        name AMI2;
+        patchInfo
+        {
+            type            cyclicAMI;
+            matchTolerance  0.0001;
+            neighbourPatch  AMI1;
+            transform       noOrdering;
+        }
+        constructFrom patches;
+        patches (runner_in);
+    }
+    {
+        name AMI3;
+        patchInfo
+        {
+            type            cyclicAMI;
+            matchTolerance  0.0001;
+            neighbourPatch  AMI4;
+            transform       noOrdering;
+        }
+        constructFrom patches;
+        patches (runner_out);
+    }
+    {
+        name AMI4;
+        patchInfo
+        {
+            type            cyclicAMI;
+            matchTolerance  0.0001;
+            neighbourPatch  AMI3;
+            transform       noOrdering;
+        }
+        constructFrom patches;
+        patches (draft_in);
+    }
+);

@@ -1,0 +1,149 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    arch        "LSB;label=32;scalar=64";
+    class       polyBoundaryMesh;
+    location    "constant/polyMesh";
+    object      boundary;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+14
+(
+    inlet
+    {
+        type            patch;
+        nFaces          865;
+        startFace       384752;
+    }
+    casing_wall
+    {
+        type            wall;
+        inGroups        1(wall);
+        nFaces          1504;
+        startFace       385617;
+    }
+    guide_wall
+    {
+        type            wall;
+        inGroups        1(wall);
+        nFaces          2376;
+        startFace       387121;
+    }
+    vanes
+    {
+        type            wall;
+        inGroups        1(wall);
+        nFaces          6276;
+        startFace       389497;
+    }
+    runner_wall
+    {
+        type            wall;
+        inGroups        1(wall);
+        nFaces          1529;
+        startFace       395773;
+    }
+    runner_blades
+    {
+        type            wall;
+        inGroups        1(wall);
+        nFaces          6583;
+        startFace       397302;
+    }
+    draft_wall
+    {
+        type            wall;
+        inGroups        1(wall);
+        nFaces          3476;
+        startFace       403885;
+    }
+    outlet
+    {
+        type            patch;
+        nFaces          1581;
+        startFace       407361;
+    }
+    S1
+    {
+        type            cyclicAMI;
+        inGroups        1(cyclicAMI);
+        nFaces          1804;
+        startFace       408942;
+        matchTolerance  0.0001;
+        transform       noOrdering;
+        neighbourPatch  S2;
+        AMIMethod       faceAreaWeightAMI;
+        restartUncoveredSourceFace 1;
+    }
+    S2
+    {
+        type            cyclicAMI;
+        inGroups        1(cyclicAMI);
+        nFaces          2244;
+        startFace       410746;
+        matchTolerance  0.0001;
+        transform       noOrdering;
+        neighbourPatch  S1;
+        AMIMethod       faceAreaWeightAMI;
+        restartUncoveredSourceFace 1;
+    }
+    AMI1
+    {
+        type            cyclicAMI;
+        inGroups        1(cyclicAMI);
+        nFaces          2244;
+        startFace       412990;
+        matchTolerance  0.0001;
+        transform       noOrdering;
+        neighbourPatch  AMI2;
+        AMIMethod       faceAreaWeightAMI;
+        restartUncoveredSourceFace 1;
+    }
+    AMI2
+    {
+        type            cyclicAMI;
+        inGroups        1(cyclicAMI);
+        nFaces          1804;
+        startFace       415234;
+        matchTolerance  0.0001;
+        transform       noOrdering;
+        neighbourPatch  AMI1;
+        AMIMethod       faceAreaWeightAMI;
+        restartUncoveredSourceFace 1;
+    }
+    AMI3
+    {
+        type            cyclicAMI;
+        inGroups        1(cyclicAMI);
+        nFaces          1804;
+        startFace       417038;
+        matchTolerance  0.0001;
+        transform       noOrdering;
+        neighbourPatch  AMI4;
+        AMIMethod       faceAreaWeightAMI;
+        restartUncoveredSourceFace 1;
+    }
+    AMI4
+    {
+        type            cyclicAMI;
+        inGroups        1(cyclicAMI);
+        nFaces          1828;
+        startFace       418842;
+        matchTolerance  0.0001;
+        transform       noOrdering;
+        neighbourPatch  AMI3;
+        AMIMethod       faceAreaWeightAMI;
+        restartUncoveredSourceFace 1;
+    }
+)
+
+// ************************************************************************* //

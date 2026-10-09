@@ -1,0 +1,12 @@
+
+
+--> FOAM FATAL IO ERROR: (openfoam-2512)
+Cannot find patchField entry for AMI1
+
+file: 0/meshPhi/boundaryField at line 27 to 93.
+
+    From void Foam::GeometricBoundaryField<Type, PatchField, GeoMesh>::readField(const Internal&, const Foam::dictionary&) [with Type = double; PatchField = Foam::fvsPatchField; GeoMesh = Foam::surfaceMesh; Internal = Foam::DimensionedField<double, Foam::surfaceMesh>]
+    in file ./src/OpenFOAM/lnInclude/GeometricBoundaryField.C at line 321.
+
+FOAM exiting
+

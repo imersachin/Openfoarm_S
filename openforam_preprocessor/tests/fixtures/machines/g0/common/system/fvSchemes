@@ -1,0 +1,16 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvSchemes;
+}
+
+// Meshing only: snappyHexMesh (v2512) requires this file to exist. V0 records
+// whether empty sections are sufficient.
+ddtSchemes {}
+gradSchemes {}
+divSchemes {}
+laplacianSchemes {}
+interpolationSchemes {}
+snGradSchemes {}

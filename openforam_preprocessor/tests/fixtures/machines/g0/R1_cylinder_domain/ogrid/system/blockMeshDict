@@ -1,0 +1,69 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+
+// R1a: cylinder domain as an O-grid (a centre block and four blocks to the
+// curved wall), as the 2-D tank in tutorials/incompressible/pimpleFoam/laminar/mixerVesselAMI2D/mixerVesselAMI2D/system/blockMeshDict.m4
+// is built from blocks with arc edges. Axis x, r 2, x -2..5. Test values.
+convertToMeters 1;
+vertices
+(
+    (-2 -0.7 -0.7)
+    (-2 0.7 -0.7)
+    (-2 0.7 0.7)
+    (-2 -0.7 0.7)
+    (-2 -1.414213562 -1.414213562)
+    (-2 1.414213562 -1.414213562)
+    (-2 1.414213562 1.414213562)
+    (-2 -1.414213562 1.414213562)
+    (5 -0.7 -0.7)
+    (5 0.7 -0.7)
+    (5 0.7 0.7)
+    (5 -0.7 0.7)
+    (5 -1.414213562 -1.414213562)
+    (5 1.414213562 -1.414213562)
+    (5 1.414213562 1.414213562)
+    (5 -1.414213562 1.414213562)
+);
+blocks
+(
+    hex (0 1 2 3 8 9 10 11) (16 16 56) simpleGrading (1 1 1)
+    hex (4 5 1 0 12 13 9 8) (16 10 56) simpleGrading (1 1 1)
+    hex (1 5 6 2 9 13 14 10) (10 16 56) simpleGrading (1 1 1)
+    hex (3 2 6 7 11 10 14 15) (16 10 56) simpleGrading (1 1 1)
+    hex (4 0 3 7 12 8 11 15) (10 16 56) simpleGrading (1 1 1)
+);
+edges
+(
+    arc 4 5 (-2 0 -2)
+    arc 5 6 (-2 2 0)
+    arc 6 7 (-2 0 2)
+    arc 7 4 (-2 -2 0)
+    arc 12 13 (5 0 -2)
+    arc 13 14 (5 2 0)
+    arc 14 15 (5 0 2)
+    arc 15 12 (5 -2 0)
+);
+boundary
+(
+    inlet
+    {
+        type patch;
+        faces ((0 3 2 1) (4 0 1 5) (2 6 5 1) (7 6 2 3) (7 3 0 4));
+    }
+    outlet
+    {
+        type patch;
+        faces ((8 9 10 11) (12 13 9 8) (9 13 14 10) (11 10 14 15) (12 8 11 15));
+    }
+    side
+    {
+        type patch;
+        faces ((4 5 13 12) (5 6 14 13) (6 7 15 14) (7 4 12 15));
+    }
+);
+mergePatchPairs ();

@@ -1,0 +1,107 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+
+// R5b rotor: the blades inside the annular zone; no pole in this mesh.
+// Structure and controls as tests/fixtures/vawt/v0 (E1); addLayers false (G0
+// proves methods, not layers).
+castellatedMesh true;
+snap            true;
+addLayers       false;
+geometry
+{
+    blades.stl
+    {
+        type triSurfaceMesh;
+        name blades;
+    }
+    zone_annulus.stl
+    {
+        type triSurfaceMesh;
+        name zone;
+        regions
+        {
+            outer { name ZR_outer; }
+            inner { name ZR_inner; }
+        }
+    }
+}
+castellatedMeshControls
+{
+    maxLocalCells       3000000;
+    maxGlobalCells      3000000;
+    minRefinementCells  0;
+    nCellsBetweenLevels 2;
+    features
+    (
+        {
+            file "blades.eMesh";
+            level 2;
+        }
+        {
+            file "zone_annulus.eMesh";
+            level 0;
+        }
+    );
+    refinementSurfaces
+    {
+        blades
+        {
+            level (1 2);
+            patchInfo { type wall; }
+        }
+        zone
+        {
+            level (0 0);
+            patchInfo { type patch; }
+            regions
+            {
+                inner { level (2 2); patchInfo { type patch; } }
+            }
+        }
+    }
+    refinementRegions {}
+    resolveFeatureAngle 30;
+    locationInMesh      (0.65 0.0113 0.0137);
+    allowFreeStandingZoneFaces false;
+}
+
+snapControls
+{
+    nSmoothPatch        3;
+    tolerance           2.0;
+    nSolveIter          30;
+    nRelaxIter          5;
+    nFeatureSnapIter    10;
+    implicitFeatureSnap false;
+    explicitFeatureSnap true;
+    multiRegionFeatureSnap false;
+}
+addLayersControls
+{
+    relativeSizes       true;
+    expansionRatio      1.2;
+    finalLayerThickness 0.3;
+    minThickness        0.1;
+    nGrow               0;
+    featureAngle        30;
+    nRelaxIter          5;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals      3;
+    nSmoothThickness    10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedialAxisAngle  90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter          50;
+    layers {}
+}
+meshQualityControls
+{
+    #include "meshQualityDict"
+}
+mergeTolerance 1e-6;

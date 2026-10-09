@@ -1,0 +1,93 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+
+// R5a outer: V0 domain (tests/fixtures/vawt/v0/E1_ami_two_mesh/outer); the pole crosses the zone cylinder's caps and is a wall outside the zone.
+// Structure and controls as tests/fixtures/vawt/v0 (E1); addLayers false (G0
+// proves methods, not layers).
+castellatedMesh true;
+snap            true;
+addLayers       false;
+geometry
+{
+    AMI_outer
+    {
+        type    searchableCylinder;
+        point1  (0 0 -0.66);
+        point2  (0 0 0.66);
+        radius  0.78;
+    }
+    pole.stl
+    {
+        type triSurfaceMesh;
+        name pole;
+    }
+}
+castellatedMeshControls
+{
+    maxLocalCells       3000000;
+    maxGlobalCells      3000000;
+    minRefinementCells  0;
+    nCellsBetweenLevels 2;
+    features
+    (
+
+    );
+    refinementSurfaces
+    {
+        AMI_outer
+        {
+            level (1 1);
+            patchInfo { type patch; }
+        }
+        pole
+        {
+            level (3 3);
+            patchInfo { type wall; }
+        }
+    }
+    refinementRegions {}
+    resolveFeatureAngle 30;
+    locationInMesh      (-1.95 0 0);
+    allowFreeStandingZoneFaces false;
+}
+
+snapControls
+{
+    nSmoothPatch        3;
+    tolerance           2.0;
+    nSolveIter          30;
+    nRelaxIter          5;
+    nFeatureSnapIter    10;
+    implicitFeatureSnap false;
+    explicitFeatureSnap false;
+    multiRegionFeatureSnap false;
+}
+addLayersControls
+{
+    relativeSizes       true;
+    expansionRatio      1.2;
+    finalLayerThickness 0.3;
+    minThickness        0.1;
+    nGrow               0;
+    featureAngle        30;
+    nRelaxIter          5;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals      3;
+    nSmoothThickness    10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedialAxisAngle  90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter          50;
+    layers {}
+}
+meshQualityControls
+{
+    #include "meshQualityDict"
+}
+mergeTolerance 1e-6;

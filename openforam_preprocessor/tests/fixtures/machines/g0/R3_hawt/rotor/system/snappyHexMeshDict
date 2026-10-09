@@ -1,0 +1,96 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+
+// R3 rotor: hub + blades inside the zone cylinder (V0 E1 rotor method).
+// Structure and controls as tests/fixtures/vawt/v0 (E1); addLayers false (G0
+// proves methods, not layers).
+castellatedMesh true;
+snap            true;
+addLayers       false;
+geometry
+{
+    hawt_rotor.stl
+    {
+        type triSurfaceMesh;
+        name rotor;
+    }
+    AMI_rotor
+    {
+        type    searchableCylinder;
+        point1  (-0.12 0 0);
+        point2  (0.12 0 0);
+        radius  0.6;
+    }
+}
+castellatedMeshControls
+{
+    maxLocalCells       3000000;
+    maxGlobalCells      3000000;
+    minRefinementCells  0;
+    nCellsBetweenLevels 2;
+    features
+    (
+        {
+            file "hawt_rotor.eMesh";
+            level 3;
+        }
+    );
+    refinementSurfaces
+    {
+        rotor
+        {
+            level (3 3);
+            patchInfo { type wall; }
+        }
+        AMI_rotor
+        {
+            level (0 0);
+            patchInfo { type patch; }
+        }
+    }
+    refinementRegions {}
+    resolveFeatureAngle 30;
+    locationInMesh      (0.0013 0.3013 0.0113);
+    allowFreeStandingZoneFaces false;
+}
+
+snapControls
+{
+    nSmoothPatch        3;
+    tolerance           2.0;
+    nSolveIter          30;
+    nRelaxIter          5;
+    nFeatureSnapIter    10;
+    implicitFeatureSnap false;
+    explicitFeatureSnap true;
+    multiRegionFeatureSnap false;
+}
+addLayersControls
+{
+    relativeSizes       true;
+    expansionRatio      1.2;
+    finalLayerThickness 0.3;
+    minThickness        0.1;
+    nGrow               0;
+    featureAngle        30;
+    nRelaxIter          5;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals      3;
+    nSmoothThickness    10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedialAxisAngle  90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter          50;
+    layers {}
+}
+meshQualityControls
+{
+    #include "meshQualityDict"
+}
+mergeTolerance 1e-6;

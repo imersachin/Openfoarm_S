@@ -1,0 +1,125 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    arch        "LSB;label=32;scalar=64";
+    class       polyBoundaryMesh;
+    location    "constant/polyMesh";
+    object      boundary;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+12
+(
+    inlet
+    {
+        type            patch;
+        nFaces          865;
+        startFace       359904;
+    }
+    casing_wall
+    {
+        type            wall;
+        inGroups        1(wall);
+        nFaces          1504;
+        startFace       360769;
+    }
+    guide_wall
+    {
+        type            wall;
+        inGroups        1(wall);
+        nFaces          2448;
+        startFace       362273;
+    }
+    vanes
+    {
+        type            wall;
+        inGroups        1(wall);
+        nFaces          5128;
+        startFace       364721;
+    }
+    runner_wall
+    {
+        type            wall;
+        inGroups        1(wall);
+        nFaces          1529;
+        startFace       369849;
+    }
+    runner_blades
+    {
+        type            wall;
+        inGroups        1(wall);
+        nFaces          6583;
+        startFace       371378;
+    }
+    draft_wall
+    {
+        type            wall;
+        inGroups        1(wall);
+        nFaces          3476;
+        startFace       377961;
+    }
+    outlet
+    {
+        type            patch;
+        nFaces          1581;
+        startFace       381437;
+    }
+    AMI1
+    {
+        type            cyclicAMI;
+        inGroups        1(cyclicAMI);
+        nFaces          1804;
+        startFace       383018;
+        matchTolerance  0.0001;
+        transform       noOrdering;
+        neighbourPatch  AMI2;
+        AMIMethod       faceAreaWeightAMI;
+        restartUncoveredSourceFace 1;
+    }
+    AMI2
+    {
+        type            cyclicAMI;
+        inGroups        1(cyclicAMI);
+        nFaces          1804;
+        startFace       384822;
+        matchTolerance  0.0001;
+        transform       noOrdering;
+        neighbourPatch  AMI1;
+        AMIMethod       faceAreaWeightAMI;
+        restartUncoveredSourceFace 1;
+    }
+    AMI3
+    {
+        type            cyclicAMI;
+        inGroups        1(cyclicAMI);
+        nFaces          1804;
+        startFace       386626;
+        matchTolerance  0.0001;
+        transform       noOrdering;
+        neighbourPatch  AMI4;
+        AMIMethod       faceAreaWeightAMI;
+        restartUncoveredSourceFace 1;
+    }
+    AMI4
+    {
+        type            cyclicAMI;
+        inGroups        1(cyclicAMI);
+        nFaces          1828;
+        startFace       388430;
+        matchTolerance  0.0001;
+        transform       noOrdering;
+        neighbourPatch  AMI3;
+        AMIMethod       faceAreaWeightAMI;
+        restartUncoveredSourceFace 1;
+    }
+)
+
+// ************************************************************************* //

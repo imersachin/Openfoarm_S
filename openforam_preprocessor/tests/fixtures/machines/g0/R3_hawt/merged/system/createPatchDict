@@ -1,0 +1,38 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      createPatchDict;
+}
+
+// R3: one AMI pair from the outer and rotor zone surfaces.
+// Entries as tutorials/incompressible/pimpleFoam/RAS/propeller/system/createPatchDict and V0 E1.
+pointSync false;
+patches
+(
+    {
+        name AMI1;
+        patchInfo
+        {
+            type            cyclicAMI;
+            matchTolerance  0.0001;
+            neighbourPatch  AMI2;
+            transform       noOrdering;
+        }
+        constructFrom patches;
+        patches (AMI_outer);
+    }
+    {
+        name AMI2;
+        patchInfo
+        {
+            type            cyclicAMI;
+            matchTolerance  0.0001;
+            neighbourPatch  AMI1;
+            transform       noOrdering;
+        }
+        constructFrom patches;
+        patches (AMI_rotor);
+    }
+);

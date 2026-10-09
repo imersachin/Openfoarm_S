@@ -1,0 +1,92 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : mergeMeshes -overwrite <work>/R3/merged_snappy <work>/R3/rotor
+Date   : Oct 09 2026
+Time   : 12:08:52
+Host   : DESKTOP-162QBLJ
+PID    : 2807
+I/O    : uncollated
+Case   : <work>/R3/merged_snappy
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Master:      "<work>/R3/merged_snappy"  region region0
+mesh to add: "<work>/R3/rotor"  region region0
+
+Create Times
+Reading master mesh for time = 0
+Create mesh
+
+Reading mesh to add for time = 0
+Create mesh
+
+Writing combined mesh to 0
+patch names: 6(AMI_outer inlet outlet side rotor AMI_rotor)
+patch dicts: 
+6
+(
+
+{
+    type            patch;
+    nFaces          3232;
+    startFace       165664;
+}
+
+
+{
+    type            patch;
+    nFaces          812;
+    startFace       168896;
+}
+
+
+{
+    type            patch;
+    nFaces          812;
+    startFace       169708;
+}
+
+
+{
+    type            patch;
+    nFaces          4928;
+    startFace       170520;
+}
+
+
+{
+    type            wall;
+    inGroups        1 ( wall );
+    nFaces          12368;
+    startFace       175901;
+}
+
+
+{
+    type            patch;
+    nFaces          2712;
+    startFace       188269;
+}
+
+)
+
+point zone names: 1(frozenPoints)
+face zone names: 0()
+cell zone names: 1(rotating)
+Copying old patches
+Adding new patches. 
+Adding new cellZones.
+Reordering processor patches last
+End
+

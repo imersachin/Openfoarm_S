@@ -1,0 +1,75 @@
+{
+  "named": {
+    "files": {
+      "duct_named.stl": {
+        "format": "ascii",
+        "regions": {
+          "inlet": 2,
+          "outlet": 2,
+          "wall": 8
+        },
+        "triangles": 12
+      }
+    },
+    "union_closed": true,
+    "open_edges": 0
+  },
+  "per_file": {
+    "files": {
+      "inlet.stl": {
+        "format": "ascii",
+        "regions": {
+          "inlet": 2
+        },
+        "triangles": 2
+      },
+      "outlet.stl": {
+        "format": "ascii",
+        "regions": {
+          "outlet": 2
+        },
+        "triangles": 2
+      },
+      "wall.stl": {
+        "format": "ascii",
+        "regions": {
+          "wall": 8
+        },
+        "triangles": 8
+      }
+    },
+    "union_closed": true,
+    "open_edges": 0
+  },
+  "binary": {
+    "files": {
+      "duct_binary.stl": {
+        "format": "binary",
+        "regions": null,
+        "triangles": 12
+      }
+    },
+    "union_closed": true,
+    "open_edges": 0
+  },
+  "open": {
+    "files": {
+      "inlet.stl": {
+        "format": "ascii",
+        "regions": {
+          "inlet": 2
+        },
+        "triangles": 2
+      },
+      "wall.stl": {
+        "format": "ascii",
+        "regions": {
+          "wall": 8
+        },
+        "triangles": 8
+      }
+    },
+    "union_closed": false,
+    "open_edges": 4
+  }
+}

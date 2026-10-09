@@ -1,0 +1,58 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : stitchMesh -overwrite -integral casing_out guide_in
+Date   : Oct 09 2026
+Time   : 12:10:04
+Host   : DESKTOP-162QBLJ
+PID    : 3870
+I/O    : uncollated
+Case   : <work>/R4/merged_stitch_nc
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+    casing_out / guide_in
+
+1 validated actions
+Reading all current volfields
+
+========================================
+Coupling INTEGRALLY matching of patches casing_out / guide_in
+
+Resulting (internal) faces in faceZone casing_outguide_inCutFaceZone
+
+The overall area covered by both patches should be identical!
+If this is not the case use partial
+
+pointZone casing_outguide_inCutPointZone (new at index 1)
+faceZone casing_outguide_inSide0Zone (new at index 0)
+faceZone casing_outguide_inSide1Zone (new at index 1)
+faceZone casing_outguide_inCutFaceZone (new at index 2)
+Sliding interface parameters:
+pointMergeTol            : 0.05
+edgeMergeTol             : 0.01
+nFacesPerSlaveEdge       : 5
+edgeFaceEscapeLimit      : 10
+integralAdjTol           : 0.05
+edgeMasterCatchFraction  : 0.4
+edgeCoPlanarTol          : 0.8
+edgeEndCutoffTol         : 0.0001
+
+Writing polyMesh to time 0
+
+End
+

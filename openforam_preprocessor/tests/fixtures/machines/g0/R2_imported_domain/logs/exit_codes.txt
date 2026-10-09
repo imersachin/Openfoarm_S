@@ -1,0 +1,16 @@
+named_01_blockMesh                       exit=0     0s  blockMesh -case <work>/R2/named
+named_02_surfaceFeatureExtract           exit=0     0s  surfaceFeatureExtract -case <work>/R2/named
+named_03_snappyHexMesh                   exit=0     1s  snappyHexMesh -case <work>/R2/named -overwrite
+named_04_checkMesh                       exit=0     0s  checkMesh -case <work>/R2/named -allTopology -meshQuality
+per_file_01_blockMesh                    exit=0     0s  blockMesh -case <work>/R2/per_file
+per_file_02_surfaceFeatureExtract        exit=0     0s  surfaceFeatureExtract -case <work>/R2/per_file
+per_file_03_snappyHexMesh                exit=0     1s  snappyHexMesh -case <work>/R2/per_file -overwrite
+per_file_04_checkMesh                    exit=0     0s  checkMesh -case <work>/R2/per_file -allTopology -meshQuality
+binary_01_blockMesh                      exit=0     0s  blockMesh -case <work>/R2/binary
+binary_02_surfaceFeatureExtract          exit=0     0s  surfaceFeatureExtract -case <work>/R2/binary
+binary_03_snappyHexMesh                  exit=0     1s  snappyHexMesh -case <work>/R2/binary -overwrite
+binary_04_checkMesh                      exit=0     0s  checkMesh -case <work>/R2/binary -allTopology -meshQuality
+open_01_blockMesh                        exit=0     0s  blockMesh -case <work>/R2/open
+open_02_surfaceFeatureExtract            exit=0     0s  surfaceFeatureExtract -case <work>/R2/open
+open_03_snappyHexMesh                    exit=0     1s  snappyHexMesh -case <work>/R2/open -overwrite
+open_04_checkMesh                        exit=0     0s  checkMesh -case <work>/R2/open -allTopology -meshQuality

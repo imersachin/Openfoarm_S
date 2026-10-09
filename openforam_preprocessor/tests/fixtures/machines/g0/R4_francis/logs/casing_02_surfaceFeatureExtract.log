@@ -1,0 +1,74 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : surfaceFeatureExtract -case <work>/R4/casing
+Date   : Oct 09 2026
+Time   : 12:09:21
+Host   : DESKTOP-162QBLJ
+PID    : 3368
+I/O    : uncollated
+Case   : <work>/R4/casing
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+
+Note: Feature line extraction only valid on closed manifold surfaces
+
+Reading surfaceFeatureExtractDict
+
+Surfaces     : casing.stl
+Output       : casing
+Load options : offset
+Write options: writeObj=no writeVTK=off
+
+Statistics:
+Triangles    : 384 in 3 region(s)
+Vertices     : 194
+Bounding Box : (-0.30000001 -0.30000001 -0.60000002) (0.30000001 0.30000001 -0.30000001)
+
+Constructing feature set from included angle 150
+Selecting edges based purely on geometric tests: no
+Removing all non-manifold edges (edges with > 2 connected faces) unless they cross multiple regions
+
+Initial Feature set:
+    points : 0
+    edges  : 192
+    of which
+        region edges   : 192
+        external edges : 0
+        internal edges : 0
+
+Final Feature set:
+    points : 192
+    of which
+        convex             : 0
+        concave            : 0
+        mixed              : 0
+        non-feature        : 192
+    edges  : 192
+    of which
+        external edges     : 192
+        internal edges     : 0
+        flat edges         : 0
+        open edges         : 0
+        multiply connected : 0
+
+Writing extendedFeatureEdgeMesh to "<work>/R4/casing/constant/extendedFeatureEdgeMesh/casing.extendedFeatureEdgeMesh"
+
+Writing featureEdgeMesh to "<work>/R4/casing/constant/triSurface/casing.eMesh"
+ExecutionTime = 0 s  ClockTime = 0 s
+
+End
+

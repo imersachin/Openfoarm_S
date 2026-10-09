@@ -1,0 +1,98 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+
+// R4 runner: one fluid-domain STL with named regions, meshed on its own.
+// Structure and controls as tests/fixtures/vawt/v0 (E1); addLayers false (G0
+// proves methods, not layers).
+castellatedMesh true;
+snap            true;
+addLayers       false;
+geometry
+{
+    runner.stl
+    {
+        type triSurfaceMesh;
+        name runner;
+        regions
+        {
+            runner_in { name runner_in; }
+            runner_wall { name runner_wall; }
+            runner_out { name runner_out; }
+            runner_blades { name runner_blades; }
+        }
+    }
+}
+castellatedMeshControls
+{
+    maxLocalCells       3000000;
+    maxGlobalCells      3000000;
+    minRefinementCells  0;
+    nCellsBetweenLevels 2;
+    features
+    (
+        {
+            file "runner.eMesh";
+            level 1;
+        }
+    );
+    refinementSurfaces
+    {
+        runner
+        {
+            level (0 0);
+            patchInfo { type wall; }
+            regions
+            {
+                runner_in { level (1 1); patchInfo { type patch; } }
+                runner_wall { level (0 0); patchInfo { type wall; } }
+                runner_out { level (1 1); patchInfo { type patch; } }
+                runner_blades { level (2 2); patchInfo { type wall; } }
+            }
+        }
+    }
+    refinementRegions {}
+    resolveFeatureAngle 30;
+    locationInMesh      (0.1013 0.0213 0.0813);
+    allowFreeStandingZoneFaces false;
+}
+
+snapControls
+{
+    nSmoothPatch        3;
+    tolerance           2.0;
+    nSolveIter          30;
+    nRelaxIter          5;
+    nFeatureSnapIter    10;
+    implicitFeatureSnap false;
+    explicitFeatureSnap true;
+    multiRegionFeatureSnap false;
+}
+addLayersControls
+{
+    relativeSizes       true;
+    expansionRatio      1.2;
+    finalLayerThickness 0.3;
+    minThickness        0.1;
+    nGrow               0;
+    featureAngle        30;
+    nRelaxIter          5;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals      3;
+    nSmoothThickness    10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedialAxisAngle  90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter          50;
+    layers {}
+}
+meshQualityControls
+{
+    #include "meshQualityDict"
+}
+mergeTolerance 1e-6;

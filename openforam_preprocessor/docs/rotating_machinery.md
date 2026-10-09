@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Proposed. Not started. Requires owner approval before G0. |
+| Status | G0 complete on synthetic geometry (`docs/rotating_machinery_notes.md`); real-geometry items wait for section 17. G1 not started. |
 | Place this file at | `openforam_preprocessor/docs/rotating_machinery.md` |
 | Builds on | `docs/vawt_mesh_generator.md` (V0–V5). V5 must be complete first. |
 | Replaces | Nothing. The VAWT workflow becomes one preset of this one. |

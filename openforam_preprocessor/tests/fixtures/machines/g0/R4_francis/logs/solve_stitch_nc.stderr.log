@@ -1,0 +1,12 @@
+
+
+--> FOAM FATAL IO ERROR: (openfoam-2512)
+Cannot find patchField entry for casing_out
+
+file: 0/p/boundaryField at line 11 to 51.
+
+    From void Foam::GeometricBoundaryField<Type, PatchField, GeoMesh>::readField(const Internal&, const Foam::dictionary&) [with Type = double; PatchField = Foam::fvPatchField; GeoMesh = Foam::volMesh; Internal = Foam::DimensionedField<double, Foam::volMesh>]
+    in file ./src/OpenFOAM/lnInclude/GeometricBoundaryField.C at line 321.
+
+FOAM exiting
+

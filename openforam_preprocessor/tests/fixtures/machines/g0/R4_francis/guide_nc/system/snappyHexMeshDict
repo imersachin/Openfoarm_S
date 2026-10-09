@@ -1,0 +1,98 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+
+// R4 guide_nc: the guide part on the guide_nc background (non-conformal joints).
+// Structure and controls as tests/fixtures/vawt/v0 (E1); addLayers false (G0
+// proves methods, not layers).
+castellatedMesh true;
+snap            true;
+addLayers       false;
+geometry
+{
+    guide.stl
+    {
+        type triSurfaceMesh;
+        name guide;
+        regions
+        {
+            guide_in { name guide_in; }
+            guide_wall { name guide_wall; }
+            guide_out { name guide_out; }
+            vanes { name vanes; }
+        }
+    }
+}
+castellatedMeshControls
+{
+    maxLocalCells       3000000;
+    maxGlobalCells      3000000;
+    minRefinementCells  0;
+    nCellsBetweenLevels 2;
+    features
+    (
+        {
+            file "guide.eMesh";
+            level 1;
+        }
+    );
+    refinementSurfaces
+    {
+        guide
+        {
+            level (0 0);
+            patchInfo { type wall; }
+            regions
+            {
+                guide_in { level (1 1); patchInfo { type patch; } }
+                guide_wall { level (0 0); patchInfo { type wall; } }
+                guide_out { level (1 1); patchInfo { type patch; } }
+                vanes { level (2 2); patchInfo { type wall; } }
+            }
+        }
+    }
+    refinementRegions {}
+    resolveFeatureAngle 30;
+    locationInMesh      (0.0213 0.0113 -0.2013);
+    allowFreeStandingZoneFaces false;
+}
+
+snapControls
+{
+    nSmoothPatch        3;
+    tolerance           2.0;
+    nSolveIter          30;
+    nRelaxIter          5;
+    nFeatureSnapIter    10;
+    implicitFeatureSnap false;
+    explicitFeatureSnap true;
+    multiRegionFeatureSnap false;
+}
+addLayersControls
+{
+    relativeSizes       true;
+    expansionRatio      1.2;
+    finalLayerThickness 0.3;
+    minThickness        0.1;
+    nGrow               0;
+    featureAngle        30;
+    nRelaxIter          5;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals      3;
+    nSmoothThickness    10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedialAxisAngle  90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter          50;
+    layers {}
+}
+meshQualityControls
+{
+    #include "meshQualityDict"
+}
+mergeTolerance 1e-6;

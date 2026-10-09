@@ -1,0 +1,42 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+
+// Outer domain, SIMPLE preset for the fixture rotor (D = 1.04 m, H = 1.2 m,
+// axis z, flow x): x -3D..+7D, y +/-1.5D, z rotor +/-1.5D. Cell D/9.
+convertToMeters 1;
+
+vertices
+(
+    (-3.12 -1.56 -2.16)
+    ( 7.28 -1.56 -2.16)
+    ( 7.28  1.56 -2.16)
+    (-3.12  1.56 -2.16)
+    (-3.12 -1.56  2.16)
+    ( 7.28 -1.56  2.16)
+    ( 7.28  1.56  2.16)
+    (-3.12  1.56  2.16)
+);
+
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) (90 27 38) simpleGrading (1 1 1)
+);
+
+edges ();
+
+boundary
+(
+    inlet       { type patch; faces ((0 4 7 3)); }
+    outlet      { type patch; faces ((1 2 6 5)); }
+    lateral_min { type patch; faces ((0 1 5 4)); }
+    lateral_max { type patch; faces ((3 7 6 2)); }
+    axial_min   { type patch; faces ((0 3 2 1)); }
+    axial_max   { type patch; faces ((4 5 6 7)); }
+);
+
+mergePatchPairs ();

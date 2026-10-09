@@ -1,0 +1,74 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : surfaceFeatureExtract -case <work>/R3/rotor
+Date   : Oct 09 2026
+Time   : 12:08:39
+Host   : DESKTOP-162QBLJ
+PID    : 2762
+I/O    : uncollated
+Case   : <work>/R3/rotor
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+
+Note: Feature line extraction only valid on closed manifold surfaces
+
+Reading surfaceFeatureExtractDict
+
+Surfaces     : hawt_rotor.stl
+Output       : hawt_rotor
+Load options : offset
+Write options: writeObj=no writeVTK=off
+
+Statistics:
+Triangles    : 636 in 1 region(s)
+Vertices     : 326
+Bounding Box : (-0.079999998 -0.5 -0.44581375) (0.079999998 0.27217209 0.44581375)
+
+Constructing feature set from included angle 150
+Selecting edges based purely on geometric tests: no
+Removing all non-manifold edges (edges with > 2 connected faces) unless they cross multiple regions
+
+Initial Feature set:
+    points : 24
+    edges  : 336
+    of which
+        region edges   : 0
+        external edges : 336
+        internal edges : 0
+
+Final Feature set:
+    points : 324
+    of which
+        convex             : 24
+        concave            : 0
+        mixed              : 0
+        non-feature        : 300
+    edges  : 336
+    of which
+        external edges     : 336
+        internal edges     : 0
+        flat edges         : 0
+        open edges         : 0
+        multiply connected : 0
+
+Writing extendedFeatureEdgeMesh to "<work>/R3/rotor/constant/extendedFeatureEdgeMesh/hawt_rotor.extendedFeatureEdgeMesh"
+
+Writing featureEdgeMesh to "<work>/R3/rotor/constant/triSurface/hawt_rotor.eMesh"
+ExecutionTime = 0 s  ClockTime = 0 s
+
+End
+

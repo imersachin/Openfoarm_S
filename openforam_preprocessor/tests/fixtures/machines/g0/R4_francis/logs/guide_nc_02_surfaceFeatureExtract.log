@@ -1,0 +1,74 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : surfaceFeatureExtract -case <work>/R4/guide_nc
+Date   : Oct 09 2026
+Time   : 12:09:31
+Host   : DESKTOP-162QBLJ
+PID    : 3546
+I/O    : uncollated
+Case   : <work>/R4/guide_nc
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+
+Note: Feature line extraction only valid on closed manifold surfaces
+
+Reading surfaceFeatureExtractDict
+
+Surfaces     : guide.stl
+Output       : guide
+Load options : offset
+Write options: writeObj=no writeVTK=off
+
+Statistics:
+Triangles    : 736 in 4 region(s)
+Vertices     : 386
+Bounding Box : (-0.30000001 -0.30000001 -0.30000001) (0.30000001 0.30000001 -0.1)
+
+Constructing feature set from included angle 150
+Selecting edges based purely on geometric tests: no
+Removing all non-manifold edges (edges with > 2 connected faces) unless they cross multiple regions
+
+Initial Feature set:
+    points : 64
+    edges  : 416
+    of which
+        region edges   : 192
+        external edges : 224
+        internal edges : 0
+
+Final Feature set:
+    points : 384
+    of which
+        convex             : 64
+        concave            : 0
+        mixed              : 0
+        non-feature        : 320
+    edges  : 416
+    of which
+        external edges     : 416
+        internal edges     : 0
+        flat edges         : 0
+        open edges         : 0
+        multiply connected : 0
+
+Writing extendedFeatureEdgeMesh to "<work>/R4/guide_nc/constant/extendedFeatureEdgeMesh/guide.extendedFeatureEdgeMesh"
+
+Writing featureEdgeMesh to "<work>/R4/guide_nc/constant/triSurface/guide.eMesh"
+ExecutionTime = 0 s  ClockTime = 0 s
+
+End
+

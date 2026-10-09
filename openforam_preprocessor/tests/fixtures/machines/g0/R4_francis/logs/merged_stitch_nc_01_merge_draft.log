@@ -1,0 +1,170 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : mergeMeshes -overwrite <work>/R4/merged_stitch_nc <work>/R4/draft
+Date   : Oct 09 2026
+Time   : 12:10:04
+Host   : DESKTOP-162QBLJ
+PID    : 3864
+I/O    : uncollated
+Case   : <work>/R4/merged_stitch_nc
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Master:      "<work>/R4/merged_stitch_nc"  region region0
+mesh to add: "<work>/R4/draft"  region region0
+
+Create Times
+Reading master mesh for time = 0
+Create mesh
+
+Reading mesh to add for time = 0
+Create mesh
+
+Writing combined mesh to 0
+patch names: 
+14
+(
+inlet
+casing_wall
+casing_out
+guide_in
+guide_wall
+guide_out
+vanes
+runner_in
+runner_wall
+runner_out
+runner_blades
+draft_in
+draft_wall
+outlet
+)
+
+patch dicts: 
+14
+(
+
+{
+    type            patch;
+    nFaces          865;
+    startFace       299559;
+}
+
+
+{
+    type            wall;
+    inGroups        1 ( wall );
+    nFaces          1504;
+    startFace       300424;
+}
+
+
+{
+    type            patch;
+    nFaces          1804;
+    startFace       301928;
+}
+
+
+{
+    type            patch;
+    nFaces          2244;
+    startFace       303732;
+}
+
+
+{
+    type            wall;
+    inGroups        1 ( wall );
+    nFaces          2376;
+    startFace       305976;
+}
+
+
+{
+    type            patch;
+    nFaces          2244;
+    startFace       308352;
+}
+
+
+{
+    type            wall;
+    inGroups        1 ( wall );
+    nFaces          6276;
+    startFace       310596;
+}
+
+
+{
+    type            patch;
+    nFaces          1804;
+    startFace       316872;
+}
+
+
+{
+    type            wall;
+    inGroups        1 ( wall );
+    nFaces          1529;
+    startFace       318676;
+}
+
+
+{
+    type            patch;
+    nFaces          1804;
+    startFace       320205;
+}
+
+
+{
+    type            wall;
+    inGroups        1 ( wall );
+    nFaces          6583;
+    startFace       322009;
+}
+
+
+{
+    type            patch;
+    nFaces          1828;
+    startFace       85193;
+}
+
+
+{
+    type            wall;
+    inGroups        1 ( wall );
+    nFaces          3476;
+    startFace       87021;
+}
+
+
+{
+    type            patch;
+    nFaces          1581;
+    startFace       90497;
+}
+
+)
+
+point zone names: 1(frozenPoints)
+face zone names: 0()
+cell zone names: 1(rotating)
+Copying old patches
+Adding new patches. 
+Reordering processor patches last
+End
+

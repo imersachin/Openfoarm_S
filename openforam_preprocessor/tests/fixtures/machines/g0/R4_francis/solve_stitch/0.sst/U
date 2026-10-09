@@ -1,0 +1,56 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    object      U;
+}
+
+// Boundary types per patch kind; sources:
+//   inlet: tutorials/incompressible/pimpleFoam/RAS/propeller/0.orig (inlet)
+//   moving: tutorials/incompressible/pimpleFoam/RAS/propeller/0.orig/U ("propeller.*": movingWallVelocity)
+//   outlet: tutorials/incompressible/pimpleFoam/RAS/propeller/0.orig (outlet)
+//   wall: etc/templates/inflowOutflowRotating/0 (wall); U noSlip from tutorials/incompressible/pimpleFoam/RAS/propeller/0.orig/U
+// cyclicAMI patches: caseDicts/setConstraintTypes (as in the propeller case).
+dimensions      [0 1 -1 0 0 0 0];
+internalField   uniform (0 0 0);
+boundaryField
+{
+    #includeEtc "caseDicts/setConstraintTypes"
+    inlet
+    {
+        type            fixedValue;
+        value           uniform (0 0 1);
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform (0 0 0);
+        value           uniform (0 0 0);
+    }
+    casing_wall
+    {
+        type            noSlip;
+    }
+    guide_wall
+    {
+        type            noSlip;
+    }
+    vanes
+    {
+        type            noSlip;
+    }
+    runner_wall
+    {
+        type            noSlip;
+    }
+    draft_wall
+    {
+        type            noSlip;
+    }
+    runner_blades
+    {
+        type            movingWallVelocity;
+        value           uniform (0 0 0);
+    }
+}

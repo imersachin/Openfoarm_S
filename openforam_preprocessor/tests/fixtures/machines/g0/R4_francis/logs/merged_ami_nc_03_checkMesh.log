@@ -1,0 +1,149 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : checkMesh -case <work>/R4/merged_ami_nc -allTopology -meshQuality
+Date   : Oct 09 2026
+Time   : 12:09:57
+Host   : DESKTOP-162QBLJ
+PID    : 3799
+I/O    : uncollated
+Case   : <work>/R4/merged_ami_nc
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+--> FOAM Warning : 
+    From static Foam::instantList Foam::timeSelector::select0(Foam::Time&, const Foam::argList&)
+    in file db/Time/timeSelector.C at line 284
+    No time specified or available, selecting 'constant'
+Create mesh for time = constant
+
+Check mesh...
+    Enabling all (cell, face, edge, point) topology checks.
+    Enabling user-defined geometry checks.
+
+Time = constant
+
+Mesh stats 
+    points:           165866
+    faces:            420670
+    internal faces:   384752
+    cells:            129731
+    faces per cell:   6.2084005
+    boundary patches: 14
+    point zones:      1
+    face zones:       0
+    cell zones:       1
+
+Overall number of cells of each type:
+    hexahedra:     105280
+    prisms:        5034
+    wedges:        0
+    pyramids:      0
+    tet wedges:    114
+    tetrahedra:    0
+    polyhedra:     19303
+    Breakdown of polyhedra by number of faces:
+        faces   number of cells
+            4   3821
+            5   2637
+            6   4434
+            7   56
+            8   88
+            9   4251
+           10   66
+           11   60
+           12   2222
+           13   10
+           14   14
+           15   1412
+           17   2
+           18   222
+           21   8
+
+Checking topology...
+    Boundary definition OK.
+    Cell to face addressing OK.
+    Point usage OK.
+    Upper triangular ordering OK.
+    Face vertices OK.
+    Topological cell zip-up check OK.
+    Face-face connectivity OK.
+   *Number of regions: 4
+    The mesh has multiple regions which are not connected by any face.
+  <<Writing region information to "constant/cellToRegion"
+  <<Writing region 0 (fully disconnected) with 11683 cells to cellSet region0
+  <<Writing region 1 (fully disconnected) with 48544 cells to cellSet region1
+  <<Writing region 2 (fully disconnected) with 40070 cells to cellSet region2
+  <<Writing region 3 (fully disconnected) with 29434 cells to cellSet region3
+
+Checking patch topology for multiply connected surfaces...
+                   Patch    Faces   Points  Surface topology
+                   inlet      865      972  ok (non-closed singly connected)
+             casing_wall     1504     1824  ok (non-closed singly connected)
+              guide_wall     2376     2868  ok (non-closed singly connected)
+                   vanes     6276     8184      ok (closed singly connected)
+             runner_wall     1529     1861  ok (non-closed singly connected)
+           runner_blades     6583     8366      ok (closed singly connected)
+              draft_wall     3476     4428  ok (non-closed singly connected)
+                  outlet     1581     1748  ok (non-closed singly connected)
+                      S1     1804     1841  ok (non-closed singly connected)
+                      S2     2244     2285  ok (non-closed singly connected)
+                    AMI1     2244     2285  ok (non-closed singly connected)
+                    AMI2     1804     1841  ok (non-closed singly connected)
+                    AMI3     1804     1841  ok (non-closed singly connected)
+                    AMI4     1828     1869  ok (non-closed singly connected)
+                    ".*"    35918    41053      ok (closed singly connected)
+
+
+Checking faceZone topology for multiply connected surfaces...
+    No faceZones found.
+
+Checking basic cellZone addressing...
+                CellZone        Cells       Points       VolumeBoundingBox
+               rotating        40070        52825  0.053622889 (-0.29999928 -0.29999943 -0.1) (0.29999966 0.29999991 0.1)
+
+Checking basic pointZone addressing...
+               PointZone  PointsBoundingBox
+            frozenPoints       0(1e+150 1e+150 1e+150) (-1e+150 -1e+150 -1e+150)
+
+Checking geometry...
+    Overall domain bounding box (-0.44999363 -0.44999363 -0.60000002) (0.44999363 0.44999363 0.89999998)
+    Mesh has 3 geometric (non-empty/wedge) directions (1 1 1)
+    Mesh has 3 solution (non-empty) directions (1 1 1)
+    Boundary openness (-1.3060215e-16 -1.3419965e-16 -4.671596e-16) OK.
+    Max cell openness = 3.903643e-16 OK.
+    Max aspect ratio = 5.7690274 OK.
+    Minimum face area = 1.1049546e-06. Maximum face area = 0.0010658325.  Face area magnitudes OK.
+    Min volume = 4.6353267e-08. Max volume = 2.3016415e-05.  Total volume = 0.55125306.  Cell volumes OK.
+    Mesh non-orthogonality Max: 59.955572 average: 11.583189
+    Non-orthogonality check OK.
+    Face pyramids OK.
+    Max skewness = 3.0048809 OK.
+    Coupled point location match (average 0) OK.
+Checking faces in error :
+    non-orthogonality >  65 degrees                        : 0
+    faces with face pyramid volume < 1e-13                 : 0
+    faces with face-decomposition tet quality < 1e-15      : 0
+    faces with concavity >  80 degrees                     : 0
+    faces with skewness >   4 (internal) or  20 (boundary) : 0
+    faces with interpolation weights (0..1)  <  0.05       : 0
+    faces with volume ratio of neighbour cells <  0.01     : 0
+    faces with face twist <  0.02                          : 0
+    faces on cells with determinant < 0.001                : 0
+
+Mesh OK.
+
+End
+

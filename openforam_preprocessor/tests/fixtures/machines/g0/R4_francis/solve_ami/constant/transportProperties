@@ -1,0 +1,11 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      transportProperties;
+}
+
+// Form from tutorials/incompressible/pimpleFoam/RAS/propeller/constant/transportProperties. Water (spec 9.1 preset, approximate).
+transportModel  Newtonian;
+nu              1e-06;

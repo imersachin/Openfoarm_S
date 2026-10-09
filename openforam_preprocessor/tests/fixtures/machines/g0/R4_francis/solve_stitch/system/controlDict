@@ -1,0 +1,40 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+
+// R4 Francis-like: U 1 m/s along +z, omega 20 rad/s. runner_wall is a surface of revolution about the axis: noSlip (stationary) is valid on it.
+// Few fixed time steps; one step = 1 degree of rotation (dt = (pi/180)/omega).
+// Base: tutorials/incompressible/pimpleFoam/RAS/propeller/system/controlDict; AMIWeights from tutorials/incompressible/pimpleFoam/RAS/propeller/system/AMIWeights.
+application     pimpleFoam;
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+endTime         0.00872664626;
+deltaT          0.000872664626;
+writeControl    timeStep;
+writeInterval   10;
+purgeWrite      0;
+writeFormat     binary;
+writePrecision  6;
+writeCompression off;
+timeFormat      general;
+timePrecision   6;
+runTimeModifiable false;
+adjustTimeStep  no;
+functions
+{
+    AMIWeights1
+    {
+        type            AMIWeights;
+        libs            (fieldFunctionObjects);
+        writeFields     false;
+        writeToFile     true;
+        log             true;
+        executeControl  timeStep;
+        executeInterval 1;
+    }
+}

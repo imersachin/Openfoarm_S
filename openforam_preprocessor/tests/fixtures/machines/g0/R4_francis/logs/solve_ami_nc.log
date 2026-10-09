@@ -1,0 +1,804 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : pimpleFoam
+Date   : Oct 09 2026
+Time   : 12:10:18
+Host   : DESKTOP-162QBLJ
+PID    : 3928
+I/O    : uncollated
+Case   : <work>/R4/solve_ami_nc
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+Selecting dynamicFvMesh dynamicMotionSolverFvMesh
+Selecting motion solver: solidBody
+Applying motion to cellZone: rotating
+Selecting solid-body motion function rotatingMotion
+
+PIMPLE: no residual control data found. Calculations will employ 2 corrector loops
+
+Reading field p
+
+Reading field U
+
+Reading/calculating face flux field phi
+
+AMI: Creating AMI for source:S1 and target:S2
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 2244
+AMI: Patch source sum(weights) min:0.994283 max:1 average:0.99989
+AMI: Patch target sum(weights) min:0.975919 max:1 average:0.999549
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 2244
+AMI: Patch target faces: 1804
+AMI: Patch source sum(weights) min:0.975635 max:1 average:0.999543
+AMI: Patch target sum(weights) min:0.994198 max:1 average:0.999891
+AMI: Creating AMI for source:AMI3 and target:AMI4
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 1828
+AMI: Patch source sum(weights) min:0.988117 max:1 average:0.999904
+AMI: Patch target sum(weights) min:0.96867 max:1 average:0.999686
+Selecting incompressible transport model Newtonian
+Selecting turbulence model type RAS
+Selecting RAS turbulence model kOmegaSST
+Selecting patchDistMethod meshWave
+RAS
+{
+    RASModel        kOmegaSST;
+    turbulence      on;
+    printCoeffs     on;
+    alphaK1         0.85;
+    alphaK2         1;
+    alphaOmega1     0.5;
+    alphaOmega2     0.856;
+    gamma1          0.555556;
+    gamma2          0.44;
+    beta1           0.075;
+    beta2           0.0828;
+    betaStar        0.09;
+    a1              0.31;
+    b1              1;
+    c1              10;
+    F3              false;
+    decayControl    false;
+    kInf            0;
+    omegaInf        0;
+}
+
+No MRF models present
+
+No finite volume options present
+Constructing face velocity Uf
+
+Courant Number mean: 0.000223534 max: 0.0437782
+Courant Number mean: 0.000223534 max: 0.0437782
+
+Starting time loop
+
+Courant Number mean: 0.000223534 max: 0.0437782
+Time = 0.000872665
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:S1 and target:S2
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 2244
+AMI: Patch source sum(weights) min:0.994283 max:1 average:0.99989
+AMI: Patch target sum(weights) min:0.975919 max:1 average:0.999549
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 2244
+AMI: Patch target faces: 1804
+AMI: Patch source sum(weights) min:0.969052 max:1 average:0.999484
+AMI: Patch target sum(weights) min:0.994329 max:1 average:0.999869
+AMI: Creating AMI for source:AMI3 and target:AMI4
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 1828
+AMI: Patch source sum(weights) min:0.987186 max:1 average:0.999794
+AMI: Patch target sum(weights) min:0.963695 max:1 average:0.999534
+smoothSolver:  Solving for Ux, Initial residual = 1, Final residual = 0.00581568, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 1, Final residual = 0.00618918, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 1, Final residual = 7.35097e-05, No Iterations 1
+GAMG:  Solving for p, Initial residual = 1, Final residual = 9.83457e-07, No Iterations 21
+time step continuity errors : sum local = 1.36505e-09, global = -2.83501e-10, cumulative = -2.83501e-10
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.0491069, Final residual = 9.91454e-07, No Iterations 5
+smoothSolver:  Solving for Uy, Initial residual = 0.0482657, Final residual = 9.72357e-08, No Iterations 6
+smoothSolver:  Solving for Uz, Initial residual = 0.0371989, Final residual = 1.7423e-07, No Iterations 5
+GAMG:  Solving for p, Initial residual = 0.0106429, Final residual = 7.91645e-07, No Iterations 9
+time step continuity errors : sum local = 1.46326e-07, global = 3.04716e-08, cumulative = 3.01881e-08
+smoothSolver:  Solving for omega, Initial residual = 0.00715856, Final residual = 7.62011e-08, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 1, Final residual = 5.30821e-07, No Iterations 6
+ExecutionTime = 1.69 s  ClockTime = 1 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: S1
+        Target: S2
+
+                     |             S1 |             S2 | 
+        min(weight)  |       0.994283 |       0.975919 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |        0.99989 |       0.999549 | 
+        min(address) |              2 |              1 | 
+        max(address) |              9 |              4 | 
+        ave(address) |        4.23004 |        3.40062 | 
+
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.969052 |       0.994329 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999484 |       0.999869 | 
+        min(address) |              1 |              2 | 
+        max(address) |              5 |              9 | 
+        ave(address) |        3.56328 |        4.43237 | 
+
+    Patches: 
+        Source: AMI3
+        Target: AMI4
+
+                     |           AMI3 |           AMI4 | 
+        min(weight)  |       0.987186 |       0.963695 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999794 |       0.999534 | 
+        min(address) |              2 |              2 | 
+        max(address) |              6 |              5 | 
+        ave(address) |        4.00887 |        3.95624 | 
+
+Courant Number mean: 0.0692998 max: 3.89685
+Time = 0.00174533
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:S1 and target:S2
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 2244
+AMI: Patch source sum(weights) min:0.994283 max:1 average:0.99989
+AMI: Patch target sum(weights) min:0.975919 max:1 average:0.999549
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 2244
+AMI: Patch target faces: 1804
+AMI: Patch source sum(weights) min:0.9677 max:1 average:0.999452
+AMI: Patch target sum(weights) min:0.994842 max:1 average:0.999858
+AMI: Creating AMI for source:AMI3 and target:AMI4
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 1828
+AMI: Patch source sum(weights) min:0.986306 max:1 average:0.999771
+AMI: Patch target sum(weights) min:0.962821 max:1 average:0.999477
+smoothSolver:  Solving for Ux, Initial residual = 0.332302, Final residual = 0.00693632, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.332797, Final residual = 0.00695147, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.798616, Final residual = 0.00585513, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.0138937, Final residual = 7.68632e-07, No Iterations 14
+time step continuity errors : sum local = 1.43018e-07, global = 3.02732e-08, cumulative = 6.04613e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.125026, Final residual = 9.66808e-08, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.124636, Final residual = 9.78714e-08, No Iterations 6
+smoothSolver:  Solving for Uz, Initial residual = 0.139761, Final residual = 4.44096e-07, No Iterations 5
+GAMG:  Solving for p, Initial residual = 0.112428, Final residual = 5.69144e-07, No Iterations 15
+time step continuity errors : sum local = 1.44356e-08, global = -3.00972e-09, cumulative = 5.74515e-08
+smoothSolver:  Solving for omega, Initial residual = 0.00537885, Final residual = 6.61307e-07, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.0953863, Final residual = 1.84083e-07, No Iterations 5
+ExecutionTime = 2.7 s  ClockTime = 2 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: S1
+        Target: S2
+
+                     |             S1 |             S2 | 
+        min(weight)  |       0.994283 |       0.975919 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |        0.99989 |       0.999549 | 
+        min(address) |              2 |              1 | 
+        max(address) |              9 |              4 | 
+        ave(address) |        4.23004 |        3.40062 | 
+
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |         0.9677 |       0.994842 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999452 |       0.999858 | 
+        min(address) |              1 |              2 | 
+        max(address) |              4 |              9 | 
+        ave(address) |        3.58645 |         4.4612 | 
+
+    Patches: 
+        Source: AMI3
+        Target: AMI4
+
+                     |           AMI3 |           AMI4 | 
+        min(weight)  |       0.986306 |       0.962821 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999771 |       0.999477 | 
+        min(address) |              2 |              1 | 
+        max(address) |              5 |              5 | 
+        ave(address) |        4.00665 |        3.95405 | 
+
+Courant Number mean: 0.0689335 max: 3.5407
+Time = 0.00261799
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:S1 and target:S2
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 2244
+AMI: Patch source sum(weights) min:0.994283 max:1 average:0.99989
+AMI: Patch target sum(weights) min:0.975919 max:1 average:0.999549
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 2244
+AMI: Patch target faces: 1804
+AMI: Patch source sum(weights) min:0.971753 max:1 average:0.999503
+AMI: Patch target sum(weights) min:0.991987 max:1 average:0.999878
+AMI: Creating AMI for source:AMI3 and target:AMI4
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 1828
+AMI: Patch source sum(weights) min:0.981648 max:1 average:0.999799
+AMI: Patch target sum(weights) min:0.968466 max:1 average:0.999515
+smoothSolver:  Solving for Ux, Initial residual = 0.0957743, Final residual = 0.00306955, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.0948872, Final residual = 0.00304378, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.0527186, Final residual = 0.00185008, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.157713, Final residual = 5.98748e-07, No Iterations 15
+time step continuity errors : sum local = 6.2323e-09, global = 1.30908e-09, cumulative = 5.87606e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.0282112, Final residual = 1.59134e-07, No Iterations 5
+smoothSolver:  Solving for Uy, Initial residual = 0.0279413, Final residual = 1.56835e-07, No Iterations 5
+smoothSolver:  Solving for Uz, Initial residual = 0.0168084, Final residual = 5.55684e-07, No Iterations 4
+GAMG:  Solving for p, Initial residual = 0.162939, Final residual = 6.01496e-07, No Iterations 15
+time step continuity errors : sum local = 2.61617e-09, global = -5.50725e-10, cumulative = 5.82099e-08
+smoothSolver:  Solving for omega, Initial residual = 0.00504626, Final residual = 6.60591e-07, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.0517544, Final residual = 9.6287e-08, No Iterations 5
+ExecutionTime = 3.7 s  ClockTime = 5 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: S1
+        Target: S2
+
+                     |             S1 |             S2 | 
+        min(weight)  |       0.994283 |       0.975919 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |        0.99989 |       0.999549 | 
+        min(address) |              2 |              1 | 
+        max(address) |              9 |              4 | 
+        ave(address) |        4.23004 |        3.40062 | 
+
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.971753 |       0.991987 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999503 |       0.999878 | 
+        min(address) |              1 |              2 | 
+        max(address) |              5 |              9 | 
+        ave(address) |        3.62923 |        4.51441 | 
+
+    Patches: 
+        Source: AMI3
+        Target: AMI4
+
+                     |           AMI3 |           AMI4 | 
+        min(weight)  |       0.981648 |       0.968466 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999799 |       0.999515 | 
+        min(address) |              2 |              1 | 
+        max(address) |              6 |              6 | 
+        ave(address) |        4.05765 |        4.00438 | 
+
+Courant Number mean: 0.0688262 max: 3.72847
+Time = 0.00349066
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:S1 and target:S2
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 2244
+AMI: Patch source sum(weights) min:0.994283 max:1 average:0.99989
+AMI: Patch target sum(weights) min:0.975919 max:1 average:0.999549
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 2244
+AMI: Patch target faces: 1804
+AMI: Patch source sum(weights) min:0.972464 max:1 average:0.999558
+AMI: Patch target sum(weights) min:0.994555 max:1 average:0.999904
+AMI: Creating AMI for source:AMI3 and target:AMI4
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 1828
+AMI: Patch source sum(weights) min:0.983651 max:1 average:0.999789
+AMI: Patch target sum(weights) min:0.967418 max:1 average:0.999497
+smoothSolver:  Solving for Ux, Initial residual = 0.0310634, Final residual = 0.00128205, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.0310088, Final residual = 0.00128141, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.0153259, Final residual = 0.00061805, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.178463, Final residual = 8.42052e-07, No Iterations 14
+time step continuity errors : sum local = 2.42688e-09, global = 5.05369e-10, cumulative = 5.87153e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.00781307, Final residual = 4.46749e-07, No Iterations 4
+smoothSolver:  Solving for Uy, Initial residual = 0.00792177, Final residual = 4.38167e-07, No Iterations 4
+smoothSolver:  Solving for Uz, Initial residual = 0.00416668, Final residual = 1.30033e-07, No Iterations 4
+GAMG:  Solving for p, Initial residual = 0.150993, Final residual = 6.5729e-07, No Iterations 14
+time step continuity errors : sum local = 9.82063e-10, global = -2.06281e-10, cumulative = 5.8509e-08
+smoothSolver:  Solving for omega, Initial residual = 0.00483336, Final residual = 6.37303e-07, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.0359296, Final residual = 8.4439e-07, No Iterations 4
+ExecutionTime = 4.68 s  ClockTime = 5 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: S1
+        Target: S2
+
+                     |             S1 |             S2 | 
+        min(weight)  |       0.994283 |       0.975919 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |        0.99989 |       0.999549 | 
+        min(address) |              2 |              1 | 
+        max(address) |              9 |              4 | 
+        ave(address) |        4.23004 |        3.40062 | 
+
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.972464 |       0.994555 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999558 |       0.999904 | 
+        min(address) |              1 |              2 | 
+        max(address) |              5 |              9 | 
+        ave(address) |        3.66132 |        4.55432 | 
+
+    Patches: 
+        Source: AMI3
+        Target: AMI4
+
+                     |           AMI3 |           AMI4 | 
+        min(weight)  |       0.983651 |       0.967418 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999789 |       0.999497 | 
+        min(address) |              2 |              2 | 
+        max(address) |              6 |              6 | 
+        ave(address) |        4.07871 |        4.02516 | 
+
+Courant Number mean: 0.0687112 max: 3.70288
+Time = 0.00436332
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:S1 and target:S2
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 2244
+AMI: Patch source sum(weights) min:0.994283 max:1 average:0.99989
+AMI: Patch target sum(weights) min:0.975919 max:1 average:0.999549
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 2244
+AMI: Patch target faces: 1804
+AMI: Patch source sum(weights) min:0.966438 max:1 average:0.999481
+AMI: Patch target sum(weights) min:0.994284 max:1 average:0.999861
+AMI: Creating AMI for source:AMI3 and target:AMI4
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 1828
+AMI: Patch source sum(weights) min:0.989007 max:1 average:0.999785
+AMI: Patch target sum(weights) min:0.962473 max:1 average:0.999472
+smoothSolver:  Solving for Ux, Initial residual = 0.0199346, Final residual = 0.000644333, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.0196307, Final residual = 0.000640875, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.00885296, Final residual = 0.000296503, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.126594, Final residual = 5.19578e-07, No Iterations 12
+time step continuity errors : sum local = 8.07405e-10, global = -1.68637e-10, cumulative = 5.83403e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.00372533, Final residual = 8.90725e-08, No Iterations 4
+smoothSolver:  Solving for Uy, Initial residual = 0.00362728, Final residual = 7.87898e-08, No Iterations 4
+smoothSolver:  Solving for Uz, Initial residual = 0.00164178, Final residual = 4.60931e-07, No Iterations 3
+GAMG:  Solving for p, Initial residual = 0.0625123, Final residual = 7.70757e-07, No Iterations 12
+time step continuity errors : sum local = 1.13934e-09, global = 2.3923e-10, cumulative = 5.85796e-08
+smoothSolver:  Solving for omega, Initial residual = 0.00460664, Final residual = 5.76219e-07, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.0279467, Final residual = 6.16203e-07, No Iterations 4
+ExecutionTime = 5.63 s  ClockTime = 6 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: S1
+        Target: S2
+
+                     |             S1 |             S2 | 
+        min(weight)  |       0.994283 |       0.975919 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |        0.99989 |       0.999549 | 
+        min(address) |              2 |              1 | 
+        max(address) |              9 |              4 | 
+        ave(address) |        4.23004 |        3.40062 | 
+
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.966438 |       0.994284 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999481 |       0.999861 | 
+        min(address) |              1 |              2 | 
+        max(address) |              5 |              8 | 
+        ave(address) |        3.68093 |        4.57871 | 
+
+    Patches: 
+        Source: AMI3
+        Target: AMI4
+
+                     |           AMI3 |           AMI4 | 
+        min(weight)  |       0.989007 |       0.962473 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999785 |       0.999472 | 
+        min(address) |              2 |              1 | 
+        max(address) |              6 |              6 | 
+        ave(address) |        4.10754 |        4.05361 | 
+
+Courant Number mean: 0.0685775 max: 3.60186
+Time = 0.00523599
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:S1 and target:S2
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 2244
+AMI: Patch source sum(weights) min:0.994283 max:1 average:0.99989
+AMI: Patch target sum(weights) min:0.975919 max:1 average:0.999549
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 2244
+AMI: Patch target faces: 1804
+AMI: Patch source sum(weights) min:0.965115 max:1 average:0.999472
+AMI: Patch target sum(weights) min:0.99148 max:1 average:0.99986
+AMI: Creating AMI for source:AMI3 and target:AMI4
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 1828
+AMI: Patch source sum(weights) min:0.990041 max:1 average:0.999812
+AMI: Patch target sum(weights) min:0.968768 max:1 average:0.99949
+smoothSolver:  Solving for Ux, Initial residual = 0.0181613, Final residual = 0.000471712, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.0179619, Final residual = 0.000460233, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.00765019, Final residual = 0.00019893, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.0690905, Final residual = 5.19482e-07, No Iterations 12
+time step continuity errors : sum local = 7.19477e-10, global = -1.51146e-10, cumulative = 5.84284e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.00212205, Final residual = 6.46218e-07, No Iterations 3
+smoothSolver:  Solving for Uy, Initial residual = 0.00206997, Final residual = 6.66074e-07, No Iterations 3
+smoothSolver:  Solving for Uz, Initial residual = 0.000906535, Final residual = 1.76686e-07, No Iterations 3
+GAMG:  Solving for p, Initial residual = 0.0388539, Final residual = 5.60278e-07, No Iterations 10
+time step continuity errors : sum local = 7.831e-10, global = 1.8036e-10, cumulative = 5.86088e-08
+smoothSolver:  Solving for omega, Initial residual = 0.00433442, Final residual = 5.02991e-07, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.0232714, Final residual = 4.73115e-07, No Iterations 4
+ExecutionTime = 6.55 s  ClockTime = 7 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: S1
+        Target: S2
+
+                     |             S1 |             S2 | 
+        min(weight)  |       0.994283 |       0.975919 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |        0.99989 |       0.999549 | 
+        min(address) |              2 |              1 | 
+        max(address) |              9 |              4 | 
+        ave(address) |        4.23004 |        3.40062 | 
+
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.965115 |        0.99148 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999472 |        0.99986 | 
+        min(address) |              1 |              2 | 
+        max(address) |              5 |              8 | 
+        ave(address) |        3.70499 |        4.60865 | 
+
+    Patches: 
+        Source: AMI3
+        Target: AMI4
+
+                     |           AMI3 |           AMI4 | 
+        min(weight)  |       0.990041 |       0.968768 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999812 |        0.99949 | 
+        min(address) |              2 |              2 | 
+        max(address) |              7 |              6 | 
+        ave(address) |        4.14856 |        4.09409 | 
+
+Courant Number mean: 0.0684524 max: 3.53508
+Time = 0.00610865
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:S1 and target:S2
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 2244
+AMI: Patch source sum(weights) min:0.994283 max:1 average:0.99989
+AMI: Patch target sum(weights) min:0.975919 max:1 average:0.999549
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 2244
+AMI: Patch target faces: 1804
+AMI: Patch source sum(weights) min:0.970632 max:1 average:0.999527
+AMI: Patch target sum(weights) min:0.988314 max:1 average:0.99988
+AMI: Creating AMI for source:AMI3 and target:AMI4
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 1828
+AMI: Patch source sum(weights) min:0.992527 max:1 average:0.99986
+AMI: Patch target sum(weights) min:0.97009 max:1 average:0.999566
+smoothSolver:  Solving for Ux, Initial residual = 0.0178508, Final residual = 0.000444632, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.0176808, Final residual = 0.000432438, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.00755638, Final residual = 0.000181436, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.0454127, Final residual = 5.62666e-07, No Iterations 10
+time step continuity errors : sum local = 7.70632e-10, global = 1.61538e-10, cumulative = 5.87703e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.00164864, Final residual = 3.32943e-07, No Iterations 3
+smoothSolver:  Solving for Uy, Initial residual = 0.00161956, Final residual = 3.50942e-07, No Iterations 3
+smoothSolver:  Solving for Uz, Initial residual = 0.000685363, Final residual = 1.02865e-07, No Iterations 3
+GAMG:  Solving for p, Initial residual = 0.0315944, Final residual = 6.06316e-07, No Iterations 11
+time step continuity errors : sum local = 8.14266e-10, global = -1.70048e-10, cumulative = 5.86003e-08
+smoothSolver:  Solving for omega, Initial residual = 0.00407175, Final residual = 4.41128e-07, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.0202641, Final residual = 3.77699e-07, No Iterations 4
+ExecutionTime = 7.43 s  ClockTime = 8 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: S1
+        Target: S2
+
+                     |             S1 |             S2 | 
+        min(weight)  |       0.994283 |       0.975919 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |        0.99989 |       0.999549 | 
+        min(address) |              2 |              1 | 
+        max(address) |              9 |              4 | 
+        ave(address) |        4.23004 |        3.40062 | 
+
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.970632 |       0.988314 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999527 |        0.99988 | 
+        min(address) |              1 |              2 | 
+        max(address) |              5 |              7 | 
+        ave(address) |        3.73619 |        4.64745 | 
+
+    Patches: 
+        Source: AMI3
+        Target: AMI4
+
+                     |           AMI3 |           AMI4 | 
+        min(weight)  |       0.992527 |        0.97009 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |        0.99986 |       0.999566 | 
+        min(address) |              2 |              2 | 
+        max(address) |              6 |              6 | 
+        ave(address) |        4.15965 |        4.10503 | 
+
+Courant Number mean: 0.0683481 max: 3.48925
+Time = 0.00698132
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:S1 and target:S2
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 2244
+AMI: Patch source sum(weights) min:0.994283 max:1 average:0.99989
+AMI: Patch target sum(weights) min:0.975919 max:1 average:0.999549
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 2244
+AMI: Patch target faces: 1804
+AMI: Patch source sum(weights) min:0.968838 max:1 average:0.999496
+AMI: Patch target sum(weights) min:0.986663 max:1 average:0.999848
+AMI: Creating AMI for source:AMI3 and target:AMI4
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 1828
+AMI: Patch source sum(weights) min:0.988086 max:1 average:0.999848
+AMI: Patch target sum(weights) min:0.968309 max:1 average:0.999568
+smoothSolver:  Solving for Ux, Initial residual = 0.0173492, Final residual = 0.000426494, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.0172115, Final residual = 0.000415552, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.00750709, Final residual = 0.000174356, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.0393913, Final residual = 5.95201e-07, No Iterations 10
+time step continuity errors : sum local = 8.04463e-10, global = 1.69812e-10, cumulative = 5.87701e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.00145203, Final residual = 2.2017e-07, No Iterations 3
+smoothSolver:  Solving for Uy, Initial residual = 0.00143397, Final residual = 2.34424e-07, No Iterations 3
+smoothSolver:  Solving for Uz, Initial residual = 0.000621207, Final residual = 7.56968e-08, No Iterations 3
+GAMG:  Solving for p, Initial residual = 0.0282386, Final residual = 5.51865e-07, No Iterations 11
+time step continuity errors : sum local = 7.28901e-10, global = -1.52099e-10, cumulative = 5.8618e-08
+smoothSolver:  Solving for omega, Initial residual = 0.00384145, Final residual = 3.89685e-07, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.0182319, Final residual = 3.12055e-07, No Iterations 4
+ExecutionTime = 8.31 s  ClockTime = 9 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: S1
+        Target: S2
+
+                     |             S1 |             S2 | 
+        min(weight)  |       0.994283 |       0.975919 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |        0.99989 |       0.999549 | 
+        min(address) |              2 |              1 | 
+        max(address) |              9 |              4 | 
+        ave(address) |        4.23004 |        3.40062 | 
+
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.968838 |       0.986663 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999496 |       0.999848 | 
+        min(address) |              2 |              2 | 
+        max(address) |              5 |              8 | 
+        ave(address) |        3.75936 |        4.67627 | 
+
+    Patches: 
+        Source: AMI3
+        Target: AMI4
+
+                     |           AMI3 |           AMI4 | 
+        min(weight)  |       0.988086 |       0.968309 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999848 |       0.999568 | 
+        min(address) |              2 |              2 | 
+        max(address) |              6 |              6 | 
+        ave(address) |        4.20843 |        4.15317 | 
+
+Courant Number mean: 0.0682658 max: 3.446
+Time = 0.00785398
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:S1 and target:S2
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 2244
+AMI: Patch source sum(weights) min:0.994283 max:1 average:0.99989
+AMI: Patch target sum(weights) min:0.975919 max:1 average:0.999549
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 2244
+AMI: Patch target faces: 1804
+AMI: Patch source sum(weights) min:0.961829 max:1 average:0.999437
+AMI: Patch target sum(weights) min:0.986124 max:1 average:0.99983
+AMI: Creating AMI for source:AMI3 and target:AMI4
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 1828
+AMI: Patch source sum(weights) min:0.987565 max:1 average:0.999805
+AMI: Patch target sum(weights) min:0.969659 max:1 average:0.999523
+smoothSolver:  Solving for Ux, Initial residual = 0.0167868, Final residual = 0.000404995, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.016684, Final residual = 0.000395503, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.0074474, Final residual = 0.000166485, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.0360302, Final residual = 9.06215e-07, No Iterations 9
+time step continuity errors : sum local = 1.2071e-09, global = 2.50085e-10, cumulative = 5.88681e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.00133502, Final residual = 1.90771e-07, No Iterations 3
+smoothSolver:  Solving for Uy, Initial residual = 0.00132173, Final residual = 1.93971e-07, No Iterations 3
+smoothSolver:  Solving for Uz, Initial residual = 0.000585445, Final residual = 9.91669e-07, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.0255193, Final residual = 9.25361e-07, No Iterations 10
+time step continuity errors : sum local = 1.20962e-09, global = -2.53908e-10, cumulative = 5.86142e-08
+smoothSolver:  Solving for omega, Initial residual = 0.00364539, Final residual = 3.44985e-07, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.0167781, Final residual = 2.62407e-07, No Iterations 4
+ExecutionTime = 9.17 s  ClockTime = 10 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: S1
+        Target: S2
+
+                     |             S1 |             S2 | 
+        min(weight)  |       0.994283 |       0.975919 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |        0.99989 |       0.999549 | 
+        min(address) |              2 |              1 | 
+        max(address) |              9 |              4 | 
+        ave(address) |        4.23004 |        3.40062 | 
+
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.961829 |       0.986124 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999437 |        0.99983 | 
+        min(address) |              1 |              2 | 
+        max(address) |              5 |              7 | 
+        ave(address) |        3.77184 |         4.6918 | 
+
+    Patches: 
+        Source: AMI3
+        Target: AMI4
+
+                     |           AMI3 |           AMI4 | 
+        min(weight)  |       0.987565 |       0.969659 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999805 |       0.999523 | 
+        min(address) |              2 |              2 | 
+        max(address) |              6 |              7 | 
+        ave(address) |        4.22506 |        4.16958 | 
+
+Courant Number mean: 0.0682015 max: 3.42831
+Time = 0.00872665
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:S1 and target:S2
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 2244
+AMI: Patch source sum(weights) min:0.994283 max:1 average:0.99989
+AMI: Patch target sum(weights) min:0.975919 max:1 average:0.999549
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 2244
+AMI: Patch target faces: 1804
+AMI: Patch source sum(weights) min:0.966084 max:1 average:0.999438
+AMI: Patch target sum(weights) min:0.984492 max:1 average:0.999836
+AMI: Creating AMI for source:AMI3 and target:AMI4
+AMI: Patch source faces: 1804
+AMI: Patch target faces: 1828
+AMI: Patch source sum(weights) min:0.990932 max:1 average:0.999795
+AMI: Patch target sum(weights) min:0.964011 max:1 average:0.999521
+smoothSolver:  Solving for Ux, Initial residual = 0.0162864, Final residual = 0.000386388, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.0162299, Final residual = 0.000377043, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.00738643, Final residual = 0.000159582, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.0334554, Final residual = 7.07646e-07, No Iterations 9
+time step continuity errors : sum local = 9.32099e-10, global = 1.93243e-10, cumulative = 5.88074e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.00126584, Final residual = 1.79864e-07, No Iterations 3
+smoothSolver:  Solving for Uy, Initial residual = 0.00126828, Final residual = 1.82381e-07, No Iterations 3
+smoothSolver:  Solving for Uz, Initial residual = 0.000553937, Final residual = 8.69013e-07, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.0235023, Final residual = 8.52199e-07, No Iterations 10
+time step continuity errors : sum local = 1.10497e-09, global = -2.31851e-10, cumulative = 5.85756e-08
+smoothSolver:  Solving for omega, Initial residual = 0.00347313, Final residual = 3.0423e-07, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.015683, Final residual = 2.22611e-07, No Iterations 4
+ExecutionTime = 10.04 s  ClockTime = 11 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: S1
+        Target: S2
+
+                     |             S1 |             S2 | 
+        min(weight)  |       0.994283 |       0.975919 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |        0.99989 |       0.999549 | 
+        min(address) |              2 |              1 | 
+        max(address) |              9 |              4 | 
+        ave(address) |        4.23004 |        3.40062 | 
+
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.966084 |       0.984492 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999438 |       0.999836 | 
+        min(address) |              1 |              2 | 
+        max(address) |              5 |              7 | 
+        ave(address) |        3.80749 |        4.73614 | 
+
+    Patches: 
+        Source: AMI3
+        Target: AMI4
+
+                     |           AMI3 |           AMI4 | 
+        min(weight)  |       0.990932 |       0.964011 | 
+        max(weight)  |              1 |              1 | 
+        ave(weight)  |       0.999795 |       0.999521 | 
+        min(address) |              2 |              1 | 
+        max(address) |              6 |              6 | 
+        ave(address) |        4.25887 |        4.20295 | 
+
+End
+

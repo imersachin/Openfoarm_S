@@ -1,0 +1,45 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+
+// Rotor background: the rotating-zone cylinder (r 0.78, z +/-0.66) plus two
+// cells of margin. Cell D/22 = 0.04727 m. Everything outside the cylinder is
+// removed by snappyHexMesh, so this patch ends up with no faces.
+convertToMeters 1;
+
+vertices
+(
+    (-0.875 -0.875 -0.755)
+    ( 0.875 -0.875 -0.755)
+    ( 0.875  0.875 -0.755)
+    (-0.875  0.875 -0.755)
+    (-0.875 -0.875  0.755)
+    ( 0.875 -0.875  0.755)
+    ( 0.875  0.875  0.755)
+    (-0.875  0.875  0.755)
+);
+
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) (38 38 32) simpleGrading (1 1 1)
+);
+
+edges ();
+
+boundary
+(
+    rotorBackground
+    {
+        type patch;
+        faces
+        (
+            (0 4 7 3) (1 2 6 5) (0 1 5 4) (3 7 6 2) (0 3 2 1) (4 5 6 7)
+        );
+    }
+);
+
+mergePatchPairs ();

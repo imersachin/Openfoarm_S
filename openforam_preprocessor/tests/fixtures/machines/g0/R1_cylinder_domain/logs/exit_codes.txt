@@ -1,0 +1,6 @@
+ogrid_01_blockMesh                       exit=0     0s  blockMesh -case <work>/R1/ogrid
+ogrid_02_checkMesh                       exit=0     0s  checkMesh -case <work>/R1/ogrid -allTopology -meshQuality
+snappy_01_blockMesh                      exit=0     0s  blockMesh -case <work>/R1/snappy
+snappy_02_surfaceFeatureExtract          exit=0     0s  surfaceFeatureExtract -case <work>/R1/snappy
+snappy_03_snappyHexMesh                  exit=0     3s  snappyHexMesh -case <work>/R1/snappy -overwrite
+snappy_04_checkMesh                      exit=0     1s  checkMesh -case <work>/R1/snappy -allTopology -meshQuality

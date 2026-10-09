@@ -1,0 +1,454 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : pimpleFoam
+Date   : Oct 09 2026
+Time   : 12:09:12
+Host   : DESKTOP-162QBLJ
+PID    : 2896
+I/O    : uncollated
+Case   : <work>/R3/solve_ogrid_laminar
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+Selecting dynamicFvMesh dynamicMotionSolverFvMesh
+Selecting motion solver: solidBody
+Applying motion to cellZone: rotating
+Selecting solid-body motion function rotatingMotion
+
+PIMPLE: no residual control data found. Calculations will employ 2 corrector loops
+
+Reading field p
+
+Reading field U
+
+Reading/calculating face flux field phi
+
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 5968
+AMI: Patch target faces: 2712
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 3632 points 4((-0.12 -0.0874745 -0.566511) (-0.12 -0.0876689 -0.588485) (-0.12 -0.0657963 -0.58887) (-0.12 -0.0656292 -0.566812)) target face 19 points 4((0.12 -0.222702 -0.545788) (0.12 -0.179973 -0.538871) (0.12 -0.180612 -0.501133) (0.12 -0.220729 -0.501171))
+AMI: Patch source sum(weights) min:0.964953 max:1.23213 average:1.00285
+AMI: Patch target sum(weights) min:0.999993 max:1.2884 average:1.01456
+Selecting incompressible transport model Newtonian
+Selecting turbulence model type laminar
+Selecting laminar stress model Stokes
+No MRF models present
+
+No finite volume options present
+Constructing face velocity Uf
+
+Courant Number mean: 0.000103894 max: 0.00581752
+Courant Number mean: 0.000103894 max: 0.00581752
+
+Starting time loop
+
+Courant Number mean: 0.000103894 max: 0.00581752
+Time = 0.000290888
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 5968
+AMI: Patch target faces: 2712
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 3632 points 4((-0.12 -0.0874745 -0.566511) (-0.12 -0.0876689 -0.588485) (-0.12 -0.0657963 -0.58887) (-0.12 -0.0656292 -0.566812)) target face 19 points 4((0.12 -0.213143 -0.549591) (0.12 -0.170541 -0.54193) (0.12 -0.171838 -0.504209) (0.12 -0.211949 -0.504947))
+AMI: Patch source sum(weights) min:0.935258 max:1.23537 average:1.00284
+AMI: Patch target sum(weights) min:1 max:1.3108 average:1.0146
+smoothSolver:  Solving for Ux, Initial residual = 1, Final residual = 4.37674e-12, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 1, Final residual = 4.3749e-07, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 1, Final residual = 4.18579e-07, No Iterations 1
+GAMG:  Solving for p, Initial residual = 1, Final residual = 4.60441e-07, No Iterations 19
+time step continuity errors : sum local = 9.77683e-11, global = -3.1682e-11, cumulative = -3.1682e-11
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.00103508, Final residual = 7.35883e-07, No Iterations 3
+smoothSolver:  Solving for Uy, Initial residual = 0.0319153, Final residual = 6.37775e-07, No Iterations 6
+smoothSolver:  Solving for Uz, Initial residual = 0.0172234, Final residual = 2.34546e-07, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.00114942, Final residual = 4.44249e-07, No Iterations 5
+time step continuity errors : sum local = 1.30556e-08, global = -5.80783e-09, cumulative = -5.83951e-09
+ExecutionTime = 1.2 s  ClockTime = 1 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.935258 |              1 | 
+        max(weight)  |        1.23537 |         1.3108 | 
+        ave(weight)  |        1.00284 |         1.0146 | 
+        min(address) |              1 |              1 | 
+        max(address) |             12 |             12 | 
+        ave(address) |        2.75436 |        6.06121 | 
+
+Courant Number mean: 0.0128172 max: 8.15756
+Time = 0.000581776
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 5968
+AMI: Patch target faces: 2712
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 3632 points 4((-0.12 -0.0874745 -0.566511) (-0.12 -0.0876689 -0.588485) (-0.12 -0.0657963 -0.58887) (-0.12 -0.0656292 -0.566812)) target face 19 points 4((0.12 -0.203519 -0.553227) (0.12 -0.161057 -0.544823) (0.12 -0.163013 -0.507131) (0.12 -0.203104 -0.508569))
+AMI: Patch source sum(weights) min:0.918563 max:1.21258 average:1.00338
+AMI: Patch target sum(weights) min:1 max:1.2955 average:1.01483
+smoothSolver:  Solving for Ux, Initial residual = 0.767431, Final residual = 7.44194e-05, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.320086, Final residual = 0.00443641, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.0983577, Final residual = 0.00131714, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.00807076, Final residual = 6.42562e-07, No Iterations 12
+time step continuity errors : sum local = 1.87915e-08, global = 4.36168e-09, cumulative = -1.47783e-09
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.0842092, Final residual = 8.6576e-07, No Iterations 4
+smoothSolver:  Solving for Uy, Initial residual = 0.0413573, Final residual = 9.00047e-07, No Iterations 6
+smoothSolver:  Solving for Uz, Initial residual = 0.0185263, Final residual = 3.18374e-07, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.098631, Final residual = 5.95419e-07, No Iterations 13
+time step continuity errors : sum local = 2.88545e-10, global = -7.15449e-11, cumulative = -1.54938e-09
+ExecutionTime = 1.9 s  ClockTime = 2 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.918563 |              1 | 
+        max(weight)  |        1.21258 |         1.2955 | 
+        ave(weight)  |        1.00338 |        1.01483 | 
+        min(address) |              1 |              1 | 
+        max(address) |             12 |             12 | 
+        ave(address) |        2.76324 |        6.08075 | 
+
+Courant Number mean: 0.0128158 max: 8.34686
+Time = 0.000872665
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 5968
+AMI: Patch target faces: 2712
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 3632 points 4((-0.12 -0.0874745 -0.566511) (-0.12 -0.0876689 -0.588485) (-0.12 -0.0657963 -0.58887) (-0.12 -0.0656292 -0.566812)) target face 19 points 4((0.12 -0.193833 -0.556695) (0.12 -0.151524 -0.547551) (0.12 -0.154137 -0.509898) (0.12 -0.194198 -0.512036))
+AMI: Patch source sum(weights) min:0.954201 max:1.1753 average:1.00276
+AMI: Patch target sum(weights) min:1 max:1.3052 average:1.01437
+smoothSolver:  Solving for Ux, Initial residual = 0.00538385, Final residual = 3.67224e-05, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.149808, Final residual = 0.00322259, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.0272306, Final residual = 0.000531113, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.317221, Final residual = 7.99338e-07, No Iterations 12
+time step continuity errors : sum local = 8.33464e-11, global = 2.61336e-11, cumulative = -1.52324e-09
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.000267739, Final residual = 6.91367e-07, No Iterations 3
+smoothSolver:  Solving for Uy, Initial residual = 0.0280873, Final residual = 2.2656e-07, No Iterations 7
+smoothSolver:  Solving for Uz, Initial residual = 0.0042822, Final residual = 6.20953e-07, No Iterations 5
+GAMG:  Solving for p, Initial residual = 0.146688, Final residual = 5.84733e-07, No Iterations 12
+time step continuity errors : sum local = 5.02943e-11, global = -1.40915e-11, cumulative = -1.53734e-09
+ExecutionTime = 2.59 s  ClockTime = 4 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.954201 |              1 | 
+        max(weight)  |         1.1753 |         1.3052 | 
+        ave(weight)  |        1.00276 |        1.01437 | 
+        min(address) |              1 |              1 | 
+        max(address) |             12 |             12 | 
+        ave(address) |         2.7805 |        6.11873 | 
+
+Courant Number mean: 0.0128128 max: 9.31416
+Time = 0.00116355
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 5968
+AMI: Patch target faces: 2712
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 3632 points 4((-0.12 -0.0874745 -0.566511) (-0.12 -0.0876689 -0.588485) (-0.12 -0.0657963 -0.58887) (-0.12 -0.0656292 -0.566812)) target face 19 points 4((0.12 -0.184088 -0.559993) (0.12 -0.141945 -0.550112) (0.12 -0.145215 -0.512511) (0.12 -0.185232 -0.515347))
+AMI: Patch source sum(weights) min:0.919708 max:1.18379 average:1.00196
+AMI: Patch target sum(weights) min:1 max:1.30294 average:1.01381
+smoothSolver:  Solving for Ux, Initial residual = 0.00286415, Final residual = 2.78712e-05, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.0298216, Final residual = 0.00149415, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.0104777, Final residual = 0.000445858, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.244124, Final residual = 8.37573e-07, No Iterations 11
+time step continuity errors : sum local = 6.04169e-11, global = 1.88628e-11, cumulative = -1.51847e-09
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.000151996, Final residual = 5.8844e-07, No Iterations 3
+smoothSolver:  Solving for Uy, Initial residual = 0.0111671, Final residual = 3.05988e-07, No Iterations 6
+smoothSolver:  Solving for Uz, Initial residual = 0.00262539, Final residual = 3.29463e-07, No Iterations 5
+GAMG:  Solving for p, Initial residual = 0.139626, Final residual = 4.41902e-07, No Iterations 12
+time step continuity errors : sum local = 3.18509e-11, global = -1.21084e-11, cumulative = -1.53058e-09
+ExecutionTime = 3.26 s  ClockTime = 4 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.919708 |              1 | 
+        max(weight)  |        1.18379 |        1.30294 | 
+        ave(weight)  |        1.00196 |        1.01381 | 
+        min(address) |              1 |              1 | 
+        max(address) |             12 |             11 | 
+        ave(address) |        2.78686 |        6.13274 | 
+
+Courant Number mean: 0.0128115 max: 8.88295
+Time = 0.00145444
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 5968
+AMI: Patch target faces: 2712
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 3632 points 4((-0.12 -0.0874745 -0.566511) (-0.12 -0.0876689 -0.588485) (-0.12 -0.0657963 -0.58887) (-0.12 -0.0656292 -0.566812)) target face 19 points 4((0.12 -0.174286 -0.563121) (0.12 -0.132323 -0.552506) (0.12 -0.136248 -0.514967) (0.12 -0.17621 -0.518502))
+AMI: Patch source sum(weights) min:0.947206 max:1.20601 average:1.00228
+AMI: Patch target sum(weights) min:0.999998 max:1.31191 average:1.0142
+smoothSolver:  Solving for Ux, Initial residual = 0.00217607, Final residual = 2.44364e-05, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.0128145, Final residual = 0.000778501, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.00798572, Final residual = 0.000424502, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.233923, Final residual = 5.92242e-07, No Iterations 12
+time step continuity errors : sum local = 3.38463e-11, global = 1.19084e-11, cumulative = -1.51867e-09
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.000138534, Final residual = 4.37645e-07, No Iterations 3
+smoothSolver:  Solving for Uy, Initial residual = 0.00605992, Final residual = 6.50335e-07, No Iterations 5
+smoothSolver:  Solving for Uz, Initial residual = 0.00298896, Final residual = 2.59549e-07, No Iterations 5
+GAMG:  Solving for p, Initial residual = 0.138396, Final residual = 8.15659e-07, No Iterations 11
+time step continuity errors : sum local = 4.8859e-11, global = -1.61011e-11, cumulative = -1.53477e-09
+ExecutionTime = 3.92 s  ClockTime = 5 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.947206 |       0.999998 | 
+        max(weight)  |        1.20601 |        1.31191 | 
+        ave(weight)  |        1.00228 |         1.0142 | 
+        min(address) |              1 |              1 | 
+        max(address) |             12 |             12 | 
+        ave(address) |        2.80999 |        6.18363 | 
+
+Courant Number mean: 0.0128104 max: 10.0849
+Time = 0.00174533
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 5968
+AMI: Patch target faces: 2712
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 3632 points 4((-0.12 -0.0874745 -0.566511) (-0.12 -0.0876689 -0.588485) (-0.12 -0.0657963 -0.58887) (-0.12 -0.0656292 -0.566812)) target face 19 points 4((0.12 -0.164432 -0.566076) (0.12 -0.12266 -0.554731) (0.12 -0.12724 -0.517267) (0.12 -0.167134 -0.521498))
+AMI: Patch source sum(weights) min:0.901377 max:1.19851 average:1.00241
+AMI: Patch target sum(weights) min:0.999999 max:1.33242 average:1.0141
+smoothSolver:  Solving for Ux, Initial residual = 0.00170754, Final residual = 2.04423e-05, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.00890921, Final residual = 0.000538499, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.0085485, Final residual = 0.000441045, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.240143, Final residual = 8.18193e-07, No Iterations 12
+time step continuity errors : sum local = 3.55786e-11, global = 1.2651e-11, cumulative = -1.52212e-09
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.000115024, Final residual = 2.64116e-07, No Iterations 3
+smoothSolver:  Solving for Uy, Initial residual = 0.00378695, Final residual = 4.43515e-07, No Iterations 5
+smoothSolver:  Solving for Uz, Initial residual = 0.00252575, Final residual = 2.46706e-07, No Iterations 5
+GAMG:  Solving for p, Initial residual = 0.140039, Final residual = 7.56452e-07, No Iterations 11
+time step continuity errors : sum local = 3.6788e-11, global = -1.33837e-11, cumulative = -1.53551e-09
+ExecutionTime = 4.58 s  ClockTime = 5 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.901377 |       0.999999 | 
+        max(weight)  |        1.19851 |        1.33242 | 
+        ave(weight)  |        1.00241 |         1.0141 | 
+        min(address) |              1 |              1 | 
+        max(address) |             11 |             12 | 
+        ave(address) |        2.81568 |        6.19617 | 
+
+Courant Number mean: 0.0128091 max: 10.8184
+Time = 0.00203622
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 5968
+AMI: Patch target faces: 2712
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 3632 points 4((-0.12 -0.0874745 -0.566511) (-0.12 -0.0876689 -0.588485) (-0.12 -0.0657963 -0.58887) (-0.12 -0.0656292 -0.566812)) target face 19 points 4((0.12 -0.154528 -0.56886) (0.12 -0.11296 -0.556787) (0.12 -0.118193 -0.519408) (0.12 -0.158007 -0.524335))
+AMI: Patch source sum(weights) min:0.943312 max:1.1864 average:1.00305
+AMI: Patch target sum(weights) min:1 max:1.34138 average:1.01439
+smoothSolver:  Solving for Ux, Initial residual = 0.00136561, Final residual = 1.50494e-05, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.00803084, Final residual = 0.000458622, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.00851247, Final residual = 0.000406925, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.193868, Final residual = 6.80248e-07, No Iterations 11
+time step continuity errors : sum local = 2.79778e-11, global = 1.0301e-11, cumulative = -1.52521e-09
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 8.41334e-05, Final residual = 2.00171e-07, No Iterations 3
+smoothSolver:  Solving for Uy, Initial residual = 0.00269166, Final residual = 4.79134e-07, No Iterations 5
+smoothSolver:  Solving for Uz, Initial residual = 0.00193353, Final residual = 2.73091e-07, No Iterations 5
+GAMG:  Solving for p, Initial residual = 0.128729, Final residual = 8.92683e-07, No Iterations 10
+time step continuity errors : sum local = 3.45862e-11, global = 1.26899e-11, cumulative = -1.51252e-09
+ExecutionTime = 5.22 s  ClockTime = 6 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.943312 |              1 | 
+        max(weight)  |         1.1864 |        1.34138 | 
+        ave(weight)  |        1.00305 |        1.01439 | 
+        min(address) |              1 |              1 | 
+        max(address) |             11 |             12 | 
+        ave(address) |        2.84149 |        6.25295 | 
+
+Courant Number mean: 0.0128074 max: 9.25342
+Time = 0.00232711
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 5968
+AMI: Patch target faces: 2712
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 3632 points 4((-0.12 -0.0874745 -0.566511) (-0.12 -0.0876689 -0.588485) (-0.12 -0.0657963 -0.58887) (-0.12 -0.0656292 -0.566812)) target face 19 points 4((0.12 -0.144576 -0.57147) (0.12 -0.103225 -0.558674) (0.12 -0.10911 -0.521392) (0.12 -0.148832 -0.527013))
+AMI: Patch source sum(weights) min:0.93718 max:1.1805 average:1.00275
+AMI: Patch target sum(weights) min:1 max:1.33343 average:1.01435
+smoothSolver:  Solving for Ux, Initial residual = 0.00110671, Final residual = 9.79293e-06, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.00843525, Final residual = 0.000388984, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.00536804, Final residual = 0.000208547, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.150187, Final residual = 4.17953e-07, No Iterations 11
+time step continuity errors : sum local = 1.66533e-11, global = 5.1076e-12, cumulative = -1.50741e-09
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 5.04509e-05, Final residual = 1.7459e-07, No Iterations 3
+smoothSolver:  Solving for Uy, Initial residual = 0.00198489, Final residual = 3.26339e-07, No Iterations 5
+smoothSolver:  Solving for Uz, Initial residual = 0.00116508, Final residual = 1.58127e-07, No Iterations 5
+GAMG:  Solving for p, Initial residual = 0.100557, Final residual = 4.80173e-07, No Iterations 11
+time step continuity errors : sum local = 1.65147e-11, global = 5.10104e-12, cumulative = -1.50231e-09
+ExecutionTime = 5.87 s  ClockTime = 7 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |        0.93718 |              1 | 
+        max(weight)  |         1.1805 |        1.33343 | 
+        ave(weight)  |        1.00275 |        1.01435 | 
+        min(address) |              1 |              1 | 
+        max(address) |             12 |             12 | 
+        ave(address) |         2.8507 |        6.27323 | 
+
+Courant Number mean: 0.0128058 max: 7.16263
+Time = 0.00261799
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 5968
+AMI: Patch target faces: 2712
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 3632 points 4((-0.12 -0.0874745 -0.566511) (-0.12 -0.0876689 -0.588485) (-0.12 -0.0657963 -0.58887) (-0.12 -0.0656292 -0.566812)) target face 19 points 4((0.12 -0.134581 -0.573906) (0.12 -0.0934594 -0.56039) (0.12 -0.0999938 -0.523217) (0.12 -0.139612 -0.52953))
+AMI: Patch source sum(weights) min:0.940469 max:1.20328 average:1.00233
+AMI: Patch target sum(weights) min:0.999999 max:1.3341 average:1.01405
+smoothSolver:  Solving for Ux, Initial residual = 0.000948126, Final residual = 7.61197e-06, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.0103453, Final residual = 0.000377766, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.00410646, Final residual = 0.000135661, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.129948, Final residual = 8.45315e-07, No Iterations 10
+time step continuity errors : sum local = 2.98033e-11, global = 7.18329e-12, cumulative = -1.49512e-09
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 4.13346e-05, Final residual = 5.7582e-07, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.00210359, Final residual = 2.91765e-07, No Iterations 5
+smoothSolver:  Solving for Uz, Initial residual = 0.000847396, Final residual = 4.85049e-07, No Iterations 4
+GAMG:  Solving for p, Initial residual = 0.0807568, Final residual = 8.01247e-07, No Iterations 10
+time step continuity errors : sum local = 2.75198e-11, global = -6.07822e-12, cumulative = -1.5012e-09
+ExecutionTime = 6.5 s  ClockTime = 7 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.940469 |       0.999999 | 
+        max(weight)  |        1.20328 |         1.3341 | 
+        ave(weight)  |        1.00233 |        1.01405 | 
+        min(address) |              1 |              1 | 
+        max(address) |             13 |             12 | 
+        ave(address) |        2.86025 |        6.29425 | 
+
+Courant Number mean: 0.0128048 max: 7.00751
+Time = 0.00290888
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 5968
+AMI: Patch target faces: 2712
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 3632 points 4((-0.12 -0.0874745 -0.566511) (-0.12 -0.0876689 -0.588485) (-0.12 -0.0657963 -0.58887) (-0.12 -0.0656292 -0.566812)) target face 19 points 4((0.12 -0.124544 -0.576168) (0.12 -0.083665 -0.561936) (0.12 -0.0908471 -0.524882) (0.12 -0.130349 -0.531886))
+AMI: Patch source sum(weights) min:0.936331 max:1.21307 average:1.00293
+AMI: Patch target sum(weights) min:0.999996 max:1.3517 average:1.01477
+smoothSolver:  Solving for Ux, Initial residual = 0.000808004, Final residual = 5.85024e-06, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.00809681, Final residual = 0.000271005, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.00368663, Final residual = 0.000110836, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.120076, Final residual = 7.09984e-07, No Iterations 11
+time step continuity errors : sum local = 2.1544e-11, global = 5.93763e-12, cumulative = -1.49526e-09
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 2.94565e-05, Final residual = 4.6154e-07, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.00150701, Final residual = 9.98459e-07, No Iterations 4
+smoothSolver:  Solving for Uz, Initial residual = 0.000565313, Final residual = 3.00942e-07, No Iterations 4
+GAMG:  Solving for p, Initial residual = 0.063876, Final residual = 4.79057e-07, No Iterations 11
+time step continuity errors : sum local = 1.60267e-11, global = -5.63448e-12, cumulative = -1.5009e-09
+ExecutionTime = 7.16 s  ClockTime = 8 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.936331 |       0.999996 | 
+        max(weight)  |        1.21307 |         1.3517 | 
+        ave(weight)  |        1.00293 |        1.01477 | 
+        min(address) |              1 |              1 | 
+        max(address) |             11 |             12 | 
+        ave(address) |        2.87902 |        6.33555 | 
+
+End
+

@@ -1,0 +1,64 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvSolution;
+}
+
+// From tutorials/incompressible/pimpleFoam/RAS/propeller/system/fvSolution (v2512); omega added to the U/k
+// entries (the propeller case uses epsilon).
+solvers
+{
+    "pcorr.*"
+    {
+        solver          GAMG;
+        tolerance       1e-2;
+        relTol          0;
+        smoother        DICGaussSeidel;
+        maxIter         50;
+        cacheAgglomeration yes;
+        updateInterval  -1;
+    }
+    p
+    {
+        $pcorr;
+        tolerance       1e-5;
+        relTol          0.01;
+    }
+    pFinal
+    {
+        $p;
+        tolerance       1e-6;
+        relTol          0;
+    }
+    "(U|k|omega)"
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-6;
+        relTol          0.1;
+    }
+    "(U|k|omega)Final"
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-6;
+        relTol          0;
+    }
+}
+PIMPLE
+{
+    correctPhi          no;
+    nOuterCorrectors    2;
+    nCorrectors         1;
+    nNonOrthogonalCorrectors 0;
+}
+relaxationFactors
+{
+    "(U|k|omega).*"   1;
+}
+cache
+{
+    grad(U);
+}

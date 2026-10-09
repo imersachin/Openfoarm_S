@@ -1,0 +1,42 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : topoSet -case <work>/R5/rotating_rotor
+Date   : Oct 09 2026
+Time   : 12:10:57
+Host   : DESKTOP-162QBLJ
+PID    : 4528
+I/O    : uncollated
+Case   : <work>/R5/rotating_rotor
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create polyMesh for time = 0
+
+Reading topoSetDict
+
+Time = 0
+    mesh not changed.
+Created cellSet rotatingCells
+    Applying source boxToCell
+    Adding cells with centre within boxes 1((-1000 -1000 -1000) (1000 1000 1000))
+    cellSet rotatingCells now size 90272
+Created cellZoneSet rotating
+    Applying source setToCellZone
+    Adding all cells from cell set: rotatingCells ...
+    cellZoneSet rotating now size 90272
+
+End
+

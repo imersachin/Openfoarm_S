@@ -1,0 +1,74 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : surfaceFeatureExtract -case <work>/R2/named
+Date   : Oct 09 2026
+Time   : 12:08:22
+Host   : DESKTOP-162QBLJ
+PID    : 1847
+I/O    : uncollated
+Case   : <work>/R2/named
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+
+Note: Feature line extraction only valid on closed manifold surfaces
+
+Reading surfaceFeatureExtractDict
+
+Surfaces     : duct_named.stl
+Output       : duct_named
+Load options : offset
+Write options: writeObj=no writeVTK=off
+
+Statistics:
+Triangles    : 12 in 3 region(s)
+Vertices     : 8
+Bounding Box : (-0.085505038 -0.23492315 -0.25) (1.9648902 0.91896343 0.25)
+
+Constructing feature set from included angle 150
+Selecting edges based purely on geometric tests: no
+Removing all non-manifold edges (edges with > 2 connected faces) unless they cross multiple regions
+
+Initial Feature set:
+    points : 8
+    edges  : 12
+    of which
+        region edges   : 8
+        external edges : 4
+        internal edges : 0
+
+Final Feature set:
+    points : 8
+    of which
+        convex             : 8
+        concave            : 0
+        mixed              : 0
+        non-feature        : 0
+    edges  : 12
+    of which
+        external edges     : 12
+        internal edges     : 0
+        flat edges         : 0
+        open edges         : 0
+        multiply connected : 0
+
+Writing extendedFeatureEdgeMesh to "<work>/R2/named/constant/extendedFeatureEdgeMesh/duct_named.extendedFeatureEdgeMesh"
+
+Writing featureEdgeMesh to "<work>/R2/named/constant/triSurface/duct_named.eMesh"
+ExecutionTime = 0 s  ClockTime = 0 s
+
+End
+

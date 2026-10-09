@@ -1,0 +1,122 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : createPatch -case <work>/R4/merged_ami -overwrite
+Date   : Oct 09 2026
+Time   : 12:09:53
+Host   : DESKTOP-162QBLJ
+PID    : 3764
+I/O    : uncollated
+Case   : <work>/R4/merged_ami
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+Reading "system/createPatchDict"
+
+
+
+Adding patches to mesh region0
+
+Adding new patch S1 from 
+{
+    type            cyclicAMI;
+    matchTolerance  0.0001;
+    neighbourPatch  S2;
+    transform       noOrdering;
+    nFaces          0;
+    startFace       0;
+}
+
+Adding new patch S2 from 
+{
+    type            cyclicAMI;
+    matchTolerance  0.0001;
+    neighbourPatch  S1;
+    transform       noOrdering;
+    nFaces          0;
+    startFace       0;
+}
+
+Adding new patch AMI1 from 
+{
+    type            cyclicAMI;
+    matchTolerance  0.0001;
+    neighbourPatch  AMI2;
+    transform       noOrdering;
+    nFaces          0;
+    startFace       0;
+}
+
+Adding new patch AMI2 from 
+{
+    type            cyclicAMI;
+    matchTolerance  0.0001;
+    neighbourPatch  AMI1;
+    transform       noOrdering;
+    nFaces          0;
+    startFace       0;
+}
+
+Adding new patch AMI3 from 
+{
+    type            cyclicAMI;
+    matchTolerance  0.0001;
+    neighbourPatch  AMI4;
+    transform       noOrdering;
+    nFaces          0;
+    startFace       0;
+}
+
+Adding new patch AMI4 from 
+{
+    type            cyclicAMI;
+    matchTolerance  0.0001;
+    neighbourPatch  AMI3;
+    transform       noOrdering;
+    nFaces          0;
+    startFace       0;
+}
+
+
+
+
+Repatching mesh region0
+
+Moving faces from patch casing_out to patch 14
+Moving faces from patch guide_in to patch 15
+Moving faces from patch guide_out to patch 16
+Moving faces from patch runner_in to patch 17
+Moving faces from patch runner_out to patch 18
+Moving faces from patch draft_in to patch 19
+Doing topology modification to order faces.
+
+Not synchronising points.
+
+Removing patches with no faces in them.
+
+Removed zero-sized patch casing_out type patch at position 2
+Removed zero-sized patch guide_in type patch at position 3
+Removed zero-sized patch guide_out type patch at position 5
+Removed zero-sized patch runner_in type patch at position 7
+Removed zero-sized patch runner_out type patch at position 9
+Removed zero-sized patch draft_in type patch at position 11
+
+
+Writing repatched mesh region0 to 0
+
+End
+

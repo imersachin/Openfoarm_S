@@ -1,0 +1,63 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      omega;
+}
+
+// Boundary types per patch kind; sources:
+//   inlet: tutorials/incompressible/pimpleFoam/RAS/propeller/0.orig (inlet)
+//   moving: tutorials/incompressible/pimpleFoam/RAS/propeller/0.orig/U ("propeller.*": movingWallVelocity)
+//   outlet: tutorials/incompressible/pimpleFoam/RAS/propeller/0.orig (outlet)
+//   slip: tutorials/incompressible/lumpedPointMotion/building/steady/0.orig/include/environ (slip)
+//   wall: etc/templates/inflowOutflowRotating/0 (wall); U noSlip from tutorials/incompressible/pimpleFoam/RAS/propeller/0.orig/U
+// cyclicAMI patches: caseDicts/setConstraintTypes (as in the propeller case).
+dimensions      [0 0 -1 0 0 0 0];
+internalField   uniform 5.590169944;
+boundaryField
+{
+    #includeEtc "caseDicts/setConstraintTypes"
+    inlet
+    {
+        type            fixedValue;
+        value           $internalField;
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      $internalField;
+        value           $internalField;
+    }
+    lateral_min
+    {
+        type            slip;
+    }
+    lateral_max
+    {
+        type            slip;
+    }
+    axial_min
+    {
+        type            slip;
+    }
+    axial_max
+    {
+        type            slip;
+    }
+    blades
+    {
+        type            omegaWallFunction;
+        value           $internalField;
+    }
+    pole
+    {
+        type            omegaWallFunction;
+        value           $internalField;
+    }
+    pole_rot
+    {
+        type            omegaWallFunction;
+        value           $internalField;
+    }
+}

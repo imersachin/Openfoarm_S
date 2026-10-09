@@ -1,0 +1,74 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : surfaceFeatureExtract -case <work>/R5/hole_outer
+Date   : Oct 09 2026
+Time   : 12:11:02
+Host   : DESKTOP-162QBLJ
+PID    : 4634
+I/O    : uncollated
+Case   : <work>/R5/hole_outer
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+
+Note: Feature line extraction only valid on closed manifold surfaces
+
+Reading surfaceFeatureExtractDict
+
+Surfaces     : zone_annulus.stl
+Output       : zone_annulus
+Load options : offset
+Write options: writeObj=no writeVTK=off
+
+Statistics:
+Triangles    : 768 in 2 region(s)
+Vertices     : 384
+Bounding Box : (-0.77999997 -0.77999997 -0.66000003) (0.77999997 0.77999997 0.66000003)
+
+Constructing feature set from included angle 150
+Selecting edges based purely on geometric tests: no
+Removing all non-manifold edges (edges with > 2 connected faces) unless they cross multiple regions
+
+Initial Feature set:
+    points : 0
+    edges  : 384
+    of which
+        region edges   : 192
+        external edges : 192
+        internal edges : 0
+
+Final Feature set:
+    points : 384
+    of which
+        convex             : 0
+        concave            : 0
+        mixed              : 0
+        non-feature        : 384
+    edges  : 384
+    of which
+        external edges     : 384
+        internal edges     : 0
+        flat edges         : 0
+        open edges         : 0
+        multiply connected : 0
+
+Writing extendedFeatureEdgeMesh to "<work>/R5/hole_outer/constant/extendedFeatureEdgeMesh/zone_annulus.extendedFeatureEdgeMesh"
+
+Writing featureEdgeMesh to "<work>/R5/hole_outer/constant/triSurface/zone_annulus.eMesh"
+ExecutionTime = 0 s  ClockTime = 0 s
+
+End
+

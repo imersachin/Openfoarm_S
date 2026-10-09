@@ -1,0 +1,26 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      topoSetDict;
+}
+
+// The whole sub-mesh becomes the rotating cell zone (V0 E1 rotor topoSetDict).
+actions
+(
+    {
+        name    rotatingCells;
+        type    cellSet;
+        action  new;
+        source  boxToCell;
+        box     (-1e3 -1e3 -1e3) (1e3 1e3 1e3);
+    }
+    {
+        name    rotating;
+        type    cellZoneSet;
+        action  new;
+        source  setToCellZone;
+        set     rotatingCells;
+    }
+);
