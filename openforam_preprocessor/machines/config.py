@@ -130,6 +130,9 @@ class ImportedSurface(BaseModel):
     # At least one: checked after the files, not as a tuple min_length (with it,
     # pydantic also reports "too short" whenever one file is invalid).
     files: tuple[StlSource, ...]
+    # Region -> refinement level (min = max) of a region that is not a joint,
+    # such as guide vanes or runner blades inside a part (G5; G0 R4 used 2).
+    refinement: dict[Name, Annotated[int, Field(ge=0, le=10)]] = Field(default_factory=dict)
 
     def file_regions(self) -> tuple[str, ...] | None:
         """Region names known without reading the files (the file stems), or None."""
@@ -304,12 +307,15 @@ class PatchConfig(BaseModel):
 
 class JointConfig(BaseModel):
     """Two coincident regions of separately meshed imported parts; meshed as a
-    cyclicAMI pair (section 11), never stitched."""
+    cyclicAMI pair named after the two regions (section 11; K1), never stitched."""
 
     model_config = _STRICT
 
     first: Name
     second: Name
+    # Refinement of both regions; the coarser side gets the finer side's cell
+    # size (as F3). G0 R4 used 1.
+    level: int = Field(default=1, ge=0, le=10)
 
 
 class ExportConfig(BaseModel):

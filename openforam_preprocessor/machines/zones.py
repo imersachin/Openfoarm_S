@@ -10,6 +10,9 @@ side) and <zone>_<interface>_rot (zone side). The meshes carry them first as
 without changing its type, so the cyclicAMI patches must be new names.
 
 A split body's part inside its zone is the patch <body>_rotating (F3).
+
+Joints between imported surfaces (G5; K1) are cyclicAMI pairs named after
+their two regions, meshed first as <region>_src for the same reason.
 """
 
 from __future__ import annotations
@@ -35,6 +38,14 @@ SOURCE_SUFFIX = "_src"
 
 
 @dataclass(frozen=True)
+class AmiPair:
+    """Two patches createPatch makes one cyclicAMI pair, each from <name>_src."""
+
+    first: str
+    second: str
+
+
+@dataclass(frozen=True)
 class Interface:
     zone: str
     region: str  # OUTER or INNER: the zone surface region
@@ -47,11 +58,24 @@ class Interface:
     def rotating(self) -> str:
         return f"{self.zone}_{self.region}_rot"
 
+    @property
+    def pair(self) -> AmiPair:
+        return AmiPair(self.stationary, self.rotating)
+
 
 def interfaces(zone: RotatingZone) -> tuple[Interface, ...]:
+    """The generated interfaces of a cylinder zone. An imported zone has none:
+    it meets the domain parts at joints (G5)."""
     shape = zone.shape
-    hole = isinstance(shape, CylinderZone) and shape.hole_diameter is not None
+    if not isinstance(shape, CylinderZone):
+        return ()
+    hole = shape.hole_diameter is not None
     return (Interface(zone.name, OUTER), *((Interface(zone.name, INNER),) if hole else ()))
+
+
+def joint_pairs(config: MachineProjectConfig) -> tuple[AmiPair, ...]:
+    """Joints between imported surfaces, named after their regions (K1)."""
+    return tuple(AmiPair(j.first, j.second) for j in config.joints)
 
 
 def split_patch(body: BodyConfig) -> str:
@@ -70,6 +94,10 @@ def generated_names(config: MachineProjectConfig) -> dict[str, str]:
     for body in config.bodies:
         if body.motion is Motion.SPLIT:
             names[split_patch(body)] = f"split body '{body.name}'"
+    for pair in joint_pairs(config):
+        for name in (pair.first, pair.second):
+            names[name] = f"joint '{pair.first}' / '{pair.second}'"
+            names[name + SOURCE_SUFFIX] = f"joint '{pair.first}' / '{pair.second}'"
     return names
 
 

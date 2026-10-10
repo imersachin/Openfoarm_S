@@ -100,8 +100,10 @@ def test_stationary_pole_in_annular_zone_hole_passes(tmp_path: Path) -> None:
     assert summary(issues) == [("BODY_CROSSES_DOMAIN_BOUNDARY", "WARNING")]
 
 
-def test_francis_needs_the_imported_surface_checks_later(francis: dict[str, Any]) -> None:
-    assert summary(found(francis)) == [("IMPORTED_SURFACES_NOT_CHECKED", "INFO")]
+def test_francis_warns_only_for_the_wall_in_the_runner(francis: dict[str, Any]) -> None:
+    # G5 changed this test: the INFO for unchecked imported zones is gone, and the
+    # fixture's runner_wall (WALL in the rotating runner) is a WARNING (K6).
+    assert summary(found(francis)) == [("WALL_IN_ROTATING_ZONE", "WARNING")]
 
 
 def test_duct_with_files_per_patch_passes(duct: dict[str, Any]) -> None:

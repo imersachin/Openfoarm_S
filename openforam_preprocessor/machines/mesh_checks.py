@@ -6,7 +6,8 @@ STL lost its inlet and outlet, and an open surface kept the background box.
 These checks read the mesh's boundary file and catch both.
 
 After assembly (G3) the merged mesh is also checked for its interface pairs,
-cell zones, region count and AMI weights (section 11; decision 4 after G0).
+cell zones, region count and AMI weights (section 11; decision 4 after G0),
+and from G5 for the pairs of the joints too.
 """
 
 from __future__ import annotations
@@ -174,20 +175,20 @@ def check_assembly(cases: MachineCases, merged_dir: Path, check_mesh_log: str,
     if ami_log is not None:
         weights = {(w.source, w.target): w for w in parse_ami_weights(ami_log)}
         low, high = ami_range
-        for face in cases.interfaces:
-            w = (weights.get((face.stationary, face.rotating))
-                 or weights.get((face.rotating, face.stationary)))
+        for pair in cases.pairs:  # zone interfaces and joints
+            w = (weights.get((pair.first, pair.second))
+                 or weights.get((pair.second, pair.first)))
             if w is None:
                 issues.append(_issue(
                     IssueSeverity.WARNING, "AMI_WEIGHTS_UNKNOWN",
-                    f"No AMI weights were reported for {face.stationary} / {face.rotating}.",
-                    "Inspect the postProcess log.", pair=[face.stationary, face.rotating]))
+                    f"No AMI weights were reported for {pair.first} / {pair.second}.",
+                    "Inspect the postProcess log.", pair=[pair.first, pair.second]))
             elif w.minimum < low or w.maximum > high:
                 issues.append(_issue(
                     IssueSeverity.WARNING, "AMI_WEIGHTS_OUT_OF_RANGE",
-                    f"AMI sum(weights) of {face.stationary} / {face.rotating} spans "
+                    f"AMI sum(weights) of {pair.first} / {pair.second} spans "
                     f"{w.minimum:.3g}-{w.maximum:.3g}, outside {low:g}-{high:g}.",
                     "Make the two sides of the interface similarly fine, and check no body "
-                    "crosses it.", pair=[face.stationary, face.rotating],
+                    "crosses it.", pair=[pair.first, pair.second],
                     minimum=w.minimum, maximum=w.maximum, range=[low, high]))
     return tuple(issues)

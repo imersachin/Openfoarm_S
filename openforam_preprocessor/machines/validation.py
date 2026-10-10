@@ -8,11 +8,11 @@ issue; BLOCKING and ERROR stop a run. Thresholds are parameters.
 - check_rotating_walls: rotating-wall regions against the surfaces holding them.
 - check_geometry: rules that need the bodies' surfaces (load_bodies).
 
-Imported surfaces (imported domain parts and zones) are read here only for
-their region names, to place rotating walls. Their
-closedness, region names, the binary-STL check and the containment of bodies
-in them come with the imported-domain reader (G2) and zones (G3); a
-configuration that uses them gets an INFO issue saying so.
+- check_imported, check_imported_placement, check_imported_zones, check_joints:
+  rules that need the imported surfaces as read (G2, G3, G5).
+
+check_config reads no imported surface; a configuration that uses them gets
+an INFO issue saying the file checks are in validate_machine.
 """
 
 from __future__ import annotations
@@ -64,7 +64,9 @@ from machines.domains import (
     stl_region_names,
     surface_grid,
 )
+from machines.joints import JointLimits, coincide, measure_joint
 from machines.presets import DOMAIN_CHOICES
+from machines.surface_sampling import surface_points
 from machines.vawt_migration import NotVawtConvertible, to_vawt
 from machines.zones import generated_names
 from vawt.case_generator import RESERVED_NAMES, Grid
@@ -107,6 +109,8 @@ class MachineThresholds:
     # AMI sum(weights) outside this range is a WARNING after meshing (section 18,
     # decision 4): mesh-consistency flags from G0, not accuracy limits.
     ami_weights_range: tuple[float, float] = (0.85, 1.5)
+    # Joint regions must coincide (K2; provisional, unverified on real CAD).
+    joints: JointLimits = field(default_factory=JointLimits)
     # The VAWT checks run for a VAWT project that converts to the VAWT model.
     vawt: ValidationThresholds = field(default_factory=ValidationThresholds)
 
@@ -332,7 +336,8 @@ def check_config(config: MachineProjectConfig, thresholds: MachineThresholds | N
     limits = thresholds or MachineThresholds()
     return (*_name_issues(config), *_machine_issues(config), *_patch_issues(config, owners),
             *_joint_issues(config, owners), *_zone_issues(config, limits),
-            *_grid_point_issues(config, limits), *_imported_notice(config))
+            *_imported_zone_rules(config), *_grid_point_issues(config, limits),
+            *_imported_notice(config))
 
 
 _T = TypeVar("_T", str, tuple[SourceKind, str])
@@ -365,7 +370,10 @@ def _name_issues(config: MachineProjectConfig) -> list[Issue]:
                 f"Choose another name; reserved: {', '.join(sorted(RESERVED_PATCH_NAMES))}.",
                 field=f"patches.{i}.name", name=patch.name))
     generated = generated_names(config)
+    joined = {name for joint in config.joints for name in (joint.first, joint.second)}
     for i, patch in enumerate(config.patches):
+        if patch.source.kind is SourceKind.REGION and patch.source.ref in joined:
+            continue  # JOINT_REGION_IS_PATCH
         if patch.name in generated:
             issues.append(_blocking(
                 "RESERVED_PATCH_NAME",
@@ -628,6 +636,31 @@ def _overlap_issue(first: RotatingZone, a: _Cylinder,
         explanation="Zones on different axes are compared by their bounding boxes only.")
 
 
+def _imported_zone_rules(config: MachineProjectConfig) -> list[Issue]:
+    """An imported zone meets imported domain parts at joints, and holds only
+    rotating bodies (G5)."""
+    issues: list[Issue] = []
+    imported = {z.name: i for i, z in enumerate(config.rotating_zones)
+                if isinstance(z.shape, ImportedZone)}
+    if imported and not isinstance(config.domain, ImportedDomain):
+        issues.extend(_blocking(
+            "IMPORTED_ZONE_NEEDS_IMPORTED_DOMAIN",
+            f"Rotating zone '{name}' is imported, but the domain is not.",
+            "Import the domain as parts and join them to the zone's regions, or use a "
+            "CYLINDER zone.", explanation="An imported zone is a separately meshed part "
+            "that meets the stationary parts at joints (cyclicAMI pairs).",
+            field=f"rotating_zones.{i}.shape") for name, i in imported.items())
+    for i, body in enumerate(config.bodies):
+        if body.zone in imported and body.motion is not Motion.ROTATING:
+            issues.append(_blocking(
+                "BODY_MOTION_IN_IMPORTED_ZONE",
+                f"Body '{body.name}' is {body.motion.value} in imported zone '{body.zone}'; "
+                "only a rotating body can be in an imported zone.",
+                "Make the body ROTATING, or include its stationary part in a domain part.",
+                field=f"bodies.{i}.motion", body=body.name))
+    return issues
+
+
 def _imported_notice(config: MachineProjectConfig) -> list[Issue]:
     if not _imported_surfaces(config):
         return []
@@ -636,20 +669,9 @@ def _imported_notice(config: MachineProjectConfig) -> list[Issue]:
         "check_config does not read the imported surfaces: their files and the placement "
         "of bodies and zones in them are checked by validate_machine.",
         "Run validate_machine for the full checks.",
-        explanation="check_imported checks the files; check_imported_placement checks "
-        "bodies and zones against imported domain parts. Imported zones are meshed "
-        "and checked from G5.")]
-
-
-def _imported_zone_notice(config: MachineProjectConfig) -> list[Issue]:
-    names = [z.name for z in config.rotating_zones if isinstance(z.shape, ImportedZone)]
-    if not names:
-        return []
-    return [_issue(
-        IssueSeverity.INFO, "IMPORTED_SURFACES_NOT_CHECKED",
-        f"Imported rotating zones ({', '.join(names)}) are not checked against bodies, "
-        "and are meshed, from G5.", "Check the bodies' placement in these zones.",
-        zones=names)]
+        explanation="check_imported checks the files; check_imported_placement and "
+        "check_imported_zones check bodies and zones against imported parts and zones; "
+        "check_joints checks that joined regions coincide.")]
 
 
 # --- geometry -----------------------------------------------------------------------------
@@ -673,33 +695,6 @@ def _geometry(source: StlSource, name: str) -> RotorGeometryConfig:
     return RotorGeometryConfig(
         source_path=source.source_path, source_units=source.source_units, scale=source.scale,
         rotation_deg=source.rotation_deg, translation=source.translation, patch_name=name)
-
-
-def surface_points(mesh: trimesh.Trimesh, spacing: float,
-                   max_points: int) -> tuple[np.ndarray, float]:
-    """Vertices plus points on every face, at most about `spacing` apart.
-
-    Returns the points and the spacing used (wider when max_points is reached).
-    """
-    vertices = np.asarray(mesh.vertices, dtype=float)
-    triangles = vertices[np.asarray(mesh.faces)]
-    if len(triangles) == 0:
-        return vertices, spacing
-    edges = np.linalg.norm(triangles - np.roll(triangles, 1, axis=1), axis=2).max(axis=1)
-    divisions = np.maximum(1, np.ceil(edges / spacing)).astype(np.int64)
-    total = int(((divisions + 1) * (divisions + 2) // 2).sum())
-    if total > max_points:
-        factor = math.sqrt(total / max_points)
-        spacing *= factor
-        divisions = np.maximum(1, np.ceil(divisions / factor)).astype(np.int64)
-    points = [vertices]
-    for n in np.unique(divisions[divisions > 1]):
-        a, b = np.meshgrid(np.arange(n + 1), np.arange(n + 1), indexing="ij")
-        keep = a + b <= n
-        weights = np.column_stack([a[keep], b[keep], n - a[keep] - b[keep]]) / n
-        points.append(np.einsum("wk,mkd->mwd", weights,
-                                triangles[divisions == n]).reshape(-1, 3))
-    return np.vstack(points), spacing
 
 
 def check_geometry(config: MachineProjectConfig, meshes: Mapping[str, trimesh.Trimesh],
@@ -899,10 +894,13 @@ def check_imported_placement(config: MachineProjectConfig, surfaces: Iterable[Su
     if not isinstance(config.domain, ImportedDomain):
         return ()
     limits = thresholds or MachineThresholds()
+    surfaces = list(surfaces)
     parts = [s for s in surfaces if s.owner.startswith("domain.parts.") and s.closed]
     if len(parts) != len(config.domain.parts):
         return ()  # an unreadable or open part is already BLOCKING
-    unions = [p.union() for p in parts]
+    # Imported zones are separately meshed parts of the fluid too (G5).
+    zones = [s for s in surfaces if s.owner.startswith("rotating_zones.") and s.closed]
+    unions = [s.union() for s in (*parts, *zones)]
     cell = min(p.cell_size for p in config.domain.parts)
 
     def inside(points: np.ndarray) -> np.ndarray:
@@ -911,7 +909,7 @@ def check_imported_placement(config: MachineProjectConfig, surfaces: Iterable[Su
             hit |= contains_points(points, union.vertices, union.faces)
         return hit
 
-    regions = [(r.name, r.mesh) for p in parts for r in p.regions]
+    regions = [(r.name, r.mesh) for p in (*parts, *zones) for r in p.regions]
     region_points = [surface_points(m, limits.sample_spacing_cells * cell,
                                     limits.max_sample_points)[0] for _, m in regions]
     tree = cKDTree(np.vstack(region_points))
@@ -946,6 +944,89 @@ def check_imported_placement(config: MachineProjectConfig, surfaces: Iterable[Su
                 "ZONE_OUTSIDE_DOMAIN",
                 f"Rotating zone '{zone.name}' is not inside the imported domain.",
                 "Move or resize the zone.", field=f"rotating_zones.{i}"))
+    return tuple(issues)
+
+
+# --- imported zones and joints (G5) ------------------------------------------------------------
+
+def check_imported_zones(config: MachineProjectConfig, surfaces: Iterable[SurfaceInfo],
+                         meshes: Mapping[str, trimesh.Trimesh],
+                         thresholds: MachineThresholds | None = None) -> tuple[Issue, ...]:
+    """Bodies against closed imported zones: a zone's rotating bodies lie inside
+    it; every other body lies outside it (it would cross the zone's joints)."""
+    limits = thresholds or MachineThresholds()
+    read = {s.owner: s for s in surfaces}
+    issues: list[Issue] = []
+    for i, zone in enumerate(config.rotating_zones):
+        surface = read.get(f"rotating_zones.{i}")
+        if not isinstance(zone.shape, ImportedZone) or surface is None or not surface.closed:
+            continue  # an unreadable or open surface is already BLOCKING
+        union = surface.union()
+        for body in config.bodies:
+            mesh = meshes.get(body.name)
+            if mesh is None:
+                continue
+            points, spacing = surface_points(mesh, limits.sample_spacing_cells * zone.cell_size,
+                                             limits.max_sample_points)
+            inside = contains_points(points, union.vertices, union.faces)
+            details: dict[str, Any] = {"body": body.name, "zone": zone.name,
+                                       "sample_spacing": spacing}
+            if body.zone == zone.name:
+                if not inside.all() and body.motion is Motion.ROTATING:
+                    issues.append(_geometry_issue(
+                        IssueSeverity.BLOCKING, "ROTATING_BODY_OUTSIDE_ZONE",
+                        f"Rotating body '{body.name}' is not fully inside imported rotating "
+                        f"zone '{zone.name}'.", "Check the body's and the zone's units and "
+                        "transforms; a rotating body lies inside its zone.",
+                        outside_points=int((~inside).sum()), **details))
+            elif inside.any():
+                stationary = body.motion is Motion.STATIONARY
+                issues.append(_geometry_issue(
+                    IssueSeverity.BLOCKING,
+                    "STATIONARY_BODY_CROSSES_INTERFACE" if stationary else "BODY_IN_OTHER_ZONE",
+                    f"{'Stationary' if stationary else body.motion.value.capitalize()} body "
+                    f"'{body.name}' enters imported rotating zone '{zone.name}'.",
+                    "Move the body, or check its units and transform.",
+                    inside_points=int(inside.sum()), **details))
+    return tuple(issues)
+
+
+def _surface_cells(config: MachineProjectConfig,
+                   surfaces: Iterable[SurfaceInfo]) -> dict[str, tuple[str, Any, float]]:
+    """Region -> (owner, mesh, cell size of its surface)."""
+    return {r.name: (s.owner, r.mesh, _owned_by(config, s.owner)[2])
+            for s in surfaces if s.readable for r in s.regions}
+
+
+def check_joints(config: MachineProjectConfig, surfaces: Iterable[SurfaceInfo],
+                 thresholds: MachineThresholds | None = None) -> tuple[Issue, ...]:
+    """K2: the two regions of every joint coincide. The issue reports the
+    measured area difference and largest point distance (limits provisional,
+    unverified on real CAD)."""
+    limits = (thresholds or MachineThresholds()).joints
+    regions = _surface_cells(config, surfaces)
+    issues = []
+    for i, joint in enumerate(config.joints):
+        first, second = regions.get(joint.first), regions.get(joint.second)
+        if first is None or second is None or first[0] == second[0]:
+            continue  # unknown, unreadable or same-part regions are reported elsewhere
+        cell = min(first[2], second[2])
+        measure = measure_joint(first[1], second[1], cell, limits)
+        if coincide(measure, cell, limits):
+            continue
+        issues.append(_geometry_issue(
+            IssueSeverity.BLOCKING, "JOINT_REGIONS_DO_NOT_COINCIDE",
+            f"Joint '{joint.first}' / '{joint.second}': the regions differ in area by "
+            f"{100 * measure.area_difference:.3g}% (limit "
+            f"{100 * limits.max_area_difference:g}%) and lie up to {measure.max_distance:.4g} m "
+            f"apart (limit {limits.max_distance_cells:g} cell = "
+            f"{limits.max_distance_cells * cell:.4g} m).",
+            "Check that the two parts share this surface in CAD, and their units and "
+            "transforms.", explanation="A joint becomes a cyclicAMI pair; regions that do "
+            "not coincide leave faces without a partner. The limits are provisional, "
+            "unverified on real CAD (thresholds.joints).", field=f"joints.{i}",
+            **measure.as_details(), max_area_difference=limits.max_area_difference,
+            max_distance_limit=limits.max_distance_cells * cell, cell_size=cell))
     return tuple(issues)
 
 
@@ -1076,26 +1157,42 @@ def surface_owners(surfaces: Iterable[SurfaceInfo]) -> dict[str, str] | None:
 
 def check_rotating_walls(config: MachineProjectConfig,
                          owners: Owners | None = None) -> tuple[Issue, ...]:
-    """Every rotating-wall region lies in a rotating zone (an imported zone).
+    """Every rotating-wall region lies in a rotating zone (an imported zone);
+    a WALL region inside an imported zone is a WARNING (K6).
 
     A body's rotating wall is covered by BODY_PATCH_TYPE_MISMATCH and
     ROTATING_BODY_OUTSIDE_ZONE; a domain face by ROTATING_WALL_ON_DOMAIN.
     """
     walls = [(i, p) for i, p in enumerate(config.patches)
-             if p.type is PatchType.ROTATING_WALL and p.source.kind is SourceKind.REGION]
+             if p.type in (PatchType.ROTATING_WALL, PatchType.WALL)
+             and p.source.kind is SourceKind.REGION]
     if not walls:
         return ()
     known = owners if owners is not None else region_owners(config)
-    return tuple(
-        _issue(IssueSeverity.ERROR, "ROTATING_WALL_OUTSIDE_ZONE",
-               f"Rotating-wall patch '{patch.name}' comes from region "
-               f"'{patch.source.ref}' of a stationary domain part ({owner}).",
-               "Make the patch a WALL, or import the region as part of a rotating zone.",
-               explanation="A rotating wall moves with its zone; a stationary part's "
-               "mesh does not move.",
-               field=f"patches.{i}.type", patch=patch.name, owner=owner)
-        for i, patch in walls
-        if (owner := known.get(patch.source.ref, "")).startswith("domain.parts."))
+    issues = []
+    for i, patch in walls:
+        owner = known.get(patch.source.ref, "")
+        if patch.type is PatchType.ROTATING_WALL and owner.startswith("domain.parts."):
+            issues.append(_issue(
+                IssueSeverity.ERROR, "ROTATING_WALL_OUTSIDE_ZONE",
+                f"Rotating-wall patch '{patch.name}' comes from region "
+                f"'{patch.source.ref}' of a stationary domain part ({owner}).",
+                "Make the patch a WALL, or import the region as part of a rotating zone.",
+                explanation="A rotating wall moves with its zone; a stationary part's "
+                "mesh does not move.",
+                field=f"patches.{i}.type", patch=patch.name, owner=owner))
+        elif patch.type is PatchType.WALL and owner.startswith("rotating_zones."):
+            zone = config.rotating_zones[int(owner.rsplit(".", 1)[1])].name
+            issues.append(_issue(
+                IssueSeverity.WARNING, "WALL_IN_ROTATING_ZONE",
+                f"Patch '{patch.name}' is a WALL, but region '{patch.source.ref}' belongs to "
+                f"rotating zone '{zone}': a stationary wall inside a rotating mesh.",
+                "Use ROTATING_WALL if the surface turns with the zone (a runner's crown, "
+                "band or blades). Keep WALL only for a surface that stands still.",
+                explanation="Rare in a Francis runner. Its velocity condition comes with "
+                "case setup (G6), which holds a WALL at zero velocity in the absolute frame.",
+                field=f"patches.{i}.type", patch=patch.name, zone=zone, owner=owner))
+    return tuple(issues)
 
 
 # --- imported surfaces (section 5.3; decisions E3, E4) ----------------------------------------
@@ -1149,6 +1246,7 @@ def check_imported(config: MachineProjectConfig, surfaces: Iterable[SurfaceInfo]
                 owner=surface.owner, open_edges=surface.open_edges))
         issues.extend(_imported_point_issues(config, surface, limits))
 
+    issues.extend(_refinement_issues(config, surfaces))
     names = [r.name for s in surfaces for r in s.regions]
     for name in sorted(set(names)):
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) or len(name) > 64:
@@ -1169,6 +1267,34 @@ def check_imported(config: MachineProjectConfig, surfaces: Iterable[SurfaceInfo]
             "joints refer to regions by name).", region=name,
             owners=sorted({s.owner for s in surfaces for r in s.regions if r.name == name})))
     return tuple(issues)
+
+
+def _refinement_issues(config: MachineProjectConfig,
+                       surfaces: Iterable[SurfaceInfo]) -> list[Issue]:
+    """Refined regions belong to their surface and are not joints (a joint's
+    level is the joint's own)."""
+    owned = dict(_owned_surfaces(config))
+    joined = {name for joint in config.joints for name in (joint.first, joint.second)}
+    issues = []
+    for surface in surfaces:
+        if not surface.readable or surface.owner not in owned:
+            continue
+        regions = {r.name for r in surface.regions}
+        for region in sorted(owned[surface.owner].refinement):
+            field = f"{surface.owner}.refinement.{region}"
+            if region not in regions:
+                issues.append(_blocking(
+                    "REFINEMENT_REGION_UNKNOWN",
+                    f"'{surface.name}' has no region '{region}' to refine.",
+                    f"Name one of its regions: {', '.join(sorted(regions))}.",
+                    field=field, region=region))
+            elif region in joined:
+                issues.append(_blocking(
+                    "REFINEMENT_ON_JOINT",
+                    f"Region '{region}' is a joint; it is refined to the joint's level.",
+                    "Remove it from the refinement and set the joint's level instead.",
+                    field=field, region=region))
+    return issues
 
 
 def _imported_point_issues(config: MachineProjectConfig, surface: SurfaceInfo,
@@ -1264,7 +1390,8 @@ def check_all(config: MachineProjectConfig,
         *check_rotating_walls(config, owners), *check_layers(config, thresholds), *loaded,
         *check_geometry(config, meshes, thresholds),
         *check_imported_placement(config, surfaces, meshes, thresholds),
-        *check_vawt(config, meshes, thresholds), *_imported_zone_notice(config)))
+        *check_imported_zones(config, surfaces, meshes, thresholds),
+        *check_joints(config, surfaces, thresholds), *check_vawt(config, meshes, thresholds)))
     return CheckedConfig(issues, meshes, tuple(surfaces))
 
 

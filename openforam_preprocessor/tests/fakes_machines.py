@@ -59,6 +59,14 @@ def read_zones(poly: Path) -> list[str]:
     return re.findall(r"^(\w+)\n\{", path.read_text("utf-8"), re.M) if path.is_file() else []
 
 
+PARTS = "fakeParts"  # how many separately meshed parts a fake mesh holds
+
+
+def read_parts(poly: Path) -> int:
+    path = poly / PARTS
+    return int(path.read_text("utf-8")) if path.is_file() else 1
+
+
 class FakeMachineRunner(OpenFOAMRunner):
     """fail: command, or (command, case), that exits 1.
     outcome: {command: TIMEOUT | CANCELLED}.
@@ -130,6 +138,7 @@ class FakeMachineRunner(OpenFOAMRunner):
         rows = re.findall(r"^\s{4}(\w+) \{ type (\w+);", block.read_text("utf-8"), re.M)
         write_boundary(poly, {n: (t, 10) for n, t in rows})
         (poly / "cellZones").unlink(missing_ok=True)
+        (poly / PARTS).write_text("1", encoding="utf-8")
         return "blockMesh End\n"
 
     def _surfaceFeatureExtract(self, argv: Sequence[str], case: Path) -> str:  # noqa: N802
@@ -171,6 +180,7 @@ class FakeMachineRunner(OpenFOAMRunner):
             (poly / item).write_text(f"{item} {mesh_id}", encoding="utf-8")
         write_boundary(poly, {**read_boundary(poly), **read_boundary(other)})
         write_zones(poly, [*read_zones(poly), *read_zones(other)])
+        (poly / PARTS).write_text(str(read_parts(poly) + read_parts(other)), encoding="utf-8")
         return "mergeMeshes End\n"
 
     def _createPatch(self, argv: Sequence[str], case: Path) -> str:  # noqa: N802
@@ -194,8 +204,7 @@ class FakeMachineRunner(OpenFOAMRunner):
         return ""
 
     def _checkMesh(self, argv: Sequence[str], case: Path) -> str:  # noqa: N802
-        regions = self.regions if self.regions is not None else 1 + len(
-            read_zones(self._poly(case)))
+        regions = self.regions if self.regions is not None else read_parts(self._poly(case))
         region_line = (f"   *Number of regions: {regions}\n" if regions != 1
                        else "    Number of regions: 1 (OK).\n")
         return ("Mesh stats\n    points:           1200\n    faces:            3400\n"
@@ -204,13 +213,17 @@ class FakeMachineRunner(OpenFOAMRunner):
                 "Mesh OK.\n")
 
     def _postProcess(self, argv: Sequence[str], case: Path) -> str:  # noqa: N802
+        # Each pair once, source first, as listed in createPatchDict.
         low, high = self.weights
-        stat = [n for n, (t, _) in read_boundary(self._poly(case)).items()
-                if t == "cyclicAMI" and n.endswith("_stat")]
+        ami = {n for n, (t, _) in read_boundary(self._poly(case)).items() if t == "cyclicAMI"}
+        listed = re.findall(r"name (\w+);.*?neighbourPatch\s+(\w+);",
+                            (case / "system/createPatchDict").read_text("utf-8"), re.S)
+        pairs = [(s, t) for k, (s, t) in enumerate(listed)
+                 if s in ami and (t, s) not in listed[:k]]
         return "".join(
-            f"AMI: Creating AMI for source:{s} and target:{s.removesuffix('_stat')}_rot\n"
+            f"AMI: Creating AMI for source:{s} and target:{t}\n"
             f"AMI: Patch source sum(weights) min:{low} max:{high} average:1\n"
-            f"AMI: Patch target sum(weights) min:{low} max:{high} average:1\n" for s in stat)
+            f"AMI: Patch target sum(weights) min:{low} max:{high} average:1\n" for s, t in pairs)
 
     @staticmethod
     def _result(argv: Sequence[str], case_root: Path, log: Path, status: RunStatus,

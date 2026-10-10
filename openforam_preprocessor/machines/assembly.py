@@ -8,12 +8,17 @@ to several bodies and zones, as proven in G0 (R3 HAWT, R5 pole):
 - zone_<name>: one per cylinder zone: the zone's background block cut to the
   zone surface, with its rotating bodies and the inner parts of its split
   bodies; topoSet makes the cell zone <name>.
+- zone_<name> of an imported zone (G5; K3): the zone's own surface cut out
+  of its background block, as an imported part, with its rotating bodies;
+  topoSet puts every cell in the cell zone <name> (G0 R4).
 - merged: the domain mesh with every zone added (mergeMeshes); createPatch
-  turns each interface into a cyclicAMI pair; postProcess measures the AMI
-  weights on the static mesh (section 18, decision 4).
+  turns each interface and each joint into a cyclicAMI pair; postProcess
+  measures the AMI weights on the static mesh (section 18, decision 4).
 
-Imported zones and joints between imported parts are G5 (F6). The VAWT
-workflow keeps its own generator. Identical input gives identical files.
+A joint's regions are meshed as <region>_src in their own surfaces and
+refined to the joint's level, the coarser side to the finer side's cell size
+(K1). The VAWT workflow keeps its own generator. Identical input gives
+identical files.
 """
 
 from __future__ import annotations
@@ -43,6 +48,8 @@ from machines.config import (
     CylinderDomain,
     CylinderZone,
     ImportedDomain,
+    ImportedSurface,
+    ImportedZone,
     LayersConfig,
     MachineProjectConfig,
     Motion,
@@ -50,13 +57,15 @@ from machines.config import (
     RotatingZone,
     SourceKind,
 )
-from machines.domains import SurfaceInfo
+from machines.domains import SurfaceInfo, surface_grid
 from machines.patches import openfoam_type
 from machines.zones import (
     INNER,
     SOURCE_SUFFIX,
+    AmiPair,
     Interface,
     interfaces,
+    joint_pairs,
     split_patch,
     zone_grid,
     zone_surface,
@@ -94,10 +103,16 @@ class MachineCases:
     interfaces: tuple[Interface, ...]
     # Patch -> OpenFOAM type to set on the merged mesh (untyped meshes, H3).
     retype: dict[str, str] = field(default_factory=dict)
+    joints: tuple[AmiPair, ...] = ()  # between imported surfaces (G5)
 
     @property
     def all(self) -> tuple[DomainCase, ...]:
         return (*self.domain, *self.zones, self.merged)
+
+    @property
+    def pairs(self) -> tuple[AmiPair, ...]:
+        """Every cyclicAMI pair: the zone interfaces, then the joints."""
+        return (*(face.pair for face in self.interfaces), *self.joints)
 
 
 # --- dictionaries -------------------------------------------------------------------------
@@ -302,7 +317,7 @@ actions
 """
 
 
-def _create_patch_dict(pairs: Sequence[Interface]) -> str:
+def _create_patch_dict(pairs: Sequence[AmiPair]) -> str:
     # Entries as the propeller tutorial's createPatchDict and V0 E1.
     def entry(name: str, neighbour: str, source: str) -> str:
         return f"""    {{
@@ -318,9 +333,9 @@ def _create_patch_dict(pairs: Sequence[Interface]) -> str:
         patches ({source});
     }}"""
     entries = []
-    for face in pairs:
-        entries.append(entry(face.stationary, face.rotating, face.stationary + SOURCE_SUFFIX))
-        entries.append(entry(face.rotating, face.stationary, face.rotating + SOURCE_SUFFIX))
+    for pair in pairs:
+        entries.append(entry(pair.first, pair.second, pair.first + SOURCE_SUFFIX))
+        entries.append(entry(pair.second, pair.first, pair.second + SOURCE_SUFFIX))
     return foam_header("createPatchDict") + f"""
 pointSync false;
 
@@ -393,10 +408,14 @@ class _Content:
 
 
 def _cylinder_zones(config: MachineProjectConfig) -> list[RotatingZone]:
-    zones = [z for z in config.rotating_zones if isinstance(z.shape, CylinderZone)]
-    if len(zones) != len(config.rotating_zones):
-        raise ValueError("Imported rotating zones are meshed from G5.")
-    return zones
+    return [z for z in config.rotating_zones if isinstance(z.shape, CylinderZone)]
+
+
+def _check_imported_zones(config: MachineProjectConfig) -> None:
+    imported = any(isinstance(z.shape, ImportedZone) for z in config.rotating_zones)
+    if imported and not isinstance(config.domain, ImportedDomain):
+        raise ValueError("An imported rotating zone needs an imported domain: it meets the "
+                         "domain parts at joints.")
 
 
 def _domain_content(config: MachineProjectConfig, zones: Sequence[RotatingZone],
@@ -451,6 +470,102 @@ def _own_surface(case: DomainCase, stem: str) -> Surface:
     return Surface(stem, {n: types[n] for n in names}, (0, 0), 0, mesh)
 
 
+def _owner_cell(config: MachineProjectConfig, owner: str) -> float:
+    """The cell size of an imported part or zone, by its configuration path."""
+    section, index = owner.rsplit(".", 1)
+    if section == "domain.parts":
+        assert isinstance(config.domain, ImportedDomain)
+        return config.domain.parts[int(index)].cell_size
+    return config.rotating_zones[int(index)].cell_size
+
+
+def joint_levels(config: MachineProjectConfig,
+                 surfaces: Sequence[SurfaceInfo]) -> dict[str, int]:
+    """Region -> refinement level of every joint region: the joint's level, plus
+    the levels that bring the coarser side to the finer side's cell size."""
+    cells = {r.name: _owner_cell(config, s.owner) for s in surfaces for r in s.regions}
+    levels: dict[str, int] = {}
+    for joint in config.joints:
+        if joint.first not in cells or joint.second not in cells:
+            continue  # an unknown region is BLOCKING before meshing
+        finer = min(cells[joint.first], cells[joint.second])
+        for region in (joint.first, joint.second):
+            levels[region] = joint.level + _level_offset(cells[region], finer)
+    return levels
+
+
+@dataclass(frozen=True)
+class _Imported:
+    """An imported surface ready for its case: the surface, with its regions
+    named after their patches (<region>_src for a joint region), and the
+    patches its mesh must have (name -> type) and may have."""
+
+    surface: Surface
+    expected: dict[str, str]
+    other: tuple[str, ...]
+
+
+def _owner_surface(config: MachineProjectConfig, owner: str) -> ImportedSurface:
+    section, index = owner.rsplit(".", 1)
+    if section == "domain.parts":
+        assert isinstance(config.domain, ImportedDomain)
+        return config.domain.parts[int(index)]
+    shape = config.rotating_zones[int(index)].shape
+    assert isinstance(shape, ImportedZone)
+    return shape
+
+
+def _imported_surface(config: MachineProjectConfig, info: SurfaceInfo, stem: str,
+                      levels: Mapping[str, int], typed: bool) -> _Imported:
+    refinement = _owner_surface(config, info.owner).refinement
+    named: list[tuple[str, trimesh.Trimesh]] = []
+    types: dict[str, str] = {}
+    region_levels: dict[str, tuple[int, int]] = {}
+    expected: dict[str, str] = {}
+    other: list[str] = []
+    for region in info.regions:
+        if region.name in levels:
+            name = region.name + SOURCE_SUFFIX
+            types[name] = expected[name] = "patch"
+            region_levels[name] = (levels[region.name], levels[region.name])
+        else:
+            patch = config.patch_for(SourceKind.REGION, region.name)
+            name = patch.name if patch else region.name
+            types[name] = openfoam_type(patch.type) if patch and typed else "patch"
+            if patch:
+                expected[name] = types[name]
+            else:
+                other.append(name)
+            level = refinement.get(region.name, 0)
+            if level:
+                region_levels[name] = (level, level)
+        named.append((name, region.mesh))
+    # Feature edges at the finest region level (a joint's rim, a blade's edges).
+    features = max((lo for lo, _ in region_levels.values()), default=0)
+    return _Imported(Surface(stem, types, (0, 0), features, _stl(named), region_levels),
+                     expected, tuple(other))
+
+
+def _imported_case(config: MachineProjectConfig, name: str, owner: str, own: _Imported,
+                   grid: Grid, location: Vec3, content: _Content, zone: str | None = None,
+                   unplaced: tuple[str, ...] = ()) -> DomainCase:
+    """A case cut from an imported surface (a domain part or an imported zone)."""
+    surfaces = [own.surface, *content.surfaces]
+    stems = [s.stem for s in surfaces if s.features is not None]
+    dictionaries = {
+        **_common(config),
+        "system/blockMeshDict": _block_mesh_dict(grid, _background_boundary()),
+        "system/surfaceFeatureExtractDict": _feature_extract_dict(stems),
+        "system/snappyHexMeshDict": _snappy_dict(config, surfaces, location, content.layered),
+    }
+    if zone is not None:
+        dictionaries["system/topoSetDict"] = _topo_set_dict(zone, grid)
+    return DomainCase(name, owner, dictionaries,
+                      {f"{SURFACE_DIR}/{s.stem}.stl": s.mesh for s in surfaces},
+                      {**own.expected, **content.expected}, own.other, cut=True,
+                      unplaced=unplaced)
+
+
 def _part_index(surfaces: Sequence[SurfaceInfo], points: np.ndarray) -> int:
     """The imported part holding most of the points."""
     counts = []
@@ -496,15 +611,18 @@ def _domain_cases(config: MachineProjectConfig, zones: Sequence[RotatingZone],
         placed[_part_index(parts, _zone_point(zone))][0].append(zone)
     for body in stationary:
         placed[_part_index(parts, np.asarray(meshes[body.name].vertices))][1].append(body)
+    levels = joint_levels(config, surfaces)
     result = []
-    for case, part, (part_zones, part_bodies) in zip(base, domain.parts, placed, strict=True):
-        if not part_zones and not part_bodies:
-            result.append(case)
-            continue
+    for case, part, info, (part_zones, part_bodies) in zip(base, domain.parts, parts, placed,
+                                                            strict=True):
         content = _domain_content(config, part_zones, part_bodies, meshes, part.cell_size,
                                   wall)
-        result.append(_with_content(case, config, content, part.location_in_mesh,
-                                    _own_surface(case, part.name)))
+        grid = surface_grid(info, part.cell_size)
+        assert grid is not None  # rendered by DomainCaseGenerator: the part was read
+        result.append(_imported_case(
+            config, case.name, case.owner, _imported_surface(config, info, part.name, levels,
+                                                             typed),
+            grid, part.location_in_mesh, content, unplaced=case.unplaced))
     return tuple(result)
 
 
@@ -538,6 +656,33 @@ def _zone_case(config: MachineProjectConfig, zone: RotatingZone,
                       expected, (), cut=True)
 
 
+def _imported_zone_case(config: MachineProjectConfig, zone: RotatingZone,
+                        surfaces: Sequence[SurfaceInfo], meshes: Mapping[str, trimesh.Trimesh],
+                        wall: str, typed: bool) -> DomainCase:
+    """An imported zone (K3): its surface cut out of its background block, with
+    its rotating bodies; every cell in the cell zone (G0 R4)."""
+    owner = f"rotating_zones.{config.rotating_zones.index(zone)}"
+    info = next((s for s in surfaces if s.owner == owner), None)
+    grid = surface_grid(info, zone.cell_size) if info is not None else None
+    if info is None or grid is None:
+        raise ValueError(f"Imported rotating zone '{zone.name}' has not been read.")
+    content = _Content()
+    for body in config.bodies:
+        if body.zone != zone.name:
+            continue
+        if body.motion is not Motion.ROTATING:
+            raise ValueError(f"Body '{body.name}' is {body.motion.value} in imported zone "
+                             f"'{zone.name}'; only a rotating body can be.")
+        patch = _patch_of(config, body)
+        content.surfaces.append(_body_surface(body, meshes[body.name], patch, 0, wall))
+        content.expected[patch] = wall
+        if body.layers.enabled:
+            content.layered.append((patch, body.layers))
+    own = _imported_surface(config, info, zone.name, joint_levels(config, surfaces), typed)
+    return _imported_case(config, zone_case_name(zone), owner, own, grid,
+                          zone.location_in_mesh, content, zone=zone.name)
+
+
 def final_types(config: MachineProjectConfig) -> dict[str, str]:
     """The OpenFOAM type of every configured and generated (split) patch."""
     types = {p.name: openfoam_type(p.type) for p in config.patches}
@@ -551,16 +696,16 @@ def _untyped(config: MachineProjectConfig) -> MachineProjectConfig:
 
 
 def _merged_case(config: MachineProjectConfig, domain: Sequence[DomainCase],
-                 zones: Sequence[DomainCase], pairs: Sequence[Interface]) -> DomainCase:
+                 zones: Sequence[DomainCase], pairs: Sequence[AmiPair]) -> DomainCase:
     types = final_types(config)
     expected: dict[str, str] = {}
     for case in (*domain, *zones):
         expected.update({n: types.get(n, t) for n, t in case.expected.items()
                          if not n.endswith(SOURCE_SUFFIX)})
-    for face in pairs:
-        expected[face.stationary] = CYCLIC_AMI
-        expected[face.rotating] = CYCLIC_AMI
-    other = tuple(o for case in domain for o in case.other)
+    for pair in pairs:
+        expected[pair.first] = CYCLIC_AMI
+        expected[pair.second] = CYCLIC_AMI
+    other = tuple(o for case in (*domain, *zones) for o in case.other)
     dictionaries = {**_common(config), "system/createPatchDict": _create_patch_dict(pairs),
                     AMI_WEIGHTS_DICT: _ami_weights_dict()}
     return DomainCase(MERGED_CASE, "merged", dictionaries, {}, expected, other, cut=True,
@@ -578,18 +723,24 @@ class MachineCaseGenerator:
         the merged case sets the final types (retype), so a change of patch type
         alone re-runs only the assembly.
         """
+        _check_imported_zones(config)
         zones = _cylinder_zones(config)
         missing = [b.name for b in config.bodies if b.name not in meshes]
         if missing:
             raise ValueError(f"Bodies not loaded: {', '.join(missing)}.")
         wall = "wall" if typed else "patch"
         domain = _domain_cases(config, zones, surfaces, meshes, typed)
-        zone_cases = tuple(_zone_case(config, zone, meshes, wall) for zone in zones)
-        pairs = tuple(face for zone in zones for face in interfaces(zone))
-        merged = _merged_case(config, domain, zone_cases, pairs)
+        zone_cases = tuple(
+            _zone_case(config, zone, meshes, wall) if isinstance(zone.shape, CylinderZone)
+            else _imported_zone_case(config, zone, surfaces, meshes, wall, typed)
+            for zone in config.rotating_zones)
+        faces = tuple(face for zone in zones for face in interfaces(zone))
+        joints = joint_pairs(config)
+        merged = _merged_case(config, domain, zone_cases,
+                              (*(face.pair for face in faces), *joints))
         retype = {} if typed else {n: t for n, t in merged.expected.items()
                                    if t not in ("patch", CYCLIC_AMI)}
-        return MachineCases(domain, zone_cases, merged, pairs, retype)
+        return MachineCases(domain, zone_cases, merged, faces, retype, joints)
 
     @staticmethod
     def write(project_root: Path, cases: MachineCases) -> tuple[str, ...]:

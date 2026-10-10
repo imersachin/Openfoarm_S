@@ -80,10 +80,16 @@ def estimate_cells(config: MachineProjectConfig, meshes: Mapping[str, trimesh.Tr
                 add(estimate.background, f"domain_{part.name}", _cells(grid))
         domain_cell = min(p.cell_size for p in domain.parts)
 
-    for zone in config.rotating_zones:
-        if not isinstance(zone.shape, CylinderZone):
-            continue
+    read = {s.owner: s for s in surfaces}
+    for i, zone in enumerate(config.rotating_zones):
         case = f"zone_{zone.name}"
+        if not isinstance(zone.shape, CylinderZone):  # imported (G5): its own background
+            zone_surface_read = read.get(f"rotating_zones.{i}")
+            grid = (surface_grid(zone_surface_read, zone.cell_size)
+                    if zone_surface_read is not None else None)
+            if grid is not None:
+                add(estimate.background, case, _cells(grid))
+            continue
         add(estimate.background, case, _cells(zone_grid(zone)))
         if domain_cell is not None:
             area = sum(float(m.area) for _, m in zone_surface(zone))

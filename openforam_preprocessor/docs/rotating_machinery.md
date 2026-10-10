@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | G0 complete on synthetic geometry (`docs/rotating_machinery_notes.md`); real-geometry items wait for section 17. G1 (configuration), G2 (domains and patches), G3 (bodies and zones) and G4 (HAWT preset and pipeline, synthetic rotor) complete. G5 not started. |
+| Status | G0 complete on synthetic geometry (`docs/rotating_machinery_notes.md`); real-geometry items wait for section 17. G1 (configuration), G2 (domains and patches), G3 (bodies and zones), G4 (HAWT preset and pipeline, synthetic rotor) and G5 (Francis preset, imported zones and joints, synthetic G0 R4 passage only) complete. G6 not started. |
 | Place this file at | `openforam_preprocessor/docs/rotating_machinery.md` |
 | Builds on | `docs/vawt_mesh_generator.md` (V0–V5). V5 must be complete first. |
 | Replaces | Nothing. The VAWT workflow becomes one preset of this one. |
@@ -181,7 +181,9 @@ region, with the suggested fix (export ASCII, or one file per patch).
 Validation: the union of each part's regions is closed (each part on its own,
 section 20); region names are valid OpenFOAM patch names and not reserved;
 no two regions share a name, across all imported surfaces; each part's mesh
-point lies inside its surface; every body lies inside (G3).
+point lies inside its surface; every body lies inside (G3); the two regions of
+every joint coincide, and a rotating body lies inside its imported zone and
+every other body outside it (G5, section 23).
 
 ### 5.4 Choice per machine
 
@@ -340,7 +342,11 @@ real run on v2512.
 | An imported part's mesh point outside its surface | BLOCKING |
 | A mesh point on a background-cell face or edge (V0 E4) | ERROR |
 | A joint between two regions of the same part | BLOCKING |
-| A patch named like a generated one (interfaces, `<body>_rotating`) | BLOCKING |
+| A patch named like a generated one (interfaces, `<body>_rotating`, joint pairs) | BLOCKING |
+| A joint's two regions do not coincide (area difference or point distance above the limits; provisional, unverified on real CAD) | BLOCKING, with the measured values |
+| An imported rotating zone without an imported domain | BLOCKING |
+| A split or stationary body in an imported zone | BLOCKING |
+| A refined region that is not in its surface, or is a joint | BLOCKING |
 | Layer checks per body (first layer thicker than the finest cell; minimum thickness above the total) | ERROR |
 | Outermost layer far thinner than the finest cell | WARNING |
 | Bodies meshed together mixing RELATIVE and ABSOLUTE layer sizing | BLOCKING |
@@ -352,6 +358,7 @@ real run on v2512.
 | Stationary body crossing a wall or slip face (a pole or tower; the part outside is not meshed) | WARNING, naming the face |
 | Rotating body not fully inside its zone | BLOCKING |
 | A rotating-wall patch not inside a rotating zone | ERROR |
+| A WALL patch from a region of a rotating zone (rare in a Francis runner) | WARNING |
 | Stationary body crossing an interface | BLOCKING |
 | Rotating zones overlapping (zones on the same axis, exact) | BLOCKING |
 | Rotating zones on different axes whose bounding boxes overlap (bounding box only) | WARNING |
@@ -391,9 +398,15 @@ What a change re-runs:
 |---|---|---|
 | Inlet velocity, rotation speed, time step, fluid, turbulence | Case setup | All meshes |
 | One body's refinement or layers | That zone's mesh, assembly, check, case setup | Other zones, domain |
+| One imported part's or zone's refinement or mesh point | That part's mesh, assembly, check, case setup | Other parts and zones |
+| One imported part's or zone's cell size | That part's mesh and the meshes joined to it (joint levels follow the finer side), assembly, check, case setup | Other parts and zones |
+| A joint's level | The two joined meshes, assembly, check, case setup | Other parts and zones |
 | Domain size or patch names | Domain mesh, assembly, check, case setup | Zone meshes |
 | Patch type only | Case setup | All meshes |
 | Body geometry or units | Everything downstream of that body | Other bodies |
+
+A re-run mesh that comes out identical leaves the assembly and checks reused:
+they are cached on the mesh files they consume (seen in G5).
 
 Patch types (G4, decision H3): the domain and zone meshes are built with plain
 patches; the assembly sets the final types (`foamDictionary` on the merged
@@ -637,3 +650,65 @@ H1–H6, approved before G4. Evidence: `tests/integration/test_hawt_pipeline_rea
 5. **H5 Service layer:** G7.
 6. **H6 Real geometry:** G4 ran on the synthetic G0 HAWT rotor; no real HAWT
    STL yet. The same test runs on one when it is provided.
+
+## 23. Decisions for G5 (owner)
+
+K1–K7 approved before G5; K8 and the cell-size correction below came up while
+building it. Evidence: `tests/integration/test_francis_pipeline_real.py`
+(OpenFOAM v2512) and `tests/unit/machines/test_g5_francis.py`.
+**Every G5 result is on synthetic geometry only** (the G0 R4 passage); no
+real Francis STL has been provided (K7).
+
+1. **K1 Joint names:** a joint is the cyclicAMI pair named after its two
+   regions (`casing_out` / `guide_in`). Each region is meshed first as
+   `<region>_src` (as F2), refined to the joint's `level` (default 1, as G0
+   R4); the coarser side gets the finer side's cell size (as F3). A patch
+   named like a joint region or its `_src` is refused.
+2. **K2 Joint coincidence** (`machines/joints.py`, `check_joints`): BLOCKING
+   when the areas differ by more than 1 %, or a point of one region lies more
+   than half the finer cell from the other. Provisional: **the limits are
+   unverified on real CAD**; the issue reports the measured area difference,
+   the largest point distance and the sampling spacing so that they can be
+   tuned (`MachineThresholds.joints`). The distance is measured between
+   sampled points (no spatial-index dependency), to within about a tenth of
+   a cell while a region needs fewer than 2 million dense points (identical
+   G0 R4 discs measure 0.0012 m apart at 0.025 m cells). Above that the
+   spacing widens and the error grows with it: two tessellations of the same
+   4 m² square at 0.001 m cells measure about one cell apart, a false
+   BLOCKING (G5 testing review; open).
+3. **K3 Imported zone:** cut from its own surface like an imported part, with
+   its rotating bodies; topoSet puts every cell in the cell zone named after
+   the zone (G0 R4). An imported zone needs an imported domain, and holds
+   rotating bodies only.
+4. **K4 Mesh points:** the preset places one inside every surface: the
+   background-cell centre, shifted by 0.1137 cell on every axis, farthest
+   from the surface that lies inside it. Editable.
+5. **K5 Francis preset** (`machines/presets/francis.py`): joints proposed from
+   coincident regions; patch types never chosen (E5; name suggestions only),
+   so the draft is BLOCKING until the user types them; D confirmed by the
+   user, with each runner joint region's diameter offered as a suggestion.
+   **Correction:** the plan said cells D/30; G0 R4 used 0.025 m for the 0.6 m
+   runner, D/24, which the preset uses (labelled "G0 R4 test value;
+   unverified, not a recommendation").
+6. **K6 Walls inside a rotating zone:** typed by the user as WALL or
+   ROTATING_WALL. A WALL region of an imported rotating zone is a WARNING
+   (`WALL_IN_ROTATING_ZONE`). Its velocity condition comes with G6, which
+   must hold such a wall at zero in the absolute frame.
+7. **K7 Real geometry:** none yet; G5 ran on G0 R4. The same tests run on real
+   STLs when they arrive.
+8. **K8 Region refinement** (added during G5): an imported surface's
+   `refinement` maps a region to a level. Without it the vanes and blades
+   were meshed at the background size: 78,693 cells and checkMesh failed on
+   skewness (2 faces, 4.7). The preset refines every region that is a closed
+   solid on its own (vanes, blades with hub) to level 2, as G0 R4 (labelled
+   unverified).
+
+Results on real OpenFOAM v2512, synthetic geometry only (G0 R4 for comparison):
+
+| Run | Cells | Regions | AMI sum(weights) min–max | G0 R4 cells |
+|---|---|---|---|---|
+| Conformal (all parts 0.025 m) | 133,319 | 4 | 0.938–1.000 | 121,268 |
+| Non-conformal (guide 0.0225 m, as `guide_nc`) | 146,114 | 4 | 0.900–1.000 | 129,731 |
+
+Reuse verified on real OpenFOAM: a second run reuses everything; refining the
+draft tube's wall re-runs only the draft tube's mesh, the assembly and checks.

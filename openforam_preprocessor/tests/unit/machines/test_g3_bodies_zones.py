@@ -216,9 +216,11 @@ def test_stationary_body_and_zone_go_to_their_imported_part(tmp_path: Path) -> N
                                              "constant/triSurface/rod.stl"}
 
 
-def test_imported_zones_wait_for_g5(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="G5"):
-        render(configs.francis(tmp_path))
+def test_imported_zones_are_meshed_from_g5(tmp_path: Path) -> None:
+    # G5 changed this test: it asserted the G3 refusal ("meshed from G5").
+    cases = render(configs.francis(tmp_path))
+
+    assert [c.name for c in cases.zones] == ["zone_runner"]
 
 
 def test_bodies_must_be_loaded(tmp_path: Path) -> None:
@@ -284,8 +286,10 @@ def test_zone_outside_the_imported_domain(tmp_path: Path) -> None:
     assert ("ZONE_OUTSIDE_DOMAIN", "BLOCKING") in found(data)
 
 
-def test_imported_zone_notice_only_for_imported_zones(tmp_path: Path) -> None:
-    assert ("IMPORTED_SURFACES_NOT_CHECKED", "INFO") in found(configs.francis(tmp_path / "f"))
+def test_no_imported_surface_is_left_unchecked(tmp_path: Path) -> None:
+    # G5 changed this test: imported zones are checked now, so the INFO is gone.
+    assert ("IMPORTED_SURFACES_NOT_CHECKED", "INFO") not in found(
+        configs.francis(tmp_path / "f"))
     assert found(configs.duct(tmp_path / "d")) == []
 
 

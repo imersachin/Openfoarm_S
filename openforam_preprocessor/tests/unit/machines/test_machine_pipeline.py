@@ -212,10 +212,17 @@ def test_vawt_only_settings_need_the_vawt_workflow(project: Project) -> None:
     assert codes(result)["USE_VAWT_WORKFLOW"] == "BLOCKING" and runner.calls == []
 
 
-def test_imported_zones_are_refused_until_g5(project: Project) -> None:
-    result, runner = project.run(configs.francis(project.tmp / "f"))
+def test_imported_zone_without_imported_domain_is_refused(project: Project,
+                                                          hawt: dict[str, Any]) -> None:
+    # G5 changed this test: it asserted that every imported zone was refused
+    # (CASE_GENERATION_UNSUPPORTED); now only one without imported parts is.
+    francis = configs.francis(project.tmp / "f")
+    hawt["rotating_zones"][0]["shape"] = francis["rotating_zones"][0]["shape"]
 
-    assert codes(result)["CASE_GENERATION_UNSUPPORTED"] == "BLOCKING" and runner.calls == []
+    result, runner = project.run(hawt)
+
+    assert codes(result)["IMPORTED_ZONE_NEEDS_IMPORTED_DOMAIN"] == "BLOCKING"
+    assert runner.calls == []
 
 
 def test_command_failure_stops_and_keeps_no_record(project: Project,

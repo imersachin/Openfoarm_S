@@ -359,6 +359,12 @@ Not verified until the real STLs arrive:
   between the two pole methods.
 - Units, rotation axis and rotation direction for each machine.
 
+**G5 Francis results: synthetic geometry only.** The G5 pipeline meshed the
+G0 R4 passage (spec section 23): conformal 133,319 cells, AMI 0.938–1.000;
+non-conformal 146,114 cells, AMI 0.900–1.000. The joint-coincidence limits
+(1 % area, half a cell) and the preset values (cells D/24, solid regions at
+level 2) are unverified on real CAD.
+
 **HAWT domain distances (spec 8): unverified.** The G0 HAWT domain (2D
 upstream, 5D downstream, radius 2D) is a test value. No cited source for
 preset distances has been recorded yet.
