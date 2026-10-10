@@ -335,7 +335,8 @@ def check_config(config: MachineProjectConfig, thresholds: MachineThresholds | N
     """
     limits = thresholds or MachineThresholds()
     return (*_name_issues(config), *_machine_issues(config), *_patch_issues(config, owners),
-            *_joint_issues(config, owners), *_zone_issues(config, limits),
+            *_joint_issues(config, owners), *_unjoined_zone_issues(config, owners),
+            *_zone_issues(config, limits),
             *_imported_zone_rules(config), *_grid_point_issues(config, limits),
             *_imported_notice(config))
 
@@ -558,6 +559,23 @@ def _joint_issues(config: MachineProjectConfig, owners: Owners | None) -> list[I
             "JOINT_REGION_REUSED", f"Region '{name}' is in more than one joint.",
             "Each region joins exactly one other region.", region=name))
     return issues
+
+
+def _unjoined_zone_issues(config: MachineProjectConfig, owners: Owners | None) -> list[Issue]:
+    """An imported zone meets the stationary parts only at joints: without one
+    it is an isolated fluid region (the region count still matches)."""
+    known = owners if owners is not None else _stem_owners(config)
+    if known is None or not isinstance(config.domain, ImportedDomain):
+        return []  # regions unknown until read; no imported domain is BLOCKING already
+    joined = {known.get(name) for joint in config.joints for name in (joint.first, joint.second)}
+    return [_blocking(
+        "IMPORTED_ZONE_NOT_JOINED",
+        f"Imported rotating zone '{zone.name}' has no joint: it would be an isolated fluid "
+        "region, connected to nothing.",
+        "Join the zone's inlet and outlet regions to the coincident regions of the "
+        "stationary parts (joints).", field=f"rotating_zones.{i}", zone=zone.name)
+        for i, zone in enumerate(config.rotating_zones)
+        if isinstance(zone.shape, ImportedZone) and f"rotating_zones.{i}" not in joined]
 
 
 def _zone_issues(config: MachineProjectConfig, limits: MachineThresholds) -> list[Issue]:
@@ -1281,7 +1299,10 @@ def _refinement_issues(config: MachineProjectConfig,
             continue
         regions = {r.name for r in surface.regions}
         for region in sorted(owned[surface.owner].refinement):
-            field = f"{surface.owner}.refinement.{region}"
+            # A zone's surface is its shape: rotating_zones.<i>.shape.refinement.
+            section = (f"{surface.owner}.shape" if surface.owner.startswith("rotating_zones.")
+                       else surface.owner)
+            field = f"{section}.refinement.{region}"
             if region not in regions:
                 issues.append(_blocking(
                     "REFINEMENT_REGION_UNKNOWN",

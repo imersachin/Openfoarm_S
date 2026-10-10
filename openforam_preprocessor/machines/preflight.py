@@ -13,11 +13,13 @@ from dataclasses import dataclass, field
 
 import trimesh
 
+from machines.assembly import joint_levels
 from machines.config import (
     BoxDomain,
     CylinderDomain,
     CylinderZone,
     ImportedDomain,
+    ImportedZone,
     MachineProjectConfig,
     Motion,
 )
@@ -29,6 +31,18 @@ from vawt.case_generator import Grid
 
 def _cells(grid: Grid) -> int:
     return grid.cells[0] * grid.cells[1] * grid.cells[2]
+
+
+def _imported(config: MachineProjectConfig, owner: str) -> tuple[Mapping[str, int], str, float]:
+    """(region refinement, case name, cell size) of an imported part or zone."""
+    section, index = owner.rsplit(".", 1)
+    if section == "domain.parts":
+        assert isinstance(config.domain, ImportedDomain)
+        part = config.domain.parts[int(index)]
+        return part.refinement, f"domain_{part.name}", part.cell_size
+    zone = config.rotating_zones[int(index)]
+    assert isinstance(zone.shape, ImportedZone)
+    return zone.shape.refinement, f"zone_{zone.name}", zone.cell_size
 
 
 @dataclass(frozen=True)
@@ -94,6 +108,17 @@ def estimate_cells(config: MachineProjectConfig, meshes: Mapping[str, trimesh.Tr
         if domain_cell is not None:
             area = sum(float(m.area) for _, m in zone_surface(zone))
             add(estimate.surface, "domain", band(area, domain_cell / 2**zone.interface_level))
+
+    # Imported surfaces (G5): a band around every refined region and joint region.
+    levels = joint_levels(config, [s for s in surfaces if s.readable])
+    for surface in surfaces:
+        if not surface.readable:
+            continue
+        refinement, case, part_cell = _imported(config, surface.owner)
+        for region in surface.regions:
+            level = levels.get(region.name, refinement.get(region.name, 0))
+            if level:
+                add(estimate.surface, case, band(region.area, part_cell / 2**level))
 
     for body in config.bodies:
         mesh = meshes.get(body.name)

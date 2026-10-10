@@ -6,9 +6,12 @@ cyclicAMI pair named after the regions (K1), so the two regions must cover
 the same surface: about the same area, and every point of one close to the
 other (K2). The limits are provisional, unverified on real CAD.
 
-Distances are measured between points sampled on both regions: each region's
-points against dense points on the other. The result is within about the
-dense spacing of the true largest distance; the spacing is reported with it.
+Each region's points (every vertex, plus points spread by area about half a
+cell apart) are measured to the other region's surface exactly:
+point-to-triangle distances, the candidate triangles found with a KD-tree
+over the centres of the surface split into triangles of bounded size. No
+spatial-index dependency; the error is only what the query points can miss
+between them.
 """
 
 from __future__ import annotations
@@ -21,11 +24,12 @@ import trimesh
 from scipy.spatial import cKDTree
 
 from machines.domains import Region, SurfaceInfo
-from machines.surface_sampling import surface_points
+from machines.surface_sampling import face_points
 
-# Points of each region are compared with points on the other at this
-# fraction of the query spacing.
-DENSE_FRACTION = 0.2
+# Candidate triangles are found among points sampled on each triangle about
+# sqrt(area / CANDIDATE_POINTS) apart: it bounds the work, not the accuracy.
+CANDIDATE_POINTS = 50_000
+_CHUNK = 5_000  # query points per batch of candidate pairs
 
 
 @dataclass(frozen=True)
@@ -39,7 +43,8 @@ class JointLimits:
     max_distance_cells: float = 0.5
     # Query points per region are at most this many cells apart.
     sample_spacing_cells: float = 0.5
-    max_sample_points: int = 2_000_000
+    # Per region; beyond it the query points are spaced further apart.
+    max_sample_points: int = 200_000
 
 
 @dataclass(frozen=True)
@@ -48,7 +53,7 @@ class JointMeasure:
     second_area: float
     area_difference: float  # relative to the larger area
     max_distance: float  # m, both ways
-    spacing: float  # m, of the dense points the distance is measured to
+    spacing: float  # m, of the query points (the distance to the surface is exact)
 
     def as_details(self) -> dict[str, float]:
         return {"first_area": self.first_area, "second_area": self.second_area,
@@ -56,27 +61,67 @@ class JointMeasure:
                 "sample_spacing": self.spacing}
 
 
-def _one_way(points: np.ndarray, target: np.ndarray) -> float:
-    distance, _ = cKDTree(target).query(points)
-    return float(np.max(distance)) if len(points) else 0.0
+def _exact(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
+    closest = trimesh.triangles.closest_point(triangles, points)
+    return np.asarray(np.linalg.norm(closest - points, axis=1))
+
+
+def distance_to_surface(points: np.ndarray, mesh: trimesh.Trimesh) -> np.ndarray:
+    """Exact distance of every point to the surface (its original triangles)."""
+    triangles = np.asarray(mesh.vertices, dtype=float)[np.asarray(mesh.faces)]
+    if len(points) == 0 or len(triangles) == 0:
+        return np.zeros(len(points))
+    area = float(mesh.area)
+    spacing = np.sqrt(area / CANDIDATE_POINTS) if area > 0.0 else 1.0
+    samples, owner, used = face_points(mesh, spacing, 4 * CANDIDATE_POINTS)
+    tree = cKDTree(samples)
+    _, nearest = tree.query(points)
+    best = _exact(points, triangles[owner[nearest]])  # an upper bound per point
+    # A triangle closer than `best` has one of its points within best + used.
+    for start in range(0, len(points), _CHUNK):
+        rows = np.arange(start, min(start + _CHUNK, len(points)))
+        found = tree.query_ball_point(points[rows], best[rows] + used)
+        counts = np.array([len(f) for f in found])
+        point_index = np.repeat(rows, counts)
+        face_index = owner[np.concatenate([np.asarray(f, dtype=np.int64) for f in found])]
+        pairs = np.unique(np.column_stack([point_index, face_index]), axis=0)
+        np.minimum.at(best, pairs[:, 0], _exact(points[pairs[:, 0]], triangles[pairs[:, 1]]))
+    return best
+
+
+def _one_way(points: np.ndarray, target: trimesh.Trimesh) -> float:
+    return float(distance_to_surface(points, target).max()) if len(points) else 0.0
 
 
 def measure_joint(first: trimesh.Trimesh, second: trimesh.Trimesh, cell: float,
                   limits: JointLimits | None = None) -> JointMeasure:
-    """Areas and largest point distance of two regions; `cell` is the finer
-    cell size of the surfaces holding them."""
+    """Areas and largest point-to-surface distance of two regions; `cell` is
+    the finer cell size of the surfaces holding them."""
     limits = limits or JointLimits()
     spacing = limits.sample_spacing_cells * cell
     a_area, b_area = float(first.area), float(second.area)
     larger = max(a_area, b_area)
     difference = abs(a_area - b_area) / larger if larger > 0.0 else 0.0
-    a_query, _ = surface_points(first, spacing, limits.max_sample_points)
-    b_query, _ = surface_points(second, spacing, limits.max_sample_points)
-    a_dense, a_used = surface_points(first, DENSE_FRACTION * spacing, limits.max_sample_points)
-    b_dense, b_used = surface_points(second, DENSE_FRACTION * spacing,
-                                     limits.max_sample_points)
-    distance = max(_one_way(a_query, b_dense), _one_way(b_query, a_dense))
+    a_query, a_used = _query_points(first, spacing, limits.max_sample_points)
+    b_query, b_used = _query_points(second, spacing, limits.max_sample_points)
+    distance = max(_one_way(a_query, second), _one_way(b_query, first))
     return JointMeasure(a_area, b_area, difference, distance, max(a_used, b_used))
+
+
+def _query_points(mesh: trimesh.Trimesh, spacing: float,
+                  max_points: int) -> tuple[np.ndarray, float]:
+    """Every vertex, plus points spread by area (seeded, so repeatable) at
+    about `spacing` apart; long thin triangles get no more than their share."""
+    area = float(mesh.area)
+    vertices = np.asarray(mesh.vertices, dtype=float)
+    count = int(np.ceil(2.0 * area / spacing**2)) if spacing > 0.0 else 0
+    if count > max_points:
+        spacing *= float(np.sqrt(count / max_points))
+        count = max_points
+    if count == 0 or area <= 0.0:
+        return vertices, spacing
+    points, _ = trimesh.sample.sample_surface(mesh, count, seed=0)
+    return np.vstack([vertices, np.asarray(points, dtype=float)]), spacing
 
 
 def coincide(measure: JointMeasure, cell: float, limits: JointLimits | None = None) -> bool:

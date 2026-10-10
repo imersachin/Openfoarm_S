@@ -216,8 +216,14 @@ MachineProjectConfig
 ├── domain
 │   ├── kind                   BOX | CYLINDER | IMPORTED
 │   ├── box / cylinder         dimensions and placement
-│   └── imported               format: NAMED_REGIONS | ONE_FILE_PER_PATCH, files
+│   └── imported               parts[]: name, format: NAMED_REGIONS | ONE_FILE_PER_PATCH,
+│                              files, cell size, mesh point, refinement (region → level;
+│                              section 23, K8). An imported zone's shape has the same
+│                              files and refinement
 ├── patches[]                  name, type, source (generated face or imported region)
+├── joints[]                   first, second (coincident regions of two imported
+│                              surfaces; a cyclicAMI pair), level (refinement of both
+│                              regions, default 1; section 23, K1 and K9)
 ├── refinement                 per body, per zone, wake or region boxes and cylinders
 ├── layers                     per body (relative or absolute sizing)
 ├── snappy_quality, quality, max_global_cells
@@ -344,6 +350,7 @@ real run on v2512.
 | A joint between two regions of the same part | BLOCKING |
 | A patch named like a generated one (interfaces, `<body>_rotating`, joint pairs) | BLOCKING |
 | A joint's two regions do not coincide (area difference or point distance above the limits; provisional, unverified on real CAD) | BLOCKING, with the measured values |
+| An imported rotating zone with no joint (an isolated fluid region) | BLOCKING |
 | An imported rotating zone without an imported domain | BLOCKING |
 | A split or stationary body in an imported zone | BLOCKING |
 | A refined region that is not in its surface, or is a joint | BLOCKING |
@@ -653,8 +660,9 @@ H1–H6, approved before G4. Evidence: `tests/integration/test_hawt_pipeline_rea
 
 ## 23. Decisions for G5 (owner)
 
-K1–K7 approved before G5; K8 and the cell-size correction below came up while
-building it. Evidence: `tests/integration/test_francis_pipeline_real.py`
+K1–K7 approved before G5; K8, K9 and the cell-size correction below came up
+while building it; item 10 and the K2 measurement come from the G5 testing
+review (follow-up commit). Evidence: `tests/integration/test_francis_pipeline_real.py`
 (OpenFOAM v2512) and `tests/unit/machines/test_g5_francis.py`.
 **Every G5 result is on synthetic geometry only** (the G0 R4 passage); no
 real Francis STL has been provided (K7).
@@ -669,13 +677,15 @@ real Francis STL has been provided (K7).
    than half the finer cell from the other. Provisional: **the limits are
    unverified on real CAD**; the issue reports the measured area difference,
    the largest point distance and the sampling spacing so that they can be
-   tuned (`MachineThresholds.joints`). The distance is measured between
-   sampled points (no spatial-index dependency), to within about a tenth of
-   a cell while a region needs fewer than 2 million dense points (identical
-   G0 R4 discs measure 0.0012 m apart at 0.025 m cells). Above that the
-   spacing widens and the error grows with it: two tessellations of the same
-   4 m² square at 0.001 m cells measure about one cell apart, a false
-   BLOCKING (G5 testing review; open).
+   tuned (`MachineThresholds.joints`). The distance from each query point
+   to the other region is exact (point-to-triangle, candidate triangles
+   found through points sampled on every triangle; no spatial-index
+   dependency). Query points: every vertex plus points spread by area half a
+   cell apart, at most 200,000 per region (wider beyond, reported as
+   `sample_spacing`); only what lies between them can be missed. Before the
+   G5 follow-up the distance was point-to-point and its sampling cap gave a
+   false BLOCKING (two tessellations of one 4 m² square at 0.001 m cells
+   read about one cell apart); they now measure 1e-16 m.
 3. **K3 Imported zone:** cut from its own surface like an imported part, with
    its rotating bodies; topoSet puts every cell in the cell zone named after
    the zone (G0 R4). An imported zone needs an imported domain, and holds
@@ -701,7 +711,17 @@ real Francis STL has been provided (K7).
    were meshed at the background size: 78,693 cells and checkMesh failed on
    skewness (2 faces, 4.7). The preset refines every region that is a closed
    solid on its own (vanes, blades with hub) to level 2, as G0 R4 (labelled
-   unverified).
+   unverified). Validation: a refined region must belong to its surface and
+   must not be a joint (BLOCKING). The resource preflight counts a surface
+   band around every refined region.
+9. **K9 Joint refinement level** (added during G5): `JointConfig.level`,
+   default 1 (G0 R4), refines both regions of the joint; the coarser side
+   gets extra levels to reach the finer side's cell size, so a part's cell
+   size change re-meshes the parts joined to it. The resource preflight
+   counts a surface band around every joint region.
+10. **Isolated imported zone** (G5 follow-up): an imported rotating zone with
+    no joint is BLOCKING (`IMPORTED_ZONE_NOT_JOINED`): it would be a fluid
+    region connected to nothing, and the region count would still match.
 
 Results on real OpenFOAM v2512, synthetic geometry only (G0 R4 for comparison):
 

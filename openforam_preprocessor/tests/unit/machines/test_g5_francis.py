@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pydantic
 import pytest
 import trimesh
@@ -16,7 +17,13 @@ import trimesh
 from machines.assembly import MachineCaseGenerator, joint_levels, meshing_steps
 from machines.config import MachineProjectConfig
 from machines.domains import read_imported
-from machines.joints import JointLimits, measure_joint, propose_joints
+from machines.joints import (
+    JointLimits,
+    coincide,
+    distance_to_surface,
+    measure_joint,
+    propose_joints,
+)
 from machines.operations import ASSEMBLE, CHECK_MESH, MACHINE_EXECUTABLES, mesh_operation
 from machines.pipeline import MESH_REPORT, MachinePipeline, MachineRunResult
 from machines.preflight import estimate_cells
@@ -434,3 +441,111 @@ def test_pipeline_reports_a_missing_joint_patch(tmp_path: Path, francis: dict[st
     assert not result.succeeded
     assert any(i.code == "DOMAIN_PATCH_MISSING" and i.details.get("patch") == "guide_in_src"
                for i in result.issues)
+
+
+# --- G5 follow-up (testing review) ---------------------------------------------------------------
+
+def _square(n: int, z: float = 0.0) -> trimesh.Trimesh:
+    """A 2 m x 2 m square at height z, n x n cells of two triangles."""
+    xs = np.linspace(-1.0, 1.0, n + 1)
+    x, y = np.meshgrid(xs, xs, indexing="ij")
+    vertices = np.column_stack([x.ravel(), y.ravel(), np.full(x.size, z)])
+    i, j = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
+    a = (i * (n + 1) + j).ravel()
+    faces = np.vstack([np.column_stack([a, a + n + 1, a + n + 2]),
+                       np.column_stack([a, a + n + 2, a + 1])])
+    return trimesh.Trimesh(vertices, faces, process=False)
+
+
+def test_large_finely_meshed_joint_is_measured_exactly() -> None:
+    # 4 m2 at 0.001 m cells: the point-to-point measure hit its sampling cap
+    # here and read about one cell for identical surfaces (a false BLOCKING).
+    cell = 0.001
+    same = measure_joint(_square(40), _square(57), cell)
+    near = measure_joint(_square(40), _square(57, 0.0004), cell)
+    apart = measure_joint(_square(40), _square(57, 0.0006), cell)
+
+    assert same.max_distance < 1e-12 and coincide(same, cell)
+    assert near.max_distance == pytest.approx(0.0004) and coincide(near, cell)
+    assert apart.max_distance == pytest.approx(0.0006) and not coincide(apart, cell)
+
+
+def test_distance_to_surface_of_long_thin_triangles() -> None:
+    # The G0 discs are fans of 96 triangles 0.3 m long.
+    fan = disc(0.3, 0.0, up=True)
+    points = np.array([[0.0971, 0.0634, 0.0], [0.1, 0.0, 0.25], [0.5, 0.0, 0.0]])
+
+    distance = distance_to_surface(points, fan)
+
+    assert distance == pytest.approx([0.0, 0.25, 0.2], abs=1e-9)
+
+
+def test_preflight_counts_refined_and_joint_regions(francis: dict[str, Any]) -> None:
+    def surface_cells(data: dict[str, Any]) -> dict[str, int]:
+        config = MachineProjectConfig.model_validate(data)
+        return estimate_cells(config, {}, read_imported(config)).surface
+
+    plain = copy.deepcopy(francis)
+    for joint in plain["joints"]:
+        joint["level"] = 0
+    joints = surface_cells(francis)  # level 1
+    refined = copy.deepcopy(francis)
+    refined["domain"]["parts"][1]["refinement"] = {"vanes": 3}
+    finer_joint = copy.deepcopy(francis)
+    finer_joint["joints"][2]["level"] = 3
+
+    assert surface_cells(plain) == {}
+    assert set(joints) == {"domain_casing", "domain_guide", "domain_draft", "zone_runner"}
+    assert surface_cells(refined)["domain_guide"] > 5 * joints["domain_guide"]
+    assert surface_cells(finer_joint)["domain_draft"] == pytest.approx(
+        16 * joints["domain_draft"], rel=0.01)
+
+
+def test_refinement_field_of_an_imported_zone(francis: dict[str, Any]) -> None:
+    francis["rotating_zones"][0]["shape"]["refinement"] = {"nope": 2}
+
+    assert issue(francis, "REFINEMENT_REGION_UNKNOWN").details["field"] == (
+        "rotating_zones.0.shape.refinement.nope")
+
+
+def test_imported_zone_without_joints_is_blocking(francis: dict[str, Any]) -> None:
+    # Without its joints the runner would be an isolated fluid region; typing its
+    # former joint regions as walls left only WARNINGs before.
+    francis["joints"] = [francis["joints"][0]]  # casing / guide only
+    francis["patches"] += [patch(name, "WALL", "REGION", name)
+                           for name in ("guide_out", "runner_in", "runner_out", "draft_in")]
+
+    joint = issue(francis, "IMPORTED_ZONE_NOT_JOINED")
+
+    assert joint.severity.value == "BLOCKING" and joint.details["zone"] == "runner"
+
+
+def test_joined_zone_is_not_reported(francis: dict[str, Any]) -> None:
+    assert "IMPORTED_ZONE_NOT_JOINED" not in [c for c, _ in found(francis)]
+
+
+def test_case_generation_failure_stops_before_openfoam(
+        tmp_path: Path, francis: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(*args: Any, **kwargs: Any) -> None:
+        raise ValueError("not meshable")
+
+    monkeypatch.setattr(MachineCaseGenerator, "render", refuse)
+    result, runner = Project(tmp_path).run(francis)
+
+    unsupported = [i for i in result.issues if i.code == "CASE_GENERATION_UNSUPPORTED"]
+    assert not result.succeeded and runner.calls == []
+    assert [(i.severity.value, i.message) for i in unsupported] == [
+        ("BLOCKING", "not meshable")]
+
+
+def test_cell_size_change_remeshes_the_joined_parts(tmp_path: Path,
+                                                    francis: dict[str, Any]) -> None:
+    project = Project(tmp_path)
+    project.run(francis)
+
+    francis["domain"]["parts"][1]["cell_size"] = 0.01  # the guide, between casing and runner
+    result, _ = project.run(francis)
+
+    assert set(result.reused) == {mesh_operation("domain_draft")}
+    assert {mesh_operation(c) for c in ("domain_casing", "domain_guide", "zone_runner")} <= set(
+        result.executed)
