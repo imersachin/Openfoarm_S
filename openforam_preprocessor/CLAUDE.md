@@ -11,6 +11,14 @@ to manually edit OpenFOAM dictionaries.
 The MVP is an engineering preprocessing application. It is not a CFD solver,
 CAD system, HPC scheduler, cloud platform, or AI assistant.
 
+Approved scope extension (`docs/rotating_machinery.md`, section 2.2): for
+rotating machines, the application also prepares ready-to-run cases for one
+physics family, incompressible isothermal transient flow with a rotating mesh
+(fields, boundary conditions, fluid properties, rotation, time controls). It
+still does not run solvers. A solver smoke test of a few time steps verifies
+the generated case in the test suite only. A case that runs is not evidence
+that its results are correct. Any other physics needs explicit approval.
+
 The current implementation may be incomplete. Treat the documented target
 architecture as the intended design, but treat existing code as the source of
 truth for what is actually implemented until verified.

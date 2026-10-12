@@ -120,6 +120,7 @@ openforam_preprocessor/
 ├── visualization/
 ├── vawt/                   VAWT mesh generator workflow (docs/vawt_mesh_generator.md)
 ├── machines/               rotating-machinery workflow (docs/rotating_machinery.md)
+├── case_setup/             incompressible transient case setup (docs/rotating_machinery.md §9)
 ├── storage/
 └── tests/
     ├── unit/
@@ -845,6 +846,22 @@ The architecture should allow future adapters for:
 
 Future CFD functionality must remain separate from preprocessing.
 
+Case setup for rotating machines (`docs/rotating_machinery.md`, section 9) is
+the first such functionality. It is approved for one physics family only:
+incompressible isothermal transient flow with a rotating mesh. It is a separate
+layer (`case_setup/`):
+
+- It consumes the mesh artifacts (the assembled mesh and its patch list) and
+  never changes them: it writes no file under `constant/polyMesh/` and no
+  meshing dictionary.
+- It is its own cached operation. A physics change re-runs case setup only;
+  every mesh is reused.
+- It prepares a case; it does not run the solver.
+
+A runnable case does not mean a correct solution: a solver that starts and
+completes time steps shows that the case is consistent, not that its results
+are accurate.
+
 Potential future AI functionality may explain, summarize, or suggest, but must
 operate through validated application APIs and must not override deterministic
 engineering validation.
@@ -868,5 +885,7 @@ The following are architectural invariants:
 11. Mesh quality is not CFD accuracy.
 12. OpenFOAM environment differences are abstracted.
 13. AI does not override engineering validation.
+14. Case setup never modifies mesh artifacts.
+15. A case that runs is not evidence that its results are correct.
 
 Changing an invariant requires an explicit architectural review.

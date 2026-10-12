@@ -337,8 +337,21 @@ Examples include:
 - `omega`
 - `nut`
 
-These belong primarily to CFD setup and solver workflows, not to the core
+These belong to CFD setup and solver workflows, not to the core
 mesh-preprocessing logic.
+
+The application generates fields for the approved physics family only:
+incompressible isothermal transient flow with a rotating mesh
+(`docs/rotating_machinery.md`, section 9). It generates them in the case-setup
+layer, never in meshing code. The fields are:
+
+- `U`;
+- `p`, as kinematic pressure (p/ρ, m²/s²);
+- the turbulence fields of the chosen model (`k`, `omega`, `nut` for k-ω SST;
+  none for laminar).
+
+`T` and other transported scalars are not generated (section 9.5 of that
+specification).
 
 ---
 
@@ -352,6 +365,15 @@ High-level roles:
   configuration
 
 The MVP should not expand into full CFD setup unless explicitly approved.
+One expansion is approved: for the physics family in section 17, the
+application generates `controlDict`, `fvSchemes`, `fvSolution` and the
+`constant/` physics dictionaries (transport, turbulence, dynamic mesh).
+
+- Their contents are fixed from real runs on the configured OpenFOAM version,
+  each setting with its source, never written from memory.
+- For meshing-only work, `controlDict` stays the minimal one that the meshing
+  utilities need.
+- Any other physics needs explicit approval.
 
 ---
 
