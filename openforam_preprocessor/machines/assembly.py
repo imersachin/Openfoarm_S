@@ -77,6 +77,29 @@ from vawt.config import LayerSizing, Vec3, plane_axes
 MERGED_CASE = "merged"
 AMI_WEIGHTS_DICT = "system/amiWeightsDict"
 CYCLIC_AMI = "cyclicAMI"
+# Feature angle of surfaces without their own setting (G0 R1 and R2).
+DEFAULT_FEATURE_ANGLE = 180 - FEATURE_INCLUDED_ANGLE
+
+
+def _angle(degrees: float) -> str:
+    """An angle as a dictionary value; whole degrees print as before ("150", "30")."""
+    value = float(degrees)
+    return str(int(value)) if value.is_integer() else foam_scalar(value)
+
+
+def _included_angle(surface: Surface) -> str:
+    """includedAngle = 180 - feature angle (as the VAWT generator)."""
+    if surface.feature_angle is None:
+        return _angle(FEATURE_INCLUDED_ANGLE)
+    return _angle(180.0 - surface.feature_angle)
+
+
+def _resolve_feature_angle(surfaces: Sequence[Surface]) -> str:
+    """The case's resolveFeatureAngle: its bodies' feature angle (as the VAWT
+    rotor case), the smallest when they differ (refines more, never less);
+    DEFAULT_FEATURE_ANGLE when the case holds no body."""
+    angles = [s.feature_angle for s in surfaces if s.feature_angle is not None]
+    return _angle(min(angles, default=DEFAULT_FEATURE_ANGLE))
 
 
 def zone_case_name(zone: RotatingZone) -> str:
@@ -93,6 +116,9 @@ class Surface:
     features: int | None  # feature-edge level, or None for no feature edges
     mesh: bytes  # the STL
     region_levels: dict[str, tuple[int, int]] = field(default_factory=dict)  # overrides
+    # A body's feature angle (deg); None: DEFAULT_FEATURE_ANGLE (zone and imported
+    # surfaces, which have no feature-angle setting).
+    feature_angle: float | None = None
 
 
 @dataclass(frozen=True)
@@ -117,15 +143,16 @@ class MachineCases:
 
 # --- dictionaries -------------------------------------------------------------------------
 
-def _feature_extract_dict(stems: Sequence[str]) -> str:
+def _feature_extract_dict(surfaces: Sequence[Surface]) -> str:
+    """One entry per surface with feature edges, each at its own includedAngle."""
     entries = "".join(f"""
-{stem}.stl
+{s.stem}.stl
 {{
     extractionMethod    extractFromSurface;
 
     extractFromSurfaceCoeffs
     {{
-        includedAngle   {FEATURE_INCLUDED_ANGLE};
+        includedAngle   {_included_angle(s)};
     }}
 
     subsetFeatures
@@ -136,7 +163,7 @@ def _feature_extract_dict(stems: Sequence[str]) -> str:
 
     writeObj            no;
 }}
-""" for stem in stems)
+""" for s in surfaces if s.features is not None)
     return foam_header("surfaceFeatureExtractDict") + entries
 
 
@@ -264,7 +291,7 @@ castellatedMeshControls
 
     refinementRegions {{}}
 
-    resolveFeatureAngle 30;
+    resolveFeatureAngle {_resolve_feature_angle(surfaces)};
     locationInMesh      {foam_vector(location.x, location.y, location.z)};
     allowFreeStandingZoneFaces false;
 }}
@@ -378,7 +405,7 @@ def _body_surface(body: BodyConfig, mesh: trimesh.Trimesh, patch: str, offset: i
         stem=patch, regions={patch: kind},
         level=(r.min_level + offset, r.max_level + offset),
         features=r.feature_level + offset if r.extract_features else None,
-        mesh=_stl([(patch, mesh)]))
+        mesh=_stl([(patch, mesh)]), feature_angle=r.feature_angle_deg)
 
 
 def _zone_surface(zone: RotatingZone, side: str, level: int, hole_level: int) -> Surface:
@@ -445,11 +472,10 @@ def _domain_content(config: MachineProjectConfig, zones: Sequence[RotatingZone],
 def _with_content(case: DomainCase, config: MachineProjectConfig, content: _Content,
                   location: Vec3, own: Surface | None) -> DomainCase:
     surfaces = [*([own] if own else []), *content.surfaces]
-    stems = [s.stem for s in surfaces if s.features is not None]
     dictionaries = dict(case.dictionaries)
     dictionaries["system/snappyHexMeshDict"] = _snappy_dict(config, surfaces, location,
                                                             content.layered)
-    dictionaries["system/surfaceFeatureExtractDict"] = _feature_extract_dict(stems)
+    dictionaries["system/surfaceFeatureExtractDict"] = _feature_extract_dict(surfaces)
     return DomainCase(
         case.name, case.owner, dictionaries,
         {f"{SURFACE_DIR}/{s.stem}.stl": s.mesh for s in surfaces},
@@ -551,11 +577,10 @@ def _imported_case(config: MachineProjectConfig, name: str, owner: str, own: _Im
                    unplaced: tuple[str, ...] = ()) -> DomainCase:
     """A case cut from an imported surface (a domain part or an imported zone)."""
     surfaces = [own.surface, *content.surfaces]
-    stems = [s.stem for s in surfaces if s.features is not None]
     dictionaries = {
         **_common(config),
         "system/blockMeshDict": _block_mesh_dict(grid, _background_boundary()),
-        "system/surfaceFeatureExtractDict": _feature_extract_dict(stems),
+        "system/surfaceFeatureExtractDict": _feature_extract_dict(surfaces),
         "system/snappyHexMeshDict": _snappy_dict(config, surfaces, location, content.layered),
     }
     if zone is not None:
@@ -573,6 +598,29 @@ def _part_index(surfaces: Sequence[SurfaceInfo], points: np.ndarray) -> int:
         union = surface.union()
         counts.append(int(contains_points(points, union.vertices, union.faces).sum()))
     return int(np.argmax(counts))
+
+
+def domain_case_for(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
+                    points: np.ndarray) -> tuple[str, float] | None:
+    """(case name, cell size) of the domain mesh that holds `points`, placed as
+    _domain_cases places zones and stationary bodies; None without a domain or
+    with no imported part read."""
+    domain = config.domain
+    if isinstance(domain, BoxDomain | CylinderDomain):
+        return DOMAIN_CASE, domain.cell_size
+    if not isinstance(domain, ImportedDomain):
+        return None
+    parts = [s for s in surfaces if s.owner.startswith("domain.parts.") and s.regions]
+    if not parts:
+        return None
+    info = parts[_part_index(parts, np.atleast_2d(points))]
+    part = domain.parts[int(info.owner.rsplit(".", 1)[1])]
+    return f"{DOMAIN_CASE}_{part.name}", part.cell_size
+
+
+def zone_point(zone: RotatingZone) -> np.ndarray:
+    """A point inside a cylinder zone (in the annulus for an annular zone)."""
+    return _zone_point(zone)
 
 
 def _zone_point(zone: RotatingZone) -> np.ndarray:
@@ -642,11 +690,10 @@ def _zone_case(config: MachineProjectConfig, zone: RotatingZone,
         expected[patch] = wall
         if body.layers.enabled:
             layered.append((patch, body.layers))
-    stems = [s.stem for s in surfaces if s.features is not None]
     dictionaries = {
         **_common(config),
         "system/blockMeshDict": _block_mesh_dict(grid, _background_boundary()),
-        "system/surfaceFeatureExtractDict": _feature_extract_dict(stems),
+        "system/surfaceFeatureExtractDict": _feature_extract_dict(surfaces),
         "system/snappyHexMeshDict": _snappy_dict(config, surfaces, zone.location_in_mesh,
                                                  layered),
         "system/topoSetDict": _topo_set_dict(zone.name, grid),

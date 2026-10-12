@@ -112,6 +112,7 @@ class SurfaceInfo:
     format: StlFormat
     files: tuple[SurfaceFile, ...]
     open_edges: int  # edges used by one face only, over the union of all files
+    overused_edges: int = 0  # edges used by more than two faces (duplicate/overlapping regions)
 
     @property
     def readable(self) -> bool:
@@ -188,20 +189,28 @@ def read_surface_file(source: StlSource, file_format: StlFormat) -> SurfaceFile:
                                           for name, t in blocks))
 
 
-def open_edge_count(meshes: list[trimesh.Trimesh]) -> int:
-    """Edges used by exactly one face in the union (0: closed)."""
+def edge_use_counts(meshes: list[trimesh.Trimesh]) -> tuple[int, int]:
+    """(open, overused) edges of the union: used by exactly one face, and by
+    more than two faces. A closed manifold surface has neither; overused edges
+    come from duplicate or overlapping regions that share edges."""
     if not meshes:
-        return 0
+        return 0, 0
     union = trimesh.util.concatenate(meshes)
     union.merge_vertices()
     _, counts = np.unique(union.edges_sorted, axis=0, return_counts=True)
-    return int((counts == 1).sum())
+    return int((counts == 1).sum()), int((counts > 2).sum())
+
+
+def open_edge_count(meshes: list[trimesh.Trimesh]) -> int:
+    """Edges used by exactly one face in the union (0: closed)."""
+    return edge_use_counts(meshes)[0]
 
 
 def read_surface(owner: str, name: str, surface: ImportedSurface) -> SurfaceInfo:
     files = tuple(read_surface_file(f, surface.format) for f in surface.files)
     meshes = [r.mesh for f in files for r in f.regions]
-    return SurfaceInfo(owner, name, surface.format, files, open_edge_count(meshes))
+    open_edges, overused_edges = edge_use_counts(meshes)
+    return SurfaceInfo(owner, name, surface.format, files, open_edges, overused_edges)
 
 
 def read_imported(config: MachineProjectConfig) -> list[SurfaceInfo]:

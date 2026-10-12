@@ -341,6 +341,7 @@ real run on v2512.
 |---|---|
 | Any STL units not chosen | BLOCKING |
 | Imported domain not closed (the union of its surfaces) | BLOCKING |
+| Duplicate or overlapping regions in an imported surface (edges shared by more than two faces; overlaps that share no edges are not detected) | WARNING |
 | Binary STL given as named regions (detected by size, not by a leading "solid") | ERROR, with the fix |
 | Duplicate or invalid patch names | BLOCKING |
 | Imported region name invalid, reserved, or used twice (across all parts) | BLOCKING |
@@ -352,6 +353,7 @@ real run on v2512.
 | A joint's two regions do not coincide (area difference or point distance above the limits; provisional, unverified on real CAD) | BLOCKING, with the measured values |
 | An imported rotating zone with no joint (an isolated fluid region) | BLOCKING |
 | An imported rotating zone without an imported domain | BLOCKING |
+| `interface_level` other than the default on an imported zone (it has no effect; joints carry their own level) | WARNING |
 | A split or stationary body in an imported zone | BLOCKING |
 | A refined region that is not in its surface, or is a joint | BLOCKING |
 | Layer checks per body (first layer thicker than the finest cell; minimum thickness above the total) | ERROR |
@@ -732,3 +734,27 @@ Results on real OpenFOAM v2512, synthetic geometry only (G0 R4 for comparison):
 
 Reuse verified on real OpenFOAM: a second run reuses everything; refining the
 draft tube's wall re-runs only the draft tube's mesh, the assembly and checks.
+
+## 24. Fixes After the G2–G4 Testing Review
+
+Evidence: `tests/unit/machines/test_g2_g4_review_fixes.py` and
+`tests/unit/machines/test_machine_field_coverage.py`.
+
+1. **Feature angle:** a body's `feature_angle_deg` was not used (fixed 150 /
+   30). Now, as the VAWT generator: `includedAngle = 180 - angle` per body
+   surface, and `resolveFeatureAngle` per case is its bodies' angle, the
+   smallest when they differ (refines more, never less); 30 for a case with
+   no body. Zone and imported surfaces keep 150 / 30. Whole-degree values are
+   written as before, so existing default projects do not re-mesh.
+2. **Preflight in an imported domain:** a cylinder zone's interface band and
+   a stationary body's band are counted in the part case that holds them
+   (`domain_<part>`, at that part's cell size), placed as the case generator
+   places them; before, they went to a non-existent `domain` case and the
+   peak per case was understated.
+3. **Field coverage:** every configuration field reaches a cached meshing
+   input (case dictionaries and surfaces, retype map, OpenFOAM profile), or
+   is declared inactive with a reason and a condition, or is declared as not
+   changed by the test (file paths, references, model-variant selectors).
+4. **Layers:** a body's layers change re-runs its zone mesh only (tested).
+5. **`interface_level` on an imported zone:** WARNING (section 10).
+6. **Duplicate or overlapping regions:** WARNING (section 10).

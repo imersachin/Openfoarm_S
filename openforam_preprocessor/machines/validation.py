@@ -676,6 +676,18 @@ def _imported_zone_rules(config: MachineProjectConfig) -> list[Issue]:
                 "only a rotating body can be in an imported zone.",
                 "Make the body ROTATING, or include its stationary part in a domain part.",
                 field=f"bodies.{i}.motion", body=body.name))
+    default_level = RotatingZone.model_fields["interface_level"].default
+    for name, i in imported.items():
+        zone = config.rotating_zones[i]
+        if zone.interface_level != default_level:
+            issues.append(_issue(
+                IssueSeverity.WARNING, "INTERFACE_LEVEL_IGNORED",
+                f"interface_level {zone.interface_level} of imported rotating zone '{name}' "
+                "has no effect: an imported zone meets the domain parts at joints.",
+                "Set the refinement of the joint regions with each joint's level instead.",
+                category=IssueCategory.CONFIGURATION,
+                field=f"rotating_zones.{i}.interface_level", zone=name,
+                interface_level=zone.interface_level))
     return issues
 
 
@@ -1262,6 +1274,17 @@ def check_imported(config: MachineProjectConfig, surfaces: Iterable[SurfaceInfo]
                 explanation="snappyHexMesh then meshes through the gap into the background "
                 "box, exits 0, and checkMesh passes (G0 R2).",
                 owner=surface.owner, open_edges=surface.open_edges))
+        if surface.readable and surface.overused_edges:
+            issues.append(_issue(
+                IssueSeverity.WARNING, "IMPORTED_REGIONS_OVERLAP",
+                f"The surfaces of {surface.owner} ('{surface.name}') have "
+                f"{surface.overused_edges} edges shared by more than two faces: regions "
+                "are duplicated or overlap.",
+                "Remove the duplicate surfaces, or export each region once.",
+                category=IssueCategory.GEOMETRY, stage=IssueStage.GEOMETRY_VALIDATION,
+                explanation="A closed surface uses each edge exactly twice. Overlapping "
+                "regions that share no edges (different tessellations) are not detected.",
+                owner=surface.owner, overused_edges=surface.overused_edges))
         issues.extend(_imported_point_issues(config, surface, limits))
 
     issues.extend(_refinement_issues(config, surfaces))

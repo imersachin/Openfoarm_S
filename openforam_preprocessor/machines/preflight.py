@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 import trimesh
 
-from machines.assembly import joint_levels
+from machines.assembly import domain_case_for, joint_levels, zone_point
 from machines.config import (
     BoxDomain,
     CylinderDomain,
@@ -79,20 +79,16 @@ def estimate_cells(config: MachineProjectConfig, meshes: Mapping[str, trimesh.Tr
         return band_cells * area / size**2
 
     domain = config.domain
-    domain_cell = None
     if isinstance(domain, BoxDomain):
         add(estimate.background, "domain", _cells(box_grid(domain)))
-        domain_cell = domain.cell_size
     elif isinstance(domain, CylinderDomain):
         add(estimate.background, "domain", _cells(cylinder_grid(domain)))
-        domain_cell = domain.cell_size
     elif isinstance(domain, ImportedDomain):
         for surface, part in zip([s for s in surfaces if s.owner.startswith("domain.parts.")],
                                  domain.parts, strict=False):
             grid = surface_grid(surface, part.cell_size)
             if grid is not None:
                 add(estimate.background, f"domain_{part.name}", _cells(grid))
-        domain_cell = min(p.cell_size for p in domain.parts)
 
     read = {s.owner: s for s in surfaces}
     for i, zone in enumerate(config.rotating_zones):
@@ -105,9 +101,14 @@ def estimate_cells(config: MachineProjectConfig, meshes: Mapping[str, trimesh.Tr
                 add(estimate.background, case, _cells(grid))
             continue
         add(estimate.background, case, _cells(zone_grid(zone)))
-        if domain_cell is not None:
+        # The interface band is in the domain mesh holding the zone (an imported
+        # part's case, at that part's cell size).
+        holder = domain_case_for(config, surfaces, zone_point(zone))
+        if holder is not None:
+            holder_case, holder_cell = holder
             area = sum(float(m.area) for _, m in zone_surface(zone))
-            add(estimate.surface, "domain", band(area, domain_cell / 2**zone.interface_level))
+            add(estimate.surface, holder_case,
+                band(area, holder_cell / 2**zone.interface_level))
 
     # Imported surfaces (G5): a band around every refined region and joint region.
     levels = joint_levels(config, [s for s in surfaces if s.readable])
@@ -125,11 +126,13 @@ def estimate_cells(config: MachineProjectConfig, meshes: Mapping[str, trimesh.Tr
         if mesh is None:
             continue
         own = config.zone(body.zone or "")
-        cell = own.cell_size if own is not None else domain_cell
-        if cell is None:
-            continue
-        case = (f"zone_{own.name}" if own is not None and body.motion is not Motion.STATIONARY
-                else "domain")
+        if own is not None and body.motion is not Motion.STATIONARY:
+            case, cell = f"zone_{own.name}", own.cell_size
+        else:  # in the domain mesh that holds it (an imported part's case)
+            holder = domain_case_for(config, surfaces, mesh.vertices)
+            if holder is None:
+                continue
+            case, cell = holder
         finest = cell / 2**body.refinement.max_level
         area = float(mesh.area)
         add(estimate.surface, case, band(area, finest))
