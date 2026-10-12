@@ -23,6 +23,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_core import PydanticCustomError
 
+from case_setup.physics import PhysicsConfig
 from core.config.models import LengthUnit, OpenFOAMProfile, PositiveFloat, PositiveInt
 from vawt.config import (
     SCHEMA_VERSION_INVALID,
@@ -37,7 +38,8 @@ from vawt.config import (
     WakeConfig,
 )
 
-MACHINE_SCHEMA_VERSION = 1
+# 2 (G6): the optional `physics` section; a version 1 project loads unchanged.
+MACHINE_SCHEMA_VERSION = 2
 
 _STRICT = ConfigDict(frozen=True, allow_inf_nan=False, extra="forbid")
 # A name OpenFOAM accepts as a patch, zone or region name.
@@ -351,6 +353,9 @@ class MachineProjectConfig(BaseModel):
     quality: StrictMeshQualityLimits = Field(default_factory=StrictMeshQualityLimits)
     max_global_cells: PositiveInt = 2_000_000
     export: ExportConfig = Field(default_factory=ExportConfig)
+    # Case setup (section 9; G6). Absent: mesh only. Never a meshing input
+    # (invariant 14).
+    physics: PhysicsConfig | None = None
 
     @model_validator(mode="before")
     @classmethod

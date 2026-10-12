@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | G0 complete on synthetic geometry (`docs/rotating_machinery_notes.md`); real-geometry items wait for section 17. G1 (configuration), G2 (domains and patches), G3 (bodies and zones), G4 (HAWT preset and pipeline, synthetic rotor) and G5 (Francis preset, imported zones and joints, synthetic G0 R4 passage only) complete. G6 not started. |
+| Status | G0 complete on synthetic geometry (`docs/rotating_machinery_notes.md`); real-geometry items wait for section 17. G1 (configuration), G2 (domains and patches), G3 (bodies and zones), G4 (HAWT preset and pipeline, synthetic rotor) and G5 (Francis preset, imported zones and joints, synthetic G0 R4 passage only) complete. G6 (case setup, solver smoke test; synthetic geometry only) complete (section 25). G7 not started. |
 | Place this file at | `openforam_preprocessor/docs/rotating_machinery.md` |
 | Builds on | `docs/vawt_mesh_generator.md` (V0–V5). V5 must be complete first. |
 | Replaces | Nothing. The VAWT workflow becomes one preset of this one. |
@@ -212,7 +212,7 @@ MachineProjectConfig
 │                              when the rotating walls are regions of imported
 │                              surfaces (a Francis runner's blades)
 ├── rotating_zones[]           name, shape: CYLINDER | IMPORTED, axis, centre, size or STL,
-│                              cell size, rotation (section 9.3)
+│                              cell size (rotation: physics.rotation, section 25, P1)
 ├── domain
 │   ├── kind                   BOX | CYLINDER | IMPORTED
 │   ├── box / cylinder         dimensions and placement
@@ -227,7 +227,9 @@ MachineProjectConfig
 ├── refinement                 per body, per zone, wake or region boxes and cylinders
 ├── layers                     per body (relative or absolute sizing)
 ├── snappy_quality, quality, max_global_cells
-├── physics                    section 9 (optional until G6)
+├── physics                    section 9: fluid, turbulence, rotation per zone name,
+│                              inlets and outlets per patch name, time (optional:
+│                              absent means mesh only; section 25)
 └── export
 ```
 
@@ -373,8 +375,13 @@ real run on v2512.
 | Rotating zones on different axes whose bounding boxes overlap (bounding box only) | WARNING |
 | Zone clearance to domain or other bodies below a configurable fraction of the cell size | WARNING |
 | Rotation speed zero or direction not set | BLOCKING (G6) |
-| Time step gives more than a configurable rotation angle per step | WARNING (G6) |
-| Estimated Courant number above a configurable limit | WARNING (G6) |
+| A zone without rotation settings, or rotation set for an unknown zone; more than one rotating zone with physics (P5) | BLOCKING (G6) |
+| An inlet or outlet patch without its value, or a value for a patch of another type; k-ω SST without a length scale; a tip-speed ratio with no free-stream speed; a flow rate on an inlet whose area cannot be measured | BLOCKING (G6) |
+| Time step gives more than a configurable rotation angle per step (default 1°, provisional) | WARNING (G6) |
+| Estimated Courant number above a configurable limit (the configured maximum; heuristic) | WARNING (G6) |
+
+Physics findings (the G6 rows) never stop meshing (invariant 14): the mesh is
+built and checked, and case setup is skipped until they are resolved.
 
 Thresholds are configuration, never constants.
 
@@ -411,7 +418,7 @@ What a change re-runs:
 | One imported part's or zone's cell size | That part's mesh and the meshes joined to it (joint levels follow the finer side), assembly, check, case setup | Other parts and zones |
 | A joint's level | The two joined meshes, assembly, check, case setup | Other parts and zones |
 | Domain size or patch names | Domain mesh, assembly, check, case setup | Zone meshes |
-| Patch type only | Case setup | All meshes |
+| Patch type only | Assembly, check, case setup (H3 kept; section 25, P2) | Every domain and zone mesh |
 | Body geometry or units | Everything downstream of that body | Other bodies |
 
 A re-run mesh that comes out identical leaves the assembly and checks reused:
@@ -420,7 +427,8 @@ they are cached on the mesh files they consume (seen in G5).
 Patch types (G4, decision H3): the domain and zone meshes are built with plain
 patches; the assembly sets the final types (`foamDictionary` on the merged
 boundary). A type-only change re-runs the assembly and checks, never a domain
-or zone mesh. G6 case setup may take this step over.
+or zone mesh. G6 keeps this (section 25, P2): case setup reads the types from
+the assembled mesh.
 
 ---
 
@@ -758,3 +766,82 @@ Evidence: `tests/unit/machines/test_g2_g4_review_fixes.py` and
 4. **Layers:** a body's layers change re-runs its zone mesh only (tested).
 5. **`interface_level` on an imported zone:** WARNING (section 10).
 6. **Duplicate or overlapping regions:** WARNING (section 10).
+
+## 25. Decisions for G6 (owner)
+
+P1–P7, approved before G6. Evidence: `tests/integration/test_case_setup_real.py`
+(OpenFOAM v2512), `tests/unit/case_setup/`. **Every G6 result is on synthetic
+geometry only** (the G0 HAWT rotor and the G0 R4 passage). **A solver run that
+completes is not evidence that its results are correct (invariant 15):** the
+smoke test shows that the generated case is consistent and starts, nothing
+more.
+
+1. **P1 Rotation** lives in `physics.rotation`, keyed by zone name, not on the
+   zone: no physics field reaches a meshing input (section 6;
+   `test_g6_physics_coverage.py` mutates every physics field and checks that
+   the case files change and the meshing inputs do not).
+2. **P2 Patch types** stay with the assembly (H3); case setup reads them from
+   the assembled mesh's `boundary`. A type-only change re-runs the assembly,
+   the checks and case setup, never a snappyHexMesh part mesh. Measured on the
+   HAWT (real v2512): 2.59 s for the whole run; commands mergeMeshes 0.49 s,
+   createPatch 0.57 s, foamDictionary (twice) < 0.01 s, checkMesh 1.02 s,
+   postProcess 0.33 s. A physics-only change ran case setup only: 0.16 s, every
+   mesh file byte-identical.
+3. **P3 Time step:** `adjustTimeStep yes`, `maxCo 2` (propeller tutorial),
+   `maxDeltaT` = 1° of rotation (rotatingFanInRoom has maxDeltaT). Measured:
+   over 10° the HAWT took 19 steps and the Francis passage 18; the step
+   settles at Courant 1.99. **maxCo acts on the previous step:** from rest one
+   early step reached 3.81 (HAWT) and 3.89 (Francis) before settling. The
+   first step is also limited by the Courant estimate. Both defaults stay
+   provisional starting values.
+4. **P4 Flow-rate inlet:** `flowRateInletVelocity` (`volumetricFlowRate
+   constant Q`, angledDuct tutorial form) proven on the Francis passage:
+   Q = 0.282542 m³/s (1 m/s × the inlet region's area); after the steps the
+   inlet carried −0.282542 m³/s and the outlet 0.282522 m³/s
+   (`postProcess -func flowRatePatch`). Kept.
+5. **P5 One rotating zone** per case (every preset has one). Several zones
+   (multiSolidBodyMotionSolver) are BLOCKING (`CASE_SETUP_ONE_ZONE`) until a
+   later milestone proves them.
+6. **P6 End time** 5 revolutions by default; write interval 1 revolution
+   (or in degrees). Starting values.
+7. **P7 Sources:** each generated setting cites the v2512 tutorial or
+   template it comes from (module docstrings of `case_setup/fields.py` and
+   `case_setup/dictionaries.py`); the G6 runs prove them again. For G0's
+   inputs the generated fields, `dynamicMeshDict`, `transportProperties`,
+   `fvSchemes`, `fvSolution` and `turbulenceProperties` equal the G0 R3 files
+   (`test_g6_case_setup.py`); the Francis walls equal G0 R4's.
+
+Implementation:
+
+- `case_setup/physics.py` (models, formulas), `setup.py` (resolution against
+  the mesh's patch list), `fields.py`, `dictionaries.py`, `validation.py`,
+  `case.py` (writes `case/`).
+- The case is its own directory, `case/`: `0/`, `constant/` (a copy of the
+  assembled `polyMesh` and the physics dictionaries), `system/`. Case setup
+  never writes into `cases/`. A new setup removes generated files it no longer
+  writes (k, ω and ν_t after a switch to laminar); solver output (time
+  directories) is never touched.
+- The pipeline's `machine_case_setup` operation (Python only) follows mesh
+  validation when the project has physics and the mesh passed. It is cached
+  on the assembled mesh's files and the generated files' content.
+  `reports/case_setup.json` gives the derived values: ω in rad/s and rpm,
+  kinematic and Pa outlet pressures, inlet k and ω, the time controls, and
+  the heuristic Courant estimate (labelled as such).
+- Every patch of the mesh gets a condition; a mesh patch without a configured
+  type stops case setup (`CASE_SETUP_FAILED`). A WALL inside a rotating zone
+  is `noSlip`, zero velocity in the absolute frame (K6).
+- Rotation sign: on the real HAWT run every moved point turned +10.0000° about
+  +x for ω t = 10° (POSITIVE), as G0 found.
+- Internal fields start at rest (U = 0, as G0). Inlet k and ω follow
+  section 9.2 from each inlet's speed (|U|, or Q divided by the inlet area).
+- Schema version 2: the optional `physics` section; a version 1 project loads
+  unchanged. The VAWT migration now writes each model's own schema version
+  (before, it copied the machine version into the VAWT model, which only
+  worked while both were 1).
+- AMI sum(weights) during the runs: HAWT 0.911–1.04, Francis within the
+  0.85–1.5 range of the result check.
+- **The Courant estimate understates:** for the HAWT at 1° per step it gives
+  1.91, while G0 measured 6.7–7.0 at 1° per step on the same rotor. It uses
+  the zone's finest configured cell; snapped and layer cells are smaller.
+  Treat it as a lower bound. The solver's adjustable step (maxCo) is what
+  limits the Courant number.

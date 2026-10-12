@@ -15,6 +15,7 @@ from __future__ import annotations
 from pydantic import ValidationError
 
 from machines.config import (
+    MACHINE_SCHEMA_VERSION,
     BodyConfig,
     BodyRefinement,
     BoxDomain,
@@ -33,6 +34,7 @@ from machines.config import (
 )
 from vawt.case_generator import CELL_ZONE_NAME
 from vawt.config import (
+    VAWT_SCHEMA_VERSION,
     DomainConfig,
     DomainPatches,
     RefinementConfig,
@@ -80,7 +82,7 @@ def from_vawt(config: VawtProjectConfig) -> MachineProjectConfig:
                            cell_size=config.domain.cell_size,
                            location_in_mesh=config.domain.location_in_mesh)
     return MachineProjectConfig(
-        schema_version=config.schema_version,
+        schema_version=MACHINE_SCHEMA_VERSION,
         project_name=config.project_name,
         openfoam_profile=config.openfoam_profile,
         machine=MachineType.VAWT,
@@ -190,7 +192,7 @@ def _vawt_config(config: MachineProjectConfig, axes: RotorAxes, domain: DomainCo
     assert isinstance(shape, CylinderZone)
     source, refinement = body.source, body.refinement
     return VawtProjectConfig(
-        schema_version=config.schema_version,
+        schema_version=VAWT_SCHEMA_VERSION,  # each model has its own version
         project_name=config.project_name,
         openfoam_profile=config.openfoam_profile,
         geometry=RotorGeometryConfig(

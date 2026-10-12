@@ -269,6 +269,8 @@ INACTIVE: dict[str, tuple[str, Predicate]] = {
     "flow_axis": ("chooses the preset's inlet and outlet faces and validation rules; the "
                   "patches name their faces explicitly", _always),
     "machine": ("selects validation rules and presets, not a meshing input", _always),
+    "physics": ("case setup only, never a meshing input (invariant 14; G6): "
+                "tests/unit/case_setup/test_g6_physics_coverage.py", _always),
     "export.fluent_msh": ("VAWT workflow only (VAWT_ONLY_SETTING otherwise)", _always),
     "wake": ("VAWT workflow only (VAWT_ONLY_SETTING otherwise)", _always),
     "rotating_zones.*.shape.hole_diameter": ("None: no hole (exercised by pole_annular)",

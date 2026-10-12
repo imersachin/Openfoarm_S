@@ -6,9 +6,11 @@ runner, resource estimator):
 
     validate (gate) -> generate cases -> environment check, resource preflight
     -> one mesh per domain and zone case -> assemble -> checkMesh, AMI weights
-    -> mesh validation and result checks
+    -> mesh validation and result checks -> case setup (G6, with physics)
 
-Each OpenFOAM operation is reused only when its recorded inputs and outputs
+Physics findings never stop meshing (invariant 14): with an ERROR or
+BLOCKING physics finding the mesh is still built and checked, and case setup
+is skipped. Each OpenFOAM operation is reused only when its recorded inputs and outputs
 verify. A mesh whose result check fails is not recorded. Commands run from
 their case directory; logs go to logs/<case>/. Meshes are built untyped and
 the assembly sets the patch types (H3).
@@ -18,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
 import re
 import shutil
@@ -29,6 +32,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from case_setup.case import case_files, render, write_case
+from case_setup.setup import CaseSetup, CaseSetupError
+from case_setup.validation import CaseSetupThresholds, check_physics
 from core.artifacts import ArtifactStore
 from core.artifacts.hashing import files_under, hash_files, sha256_json
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage, has_stopping_issue
@@ -46,6 +52,7 @@ from machines.mesh_checks import (
 )
 from machines.operations import (
     ASSEMBLE,
+    CASE_SETUP,
     CHECK_MESH,
     GENERATE_CASES,
     MACHINE_EXECUTABLES,
@@ -69,6 +76,7 @@ from vawt.status import RunState, write_status
 
 PREFLIGHT_REPORT = "reports/resource_preflight.json"
 MESH_REPORT = "reports/mesh_quality_report.json"
+CASE_SETUP_REPORT = "reports/case_setup.json"
 SUPERSEDED_MESH_REPORT = "reports/mesh_quality_report.superseded.json"
 POLY_MESH = "constant/polyMesh"
 _EXCLUDED = frozenset({"sets"})  # checkMesh diagnostics, not part of the mesh
@@ -172,7 +180,9 @@ class MachinePipeline:
         estimator: ResourceEstimator | None = None,
         system_probe: Callable[[Path], SystemResources] | None = None,
         thresholds: MachineThresholds | None = None,
+        case_thresholds: CaseSetupThresholds | None = None,
     ) -> None:
+        self.case_thresholds = case_thresholds or CaseSetupThresholds()
         self.runner = runner or OpenFOAMRunner()
         self.environment = environment  # None: the process environment at run time
         self.estimator = estimator or ResourceEstimator()
@@ -254,6 +264,9 @@ class MachinePipeline:
         if has_stopping_issue(run.issues):
             raise _Stop("Validation found problems that stop the run; no OpenFOAM command "
                         "was started.")
+        # Physics findings: reported now, but they stop case setup only.
+        physics = check_physics(config, checked.surfaces, self.case_thresholds)
+        run.issues.extend(physics)
 
         # 2. Dictionaries and surfaces (cheap; write-if-changed). Untyped meshes (H3).
         run.status(GENERATE_CASES)
@@ -267,7 +280,7 @@ class MachinePipeline:
                 "Change the configuration; see the message.")) from exc
         self.generator.write(run.root, cases)
         run.executed.append(GENERATE_CASES)
-        run.operations = operations_for(cases)
+        run.operations = operations_for(cases, case_setup=config.physics is not None)
         run.status(GENERATE_CASES)
         openfoam_ops = [op for op in run.operations if executables(op)]
 
@@ -319,9 +332,43 @@ class MachinePipeline:
         run.executed.append(VALIDATE_MESH)
         report_path, succeeded, status = self._validate_mesh(run, cases)
         write_last_meshed(run.root, run.run_id, config, status)
-        return self._result(run, succeeded, f"Mesh validation completed with status: {status}.",
+        message = f"Mesh validation completed with status: {status}."
+        # 8. Case setup (G6): only on a mesh that passed, and only with physics.
+        if succeeded and config.physics is not None:
+            run.status(CASE_SETUP)
+            if has_stopping_issue(physics):
+                return self._result(run, False, message + " Case setup was not done: the "
+                                    "physics settings have problems; the mesh is reused "
+                                    "next time.", RunState.FAILED, report=report_path)
+            self._case_setup(run, checked.surfaces, force)
+            message += " The case is set up in case/."
+        return self._result(run, succeeded, message,
                             RunState.SUCCEEDED if succeeded else RunState.FAILED,
                             report=report_path)
+
+    # --- case setup ------------------------------------------------------------------------------
+
+    def _case_setup(self, run: _Run, surfaces: Sequence[Any], force: bool) -> None:
+        """Write case/ from the assembled mesh; cached on that mesh and on the
+        files written, so the mesh never re-runs for a physics change."""
+        mesh = run.case(MERGED_CASE) / POLY_MESH
+        try:
+            setup, files = render(run.config, surfaces, mesh)
+        except CaseSetupError as error:
+            raise _Stop("Case setup failed; the mesh is valid and is reused next time.", _issue(
+                IssueSeverity.BLOCKING, IssueCategory.CONFIGURATION, IssueStage.CASE_SETUP,
+                "CASE_SETUP_FAILED", str(error),
+                "Change the physics or patch settings; see the message.")) from error
+        inputs = {**hash_files(run.root, self._mesh_files(run, MERGED_CASE)),
+                  "files": sha256_json(files)}
+        if not force and run.store.check(CASE_SETUP, inputs).reusable:
+            run.reused.append(CASE_SETUP)
+        else:
+            run.store.invalidate(CASE_SETUP)
+            run.executed.append(CASE_SETUP)
+            write_case(run.root, files, mesh)
+            run.store.record(CASE_SETUP, inputs, case_files(run.root, files))
+        _write_case_report(run, setup)
 
     # --- cache inputs -------------------------------------------------------------------------
 
@@ -528,6 +575,34 @@ class MachinePipeline:
                  "stderr_log_path": c.stderr_log_path, "command_run_id": c.run_id}
                 for c in run.commands],
         })
+
+
+def _write_case_report(run: _Run, setup: CaseSetup) -> None:
+    """Derived values, each in the units the user entered and as written
+    (section 9: both values are shown)."""
+    physics, rotation, time = setup.physics, setup.rotation, setup.time
+    payload = {
+        "run_id": run.run_id,
+        "case": "case",
+        "solver": "pimpleFoam",
+        "note": "Prepared, not solved. A case that runs is not evidence that its results "
+                "are correct (invariant 15).",
+        "rotation": {"zone": rotation.zone, "origin": rotation.origin, "axis": rotation.axis,
+                     "omega_rad_s": rotation.omega,
+                     "rpm": rotation.omega * 60 / (2 * math.pi)},
+        "fluid": physics.fluid.model_dump(mode="json"),
+        "turbulence": physics.turbulence.model.value,
+        "inlets": {name: asdict(inlet) for name, inlet in setup.inlets.items()},
+        "outlets": {name: {"pressure_pa": physics.outlets[name].pressure_pa,
+                           "kinematic_pressure_m2_s2": value}
+                    for name, value in setup.outlets.items()},
+        "patches": {name: kind.value for name, kind in setup.patches},
+        "time": {**asdict(time), "estimates": "courant_estimate, smallest_cell and "
+                 "reference_speed are heuristic, not the solver's values"},
+    }
+    path = run.root / CASE_SETUP_REPORT
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def _read(path: Path) -> str:
