@@ -33,8 +33,11 @@ from machines.previews import (
     mesh_preview,
     patch_kinds,
 )
+from tests.fixtures.vawt.drafts import preset_draft
 from tests.integration.test_francis_pipeline_real import francis_config
 from tests.integration.test_hawt_pipeline_real import hawt_config
+from vawt.runtime import RunRegistry
+from vawt.service import PreviewView, RunView, VawtService
 from visualization.foam_reader import read_boundary
 
 pytestmark = [
@@ -112,3 +115,35 @@ def test_real_mesh_display(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name
           f"problem faces {tight_s:.2f} s; cut edges "
           f"{[line.total for line in scene.lines]}")
     assert first_s < 30 and again_s < 2
+
+
+def test_real_vawt_mesh_through_the_service(tmp_path: Path) -> None:
+    """The pane's own path: a VAWT AMI project meshed by VawtService, then the
+    Mesh and Setup views (patch names of the real VAWT mesh)."""
+    root = tmp_path / "project"
+    service = VawtService(root, registry=RunRegistry())
+    assert service.save(preset_draft(tmp_path)).saved
+    assert service.start_run().started
+    deadline = time.monotonic() + 600
+    while service.run_status().state is RunView.RUNNING:
+        assert time.monotonic() < deadline
+        time.sleep(0.5)
+    assert service.run_status().state is RunView.SUCCEEDED
+
+    mesh = service.preview(PreviewView.MESH)
+    assert mesh.scene is not None and mesh.built
+    kinds = {s.name: s.kind for s in mesh.scene.surfaces}
+    assert kinds["inlet (patch)"] == "INLET" and kinds["outlet (patch)"] == "OUTLET"
+    assert kinds["rotor (wall)"] == "ROTATING_WALL"
+    sides = {k for n, k in kinds.items()
+             if n not in ("inlet (patch)", "outlet (patch)", "rotor (wall)")
+             and k != INTERFACE}
+    assert sides == {"SLIP"} and len(kinds) == 9  # 4 sides, 2 AMI sides
+    assert sum(k == INTERFACE for k in kinds.values()) == 2
+    assert len(mesh.scene.lines) == 2 and mesh.scene.markers == ()
+    assert any("region0" in note for note in mesh.notes)
+    labels = [a.label for a in mesh.arrows]
+    assert any(label.endswith(": rotation not set") for label in labels)  # VAWT: no physics
+    assert "flow along +x (flow axis)" in labels
+    assert service.preview(PreviewView.MESH).built is False
+    assert service.preview(PreviewView.SETUP).scene is not None

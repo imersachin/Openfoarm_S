@@ -62,6 +62,21 @@ def test_arrows_have_heads_only_when_defined(tmp_path: Path) -> None:
     assert unset.line.dash == "dash"
 
 
+def test_a_defined_rotation_is_a_solid_arc_with_a_head(tmp_path: Path) -> None:
+    config = hawt(tmp_path, physics={
+        "fluid": {"density": 1.2, "kinematic_viscosity": 1.5e-5},
+        "rotation": {"rotating": {"speed": {"kind": "RPM", "rpm": 60},
+                                  "direction": "NEGATIVE"}}})
+    scene = build_setup_scene(config)
+    figure = scene_figure(scene, rotation_arrows(config, scene))
+
+    label = ("rotating: negative about +x (clockwise seen from +x), 60 rpm")
+    arc = next(t for t in figure.data if t.type == "scatter3d" and t.name == label)
+    assert arc.line.dash == "solid"
+    assert [c.name for c in figure.data if c.type == "cone"] == [
+        "rotating: rotation axis +x", label]
+
+
 def test_mesh_figure_shows_thinning_cuts_and_problems(tmp_path: Path) -> None:
     # Centred on the HAWT zone (the origin), so both cuts cross it.
     poly = write_block_mesh(tmp_path, (20, 20, 20), spacing=0.1, origin=(-1.0, -1.0, -1.0))

@@ -509,7 +509,8 @@ def test_flow_unknown_is_a_note(tmp_path: Path) -> None:
     config = machine("duct", tmp_path, patches=[])
     arrows, notes = flow_arrows(config, build_setup_scene(config))
     assert arrows == []
-    assert notes == ["Flow direction unknown: no inlet condition, flow axis or inlet patch."]
+    assert notes == ["Flow direction unknown: no inlet condition, flow axis or inlet patch "
+                     "gives one."]
 
 
 def test_cut_planes(tmp_path: Path) -> None:
@@ -523,6 +524,80 @@ def test_cut_planes(tmp_path: Path) -> None:
     along, across = cut_planes(pole)
     assert along.normal == (0.0, 1.0, 0.0)  # contains z and x
     assert across.normal == (0.0, 0.0, 1.0)
+
+
+def test_cut_across_an_imported_zone_is_at_its_mid_span(tmp_path: Path) -> None:
+    raw = configs.francis(tmp_path)
+    raw["rotating_zones"][0]["shape"]["origin"] = {"x": 0.0, "y": 0.0, "z": -0.3}  # on axis
+    config, issues = parse_config(raw)
+    assert config is not None, issues
+    _, across = cut_planes(config, build_setup_scene(config))
+    assert across.name == "cut across the runner axis at z = 0 m"  # the runner's middle
+    assert cut_planes(config)[1].origin[2] == -0.3  # without the scene: only the origin
+
+
+def test_flow_rate_inlet_without_its_surface_falls_back_to_the_flow_axis(
+        tmp_path: Path) -> None:
+    config = machine("pole", tmp_path, flow_axis="y")
+    config = config.model_copy(update={"physics": _physics(
+        None, inlet={"kind": "FLOW_RATE", "volumetric_flow_rate": 0.1})})
+    arrows, notes = flow_arrows(config, previews.Scene("mesh", ""))  # no patch frames
+    assert [a.label for a in arrows] == ["flow along +y (flow axis)"]
+    assert notes == ["Inlet inlet: its surface is not shown, so its flow-rate direction "
+                     "cannot be drawn."]
+    along, _ = cut_planes(config, previews.Scene("mesh", ""))
+    assert along.normal == (-1.0, 0.0, 0.0)  # contains the axis (z) and the flow (y)
+
+
+@pytest.mark.parametrize("start", range(8))
+def test_concave_face_cut_is_right_from_any_start_vertex(start: int) -> None:
+    points = np.array([[0, 0, 0], [3, 0, 0], [3, 1, 0], [2, 1, 0], [2, 0.2, 0],
+                       [1, 0.2, 0], [1, 1, 0], [0, 1, 0]], dtype=float)
+    faces = previews._Faces.of([np.roll(np.arange(8), -start)])
+    segments = cut_segments(points, faces, (0, 0.5, 0), (0, 1, 0))
+    assert sorted(sorted(s[:, 0].round(6)) for s in segments) == [[0.0, 1.0], [2.0, 3.0]]
+
+
+def test_inputs_changing_during_the_build_are_not_stored(tmp_path: Path) -> None:
+    poly = write_block_mesh(tmp_path / "case", (3, 2, 2))
+    signatures = iter(["before", "after"])
+    result = PreviewStore(tmp_path).get(
+        "mesh", lambda: next(signatures), lambda: "hash",
+        lambda key: build_mesh_scene(poly, KINDS, (), key=key))
+    assert result.built and len(result.scene.surfaces) == 3
+    assert [i.code for i in result.scene.issues] == ["VIEW_INPUTS_CHANGED"]
+    assert not (tmp_path / "previews").exists()
+
+
+def test_a_store_that_cannot_be_written_is_a_warning(tmp_path: Path,
+                                                     monkeypatch: pytest.MonkeyPatch) -> None:
+    poly = write_block_mesh(tmp_path / "case", (3, 2, 2))
+
+    def refuse(*args: Any) -> None:
+        raise PermissionError("read-only")
+
+    monkeypatch.setattr(PreviewStore, "_write", refuse)
+    result = mesh_preview(tmp_path, poly, KINDS, ())
+    assert len(result.scene.surfaces) == 3
+    (issue,) = result.scene.issues
+    assert issue.code == "VIEW_NOT_STORED" and "read-only" in issue.message
+
+
+def test_pruning_tolerates_a_file_removed_meanwhile(tmp_path: Path,
+                                                    monkeypatch: pytest.MonkeyPatch) -> None:
+    store = PreviewStore(tmp_path)
+    store.directory.mkdir()
+    for n in range(5):
+        (store.directory / f"mesh-{n}.npz").write_bytes(b"x")
+    original = Path.stat
+
+    def vanished(self: Path, *args: Any, **kwargs: Any) -> Any:
+        if self.name == "mesh-2.npz":
+            raise FileNotFoundError(self)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", vanished)
+    store._prune("mesh", keep=store.directory / "mesh-4.npz")  # no exception
 
 
 # --- boundaries ------------------------------------------------------------------------------

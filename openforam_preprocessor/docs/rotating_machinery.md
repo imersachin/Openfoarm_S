@@ -918,6 +918,19 @@ Rules:
   signature matches loads the stored file only; a changed signature hashes
   the inputs and reuses a scene with the same hash. The three newest scenes
   per view are kept. Physics is not in the stored scene: the arrows follow it.
+- **The mesh view is placed by the setup scene** of the configuration the
+  mesh was built from (stored like any setup scene): the cut across the axis
+  is at the zone's mid-span (an imported zone's origin need not be there), and
+  a flow-rate inlet's arrow uses its region's normal. When no inlet condition
+  gives a direction, the flow axis is used, else the inlet patch normal.
+  Imported region normals are taken as pointing out of the fluid; an
+  inward-wound region would reverse that arrow (nothing here checks it).
+- **Cuts of concave faces:** a face that crosses the plane more than twice is
+  paired along the cut line (even-odd rule), so the outline is right
+  wherever the face's vertex list starts (snappy meshes have a few).
+- A scene whose inputs changed while it was built (a mesh rewritten by a
+  run) is shown with a warning and not stored; a display file that cannot be
+  written is a warning, and the view is rebuilt next time.
 - **The pane never re-reads on a rerun.** The figure is cached per preview
   key, computed from the configuration and the files' stat only (tested by
   counting builds and reads on section switches, and in a new session).
@@ -929,10 +942,10 @@ Measurements (WSL Ubuntu 24.04, Python 3.12):
 | | HAWT | Francis |
 |---|---|---|
 | Boundary faces (preset meshes of the integration test) | 20,072 | 40,106 |
-| Mesh scene, first build (read, boundary, two cuts, sets) | 0.32 s | 0.51 s |
-| Mesh scene, loaded from `previews/` | 6 ms | 10 ms |
+| Mesh scene, first build (read, boundary, two cuts, sets) | 0.31–0.32 s | 0.51–0.54 s |
+| Mesh scene, loaded from `previews/` | 4–6 ms | 9–10 ms |
 | Cell edges on the two cuts | 6,709; 11,117 | 8,267; 4,517 |
-| Problem faces with tightened limits (max non-orthogonality 25, skewness 0.8), build | 11,727 faces, 0.31 s | 34,571 faces, 0.59 s |
+| Problem faces with tightened limits (max non-orthogonality 25, skewness 0.8), build | 11,727 faces, 0.30–0.31 s | 34,571 faces, 0.53–0.59 s |
 | Setup scene build | < 0.01 s | 0.01 s |
 
 Planning probe on larger meshes (the integration tests' final, refined

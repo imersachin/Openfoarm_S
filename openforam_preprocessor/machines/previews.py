@@ -21,6 +21,8 @@ and a scene with the same content hash is reused. No Plotly, no Streamlit.
 
 from __future__ import annotations
 
+import contextlib
+import dataclasses
 import json
 import math
 import os
@@ -206,6 +208,10 @@ def _issue(code: str, message: str, action: str, category: IssueCategory,
            severity: IssueSeverity = IssueSeverity.INFO, **details: Any) -> Issue:
     return Issue(category=category, severity=severity, stage=IssueStage.VISUALIZATION,
                  code=code, message=message, suggested_action=action, details=details)
+
+
+def _with_issue(scene: Scene, issue: Issue) -> Scene:
+    return dataclasses.replace(scene, issues=(*scene.issues, issue))
 
 
 # --- thinning ---------------------------------------------------------------------------
@@ -684,8 +690,10 @@ def flow_arrows(config: MachineProjectConfig, scene: Scene) -> tuple[list[Arrow]
                 continue
             add(f"flow at {name}", at(name), -np.asarray(frame.normal),
                 f"flow at {name}: flow-rate inlet, normal into the domain")
-    if arrows or inlets:
+    if arrows:
         return arrows, notes
+    # No inlet condition gave a direction: the flow axis, else the inlet patches.
+    why = "no inlet condition set" if not inlets else "the inlet condition gives none"
     if config.flow_axis is not None:
         e = unit(config.flow_axis)
         inlet_frames = [p for p in scene.patches if p.kind == PatchType.INLET.value]
@@ -695,10 +703,10 @@ def flow_arrows(config: MachineProjectConfig, scene: Scene) -> tuple[list[Arrow]
     for frame in scene.patches:
         if frame.kind == PatchType.INLET.value and any(frame.normal):
             add(f"flow at {frame.name}", np.asarray(frame.centroid), -np.asarray(frame.normal),
-                f"flow at {frame.name}: into the domain through the inlet patch "
-                "(no inlet condition set)")
+                f"flow at {frame.name}: into the domain through the inlet patch ({why})")
     if not arrows:
-        notes.append("Flow direction unknown: no inlet condition, flow axis or inlet patch.")
+        notes.append("Flow direction unknown: no inlet condition, flow axis or inlet patch "
+                     "gives one.")
     return arrows, notes
 
 
@@ -793,8 +801,18 @@ def cut_segments(points: np.ndarray, faces: _Faces, origin: Sequence[float],
     t = d[a] / (d[a] - d[b])
     hits = points[a] + t[:, None] * (points[b] - points[a])
     owner = face_of[crossing]
-    # A closed polygon crosses the plane an even number of times; its crossing
-    # edges are already grouped by face and in order around it: pair them.
+    # A closed polygon crosses the plane an even number of times, and its
+    # crossings are grouped by face. With two they are one segment. A concave
+    # face crosses more often: its crossings lie on one line (the plane meets
+    # the face's plane there), and sorted along it, the 1st-2nd, 3rd-4th...
+    # are the parts inside the face (even-odd rule), wherever the face starts.
+    starts = np.flatnonzero(np.r_[True, owner[1:] != owner[:-1]])
+    counts = np.diff(np.r_[starts, len(owner)])
+    for start, count in zip(starts[counts > 2], counts[counts > 2], strict=True):
+        group = hits[start:start + count]
+        spread = group - group.mean(axis=0)
+        direction = np.linalg.svd(spread, full_matrices=False)[2][0]
+        hits[start:start + count] = group[np.argsort(spread @ direction, kind="stable")]
     pairs = hits.reshape(-1, 2, 3)
     return pairs[owner[0::2] == owner[1::2]]
 
@@ -1046,8 +1064,13 @@ class PreviewStore:
             return key if isinstance(key, str) else None
         return None
 
-    def get(self, view: str, signature: str, hasher: Callable[[], str],
+    def get(self, view: str, signer: Callable[[], str], hasher: Callable[[], str],
             builder: Callable[[str], Scene]) -> StoredPreview:
+        """The stored scene for the inputs' signature, else for their hash, else
+        built and stored. Not stored: a scene with nothing to show, and one whose
+        inputs changed while it was built (a mesh being rewritten by a run). A
+        failed write is a warning on the scene, never an exception."""
+        signature = signer()
         key = self._indexed(view, signature)
         if key is not None:
             scene = self._load(view, key)
@@ -1060,8 +1083,22 @@ class PreviewStore:
             scene = builder(key)
             if scene.issues and not scene.surfaces:
                 return StoredPreview(scene, built=True, hashed=True)  # nothing to keep
-            self._write(view, key, scene)
-        self._write_index(view, signature, key)
+            if signer() != signature:
+                return StoredPreview(_with_issue(scene, _issue(
+                    "VIEW_INPUTS_CHANGED", "The files changed while this view was built; "
+                    "it may mix old and new content and was not stored.",
+                    "Open the view again when the run has finished.",
+                    IssueCategory.INPUT, IssueSeverity.WARNING)), built=True, hashed=True)
+        try:
+            if built:
+                self._write(view, key, scene)
+            self._write_index(view, signature, key)
+        except OSError as exc:
+            scene = _with_issue(scene, _issue(
+                "VIEW_NOT_STORED", f"The display file could not be stored in "
+                f"{self.directory}: {exc}", "Check that the project folder is writable; "
+                "the view is built again each time until then.", IssueCategory.INPUT,
+                IssueSeverity.WARNING))
         return StoredPreview(scene, built=built, hashed=True)
 
     def _write(self, view: str, key: str, scene: Scene) -> None:
@@ -1086,17 +1123,25 @@ class PreviewStore:
         os.replace(partial, target)
 
     def _prune(self, view: str, keep: Path) -> None:
-        stored = sorted(self.directory.glob(f"{view}-*.npz"),
-                        key=lambda p: p.stat().st_mtime_ns, reverse=True)
+        """Best effort: a file removed meanwhile (another tab) or not removable
+        only leaves an extra stored scene."""
+        def age(path: Path) -> int:
+            try:
+                return path.stat().st_mtime_ns
+            except OSError:
+                return 0
+
+        stored = sorted(self.directory.glob(f"{view}-*.npz"), key=age, reverse=True)
         for path in [p for p in stored if p != keep][KEEP_PER_VIEW - 1:]:
-            path.unlink(missing_ok=True)
+            with contextlib.suppress(OSError):
+                path.unlink(missing_ok=True)
 
 
 def setup_preview(root: Path, config: MachineProjectConfig,
                   limits: PreviewLimits | None = None) -> StoredPreview:
     limits = limits or PreviewLimits()
     return PreviewStore(root).get(
-        "setup", setup_signature(config, limits), lambda: setup_hash(config, limits),
+        "setup", lambda: setup_signature(config, limits), lambda: setup_hash(config, limits),
         lambda key: build_setup_scene(config, limits, key))
 
 
@@ -1104,7 +1149,7 @@ def mesh_preview(root: Path, poly: Path, kinds: Mapping[str, str], planes: Seque
                  limits: PreviewLimits | None = None) -> StoredPreview:
     limits = limits or PreviewLimits()
     return PreviewStore(root).get(
-        "mesh", mesh_signature(poly, kinds, planes, limits),
+        "mesh", lambda: mesh_signature(poly, kinds, planes, limits),
         lambda: mesh_hash(poly, kinds, planes, limits),
         lambda key: build_mesh_scene(poly, kinds, planes, limits, key))
 

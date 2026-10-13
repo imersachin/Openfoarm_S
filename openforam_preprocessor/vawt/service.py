@@ -853,11 +853,12 @@ class VawtService:
         config, poly, issues, notes = self._preview_source(view, raw)
         if config is None:
             return PreviewKey(view, None, issues, notes)
-        if poly is None:
-            signature = setup_signature(config, self.preview_limits)
-        else:
-            signature = mesh_signature(poly, patch_kinds(config), cut_planes(config),
-                                       self.preview_limits)
+        signature = [setup_signature(config, self.preview_limits)]
+        if poly is not None:
+            # The cut planes follow from the configuration and the setup scene
+            # (zone mid-span, inlet normals), which the setup signature covers.
+            signature.append(mesh_signature(poly, patch_kinds(config), (),
+                                            self.preview_limits))
         # The arrows follow the whole configuration (rotation, inlets), and the
         # staleness note follows the saved one.
         return PreviewKey(view, sha256_json([signature, config.model_dump(mode="json"),
@@ -870,20 +871,23 @@ class VawtService:
         config, poly, issues, notes = self._preview_source(view, raw)
         if config is None:
             return PreviewData(None, (), notes, issues, built=False)
-        if poly is None:
-            stored = setup_preview(self.root, config, self.preview_limits)
-        elif not (poly / "points").is_file():
+        if poly is not None and not (poly / "points").is_file():
             return PreviewData(None, (), notes, (*issues, _preview_issue(
                 "VIEW_NO_MESH", "The mesh files of the last run are missing.",
                 "Run the mesh again.", IssueSeverity.WARNING)), built=False)
-        else:
-            stored = mesh_preview(self.root, poly, patch_kinds(config), cut_planes(config),
-                                  self.preview_limits)
+        # The setup scene (stored once per geometry hash) also places the mesh
+        # view's cuts and arrows: zone mid-spans, inlet patch normals.
+        setup = setup_preview(self.root, config, self.preview_limits)
+        stored = setup
+        if poly is not None:
+            stored = mesh_preview(self.root, poly, patch_kinds(config),
+                                  cut_planes(config, setup.scene), self.preview_limits)
         scene = stored.scene
-        flows, flow_notes = flow_arrows(config, scene)
-        arrows = (*rotation_arrows(config, scene), *flows)
+        flows, flow_notes = flow_arrows(config, setup.scene)
+        arrows = (*rotation_arrows(config, setup.scene), *flows)
+        found = (*scene.issues, *(setup.scene.issues if poly is not None else ()))
         return PreviewData(scene, arrows, (*notes, *scene.notes, *flow_notes),
-                           (*issues, *scene.issues), built=stored.built)
+                           (*issues, *found), built=stored.built)
 
 
 class PreviewView(StrEnum):

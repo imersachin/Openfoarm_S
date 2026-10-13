@@ -459,7 +459,8 @@ plan                      → which operations will run and why
 preflight
 start_run / cancel_run / run_status
 reports / runs / log_tail
-preview                   → paths to display artifacts
+preview_key / preview     → a cheap key; the display data (scene, arrows, notes),
+                            stored under previews/ (V6)
 export_files
 ```
 
