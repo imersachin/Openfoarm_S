@@ -512,7 +512,10 @@ Implemented in V4 (`vawt/service.py`, `vawt/runtime.py`):
 - `plan` comes from the dependency tables (from scratch before the first
   mesh); the run re-verifies cached files itself.
 - `log_tail` reads at most 64 KiB from the end of the active log by seek.
-- `preview` (V6) and `export_files` (V7) are not implemented yet.
+- `preview_key` and `preview` (V6) serve the 3D pane: the setup (the draft)
+  or the last mesh, built once per content hash under `previews/`
+  (`docs/rotating_machinery.md` section 26). `export_files` (V7) is not
+  implemented yet.
 
 ---
 
@@ -576,7 +579,9 @@ Implemented in V5 (`app/vawt_app.py`, `app/vawt_ui/`):
   the SIMPLE preset); the switch changes the draft only.
 - Leftover OpenFOAM process and unreadable run lock: a button, then an
   explicit confirm step, call `terminate_orphan` / `remove_unreadable_lock`.
-- The 3D pane is reserved (a fragment); its views arrive in V6.
+- The 3D pane (a fragment, V6) switches between Setup and Mesh; section 15
+  and `docs/rotating_machinery.md` section 26 say what each shows. A rerun
+  with the same preview key reads no geometry or mesh file.
 
 ---
 
@@ -644,6 +649,14 @@ wall-clock time alone.
 
 The display transform that makes the rotor axis vertical never touches mesh
 coordinates. Views are built on request and never required by the pipeline.
+
+V6 (implemented; `docs/rotating_machinery.md` section 26): the transformed
+rotor is drawn from the source and its transform in memory (the same
+surface as the artifact), the source only converted to metres beside it when
+a transform moves it. "Rotor axis vertical" is the camera's up direction.
+Measured values against acceptance limits stay in the Mesh section (V5); the
+3D pane shows the problem locations. Problem sets are capped (5,000 markers)
+like the boundary (100,000 faces).
 
 ---
 

@@ -864,3 +864,90 @@ Implementation:
   the zone's finest configured cell; snapped and layer cells are smaller.
   Treat it as a lower bound. The solver's adjustable step (maxCo) is what
   limits the Courant number.
+
+---
+
+## 26. V6 Visualization (owner)
+
+Approved after the G6 merge: the VAWT V6 milestone (VAWT spec section 15),
+designed for this workflow. The 3D pane is mounted in the existing VAWT app
+now (its projects migrate to the machine model); G7 mounts the same views.
+Evidence: `tests/unit/machines/test_v6_previews.py`,
+`tests/unit/test_v6_machine_scene.py`, `tests/unit/vawt/test_v6_preview_pane.py`,
+`tests/integration/test_v6_previews_real.py` (OpenFOAM v2512).
+
+What is shown:
+
+- **Setup** (from the configuration and its STL files): bodies (and, when a
+  transform moves one, the STL only converted to metres), the domain (box
+  edges, cylinder wireframe, or the imported parts' regions), rotating zones
+  (wireframe, or the imported surface), joints (both regions), the wake box,
+  every mesh seed point labelled, and every patch coloured by its type.
+- **Arrows**, computed from the configuration when drawn: each zone's rotation
+  axis (+axis), and its direction as an arc about the axis by the right-hand
+  rule, labelled "positive about +x (counter-clockwise seen from +x)" and the
+  speed. Without a direction the arc is dashed, has no head and says "not
+  set"; nothing is assumed. The flow arrow comes from a velocity inlet's
+  vector, a flow-rate inlet's inward patch normal, else the flow axis, else
+  the inward normal of each INLET patch (labelled "no inlet condition set").
+- **Mesh** (the final ASCII polyMesh): the boundary by patch (AMI patches as
+  interfaces, other names by their configured type), a cut containing the
+  rotation axis and the flow direction (when they are parallel, as on a HAWT,
+  the plane through the axis normal to the first other axis), a cut normal to
+  the axis at the zone's mid-span, and checkMesh problem locations. Cuts are
+  drawn as the cell outlines on the plane.
+- The camera's up direction is the first rotation axis; coordinates are
+  never transformed.
+
+Rules:
+
+- **Region sets are not problems.** checkMesh `-allTopology` writes one
+  cellSet per disconnected region (`region0`, …); a mesh joined by AMI always
+  has several. They are left out with a note. The generic `mesh_view` drew
+  them as problems; fixed (`test_v6_views_region_sets.py`).
+- **Caps (configurable, `PreviewLimits`):** 100,000 boundary faces (also the
+  setup surfaces' triangles), 5,000 problem markers, 100,000 cell edges per
+  cut. Above a cap, each patch or set gets a share by size, at least 500
+  faces per patch (100 markers per set), chosen at even spacing
+  (deterministic), and a note says "Showing N of M … (display limit L)".
+- **Built once per content hash.** `previews/<view>-<hash>.npz` (compressed
+  arrays plus a JSON header) and `previews/<view>.json` (the stat signature
+  of the inputs → hash). The hash covers the inputs' content (STL files, or
+  `points`, `faces`, `owner`, `neighbour`, `boundary` and `sets/`), the
+  configuration the scene uses, the caps and a format version. A view whose
+  signature matches loads the stored file only; a changed signature hashes
+  the inputs and reuses a scene with the same hash. The three newest scenes
+  per view are kept. Physics is not in the stored scene: the arrows follow it.
+- **The pane never re-reads on a rerun.** The figure is cached per preview
+  key, computed from the configuration and the files' stat only (tested by
+  counting builds and reads on section switches, and in a new session).
+- Display only: nothing here feeds meshing, validation or case setup. A mesh
+  that looks right is not evidence of CFD accuracy (said in the pane).
+
+Measurements (WSL Ubuntu 24.04, Python 3.12):
+
+| | HAWT | Francis |
+|---|---|---|
+| Boundary faces (preset meshes of the integration test) | 20,072 | 40,106 |
+| Mesh scene, first build (read, boundary, two cuts, sets) | 0.32 s | 0.51 s |
+| Mesh scene, loaded from `previews/` | 6 ms | 10 ms |
+| Cell edges on the two cuts | 6,709; 11,117 | 8,267; 4,517 |
+| Problem faces with tightened limits (max non-orthogonality 25, skewness 0.8), build | 11,727 faces, 0.31 s | 34,571 faces, 0.59 s |
+| Setup scene build | < 0.01 s | 0.01 s |
+
+Planning probe on larger meshes (the integration tests' final, refined
+meshes): HAWT 159,285 cells, 38,862 boundary faces; Francis 156,659 cells,
+47,438. Reading `points`, `faces`, `owner` and `neighbour` took 0.42 s and
+0.39 s, each cut about 0.15 s, and the boundary as Plotly JSON 2.35 MB and
+2.92 MB (binary arrays, each patch with its own vertices).
+
+**PyVista: not used (owner decision).** Measured in a separate folder, never
+in the project environment: PyVista 0.49.1 with VTK 9.7.1 installs 770 MB
+(VTK alone 565 MB; it also brings matplotlib), against 742 MB for the whole
+project environment. On the probe meshes it read the case in 0.10–0.12 s and
+cut in 4 ms per plane, against about 0.8 s in total for the numpy build. The
+build runs once per mesh hash, so the saving is under a second per mesh, and
+the numpy cut already draws the cell outlines on the plane.
+**Revisit** if a mesh at `max_global_cells` (2,000,000 cells; extrapolated
+linearly, not measured: about 6 s to build) takes over 10 s to build on first
+view, or if filled cuts coloured by a cell quantity are asked for.

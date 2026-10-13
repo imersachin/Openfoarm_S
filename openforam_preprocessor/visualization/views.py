@@ -7,6 +7,7 @@ anything about CFD accuracy.
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,6 +25,9 @@ MAX_DISPLAY_FACES = 150_000
 PATCH_COLORS = ("#4C78A8", "#72B7B2", "#54A24B", "#EECA3B", "#B279A2", "#9D755D",
                 "#BAB0AC", "#F58518")
 PROBLEM_COLOR = "#E45756"
+# checkMesh -allTopology writes one cellSet per disconnected region: whole
+# regions, not problem cells (as machines.previews.REGION_SET).
+REGION_SET = re.compile(r"^region\d+$")
 
 
 @dataclass(frozen=True)
@@ -188,6 +192,8 @@ def mesh_view(root: Path, max_faces: int = MAX_DISPLAY_FACES) -> View:
     sets_dir = poly_mesh / "sets"
     if sets_dir.is_dir():
         for path in sorted(sets_dir.iterdir()):
+            if REGION_SET.match(path.name):
+                continue  # a whole region (checkMesh -allTopology), not a problem
             try:
                 set_class, labels = read_set(path)
             except FoamReadError as exc:

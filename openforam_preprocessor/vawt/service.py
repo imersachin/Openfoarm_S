@@ -7,7 +7,8 @@ background worker (vawt/runtime.py). Progress is read from
 second tab re-attaches to a run instead of starting another, and a run whose
 process died is reported as INTERRUPTED.
 
-Not here yet: preview (V6) and export_files (V7).
+preview_key and preview (V6) serve the 3D pane: display data built once per
+content hash under previews/ (machines.previews). Not here yet: export_files (V7).
 """
 
 from __future__ import annotations
@@ -28,14 +29,30 @@ import psutil
 import trimesh
 from pydantic import ValidationError
 
+from core.artifacts.hashing import sha256_json
 from core.config.models import OpenFOAMProfile
 from core.config.validation import issues_from_validation_error
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage, has_stopping_issue
 from core.workflow.run_lock import CREATE_TIME_TOLERANCE_S, RunLock, process_create_time
 from core.workflow.run_records import list_run_records
+from machines.config import MachineProjectConfig
+from machines.previews import (
+    Arrow,
+    PreviewLimits,
+    Scene,
+    cut_planes,
+    flow_arrows,
+    mesh_preview,
+    mesh_signature,
+    patch_kinds,
+    rotation_arrows,
+    setup_preview,
+    setup_signature,
+)
+from machines.vawt_migration import from_vawt
 from mesh.estimator import ResourceAssessment, ResourceEstimator, SystemResources
 from openfoam.environment import validate_environment
-from vawt.case_generator import VawtCaseGenerator, zone_cell_size
+from vawt.case_generator import VawtCaseGenerator, case_layout, zone_cell_size
 from vawt.config import Axis, RotorGeometryConfig, VawtProjectConfig
 from vawt.operations import CACHED, LAYOUT, PLANNER, VawtOperation, plan_changes
 from vawt.pipeline import (
@@ -315,6 +332,7 @@ class VawtService:
         estimator: ResourceEstimator | None = None,
         thresholds: ValidationThresholds | None = None,
         geometry_cache: _GeometryCache | None = None,
+        preview_limits: PreviewLimits | None = None,
     ) -> None:
         self.root = Path(root).expanduser().resolve()
         self.env = env  # None: the process environment
@@ -326,6 +344,7 @@ class VawtService:
         self.thresholds = thresholds or ValidationThresholds()
         self.geometry = geometry_cache or GEOMETRY_CACHE
         self.store = VawtProjectStore(self.root)
+        self.preview_limits = preview_limits or PreviewLimits()
 
     def _env(self) -> Mapping[str, str]:
         return self.env if self.env is not None else os.environ
@@ -781,6 +800,119 @@ class VawtService:
         return LogTail(path.relative_to(self.root).as_posix(),
                        data.decode("utf-8", errors="replace"), start > 0, size,
                        bytes_read=min(size, max_bytes))
+
+    # --- 3D preview (V6) -------------------------------------------------------------
+
+    def _preview_source(self, view: PreviewView, raw: Mapping[str, Any] | None,
+                        ) -> tuple[MachineProjectConfig | None, Path | None,
+                                   tuple[Issue, ...], tuple[str, ...]]:
+        """(machine configuration, polyMesh or None, issues, notes); no geometry or
+        mesh file is read. setup: the draft (default: the saved configuration);
+        mesh: the configuration of the last run that produced meshes."""
+        saved = self._saved_raw()
+        if view is PreviewView.SETUP:
+            if raw is None:
+                raw = saved
+            config = parse_config(dict(raw))[0] if raw is not None else None
+            if config is None:
+                return None, None, (_preview_issue(
+                    "VIEW_SETUP_INCOMPLETE",
+                    "The setup is shown once the configuration can be read.",
+                    "Complete the sections marked as incomplete."),), ()
+            return from_vawt(config), None, (), ()
+        try:
+            meshed = self._last_meshed_config()
+        except ValueError as exc:
+            return None, None, (_preview_issue(
+                "VIEW_MESH_RECORD_UNREADABLE", str(exc), "Run the mesh again.",
+                IssueSeverity.WARNING),), ()
+        if meshed is None:
+            return None, None, (_preview_issue(
+                "VIEW_NO_MESH", "No mesh has been built for this project yet.",
+                "Run the mesh; it is shown here when it finishes."),), ()
+        poly = self.root / "cases" / case_layout(meshed).final / "constant" / "polyMesh"
+        notes: tuple[str, ...] = ()
+        current = parse_config(saved)[0] if saved is not None else None
+        if current is not None and current != meshed:
+            notes = ("This mesh was built from an earlier configuration than the one "
+                     "saved; run the mesh to update it.",)
+        return from_vawt(meshed), poly, (), notes
+
+    def _saved_raw(self) -> dict[str, Any] | None:
+        try:
+            stored = self.store.load()
+        except ValueError:
+            return None  # load() reports it
+        return stored.raw if stored is not None else None
+
+    def preview_key(self, view: PreviewView, raw: Mapping[str, Any] | None = None,
+                    ) -> PreviewKey:
+        """A cheap identity of what the 3D pane would show: the configuration and
+        the stat of the STL or mesh files, no file content. Equal keys show the
+        same picture."""
+        config, poly, issues, notes = self._preview_source(view, raw)
+        if config is None:
+            return PreviewKey(view, None, issues, notes)
+        if poly is None:
+            signature = setup_signature(config, self.preview_limits)
+        else:
+            signature = mesh_signature(poly, patch_kinds(config), cut_planes(config),
+                                       self.preview_limits)
+        # The arrows follow the whole configuration (rotation, inlets), and the
+        # staleness note follows the saved one.
+        return PreviewKey(view, sha256_json([signature, config.model_dump(mode="json"),
+                                             list(notes)]), issues, notes)
+
+    def preview(self, view: PreviewView, raw: Mapping[str, Any] | None = None,
+                ) -> PreviewData:
+        """The display data of the setup or of the last mesh, built once per
+        content hash under previews/ and loaded from there afterwards."""
+        config, poly, issues, notes = self._preview_source(view, raw)
+        if config is None:
+            return PreviewData(None, (), notes, issues, built=False)
+        if poly is None:
+            stored = setup_preview(self.root, config, self.preview_limits)
+        elif not (poly / "points").is_file():
+            return PreviewData(None, (), notes, (*issues, _preview_issue(
+                "VIEW_NO_MESH", "The mesh files of the last run are missing.",
+                "Run the mesh again.", IssueSeverity.WARNING)), built=False)
+        else:
+            stored = mesh_preview(self.root, poly, patch_kinds(config), cut_planes(config),
+                                  self.preview_limits)
+        scene = stored.scene
+        flows, flow_notes = flow_arrows(config, scene)
+        arrows = (*rotation_arrows(config, scene), *flows)
+        return PreviewData(scene, arrows, (*notes, *scene.notes, *flow_notes),
+                           (*issues, *scene.issues), built=stored.built)
+
+
+class PreviewView(StrEnum):
+    SETUP = "setup"
+    MESH = "mesh"
+
+
+@dataclass(frozen=True)
+class PreviewKey:
+    view: PreviewView
+    signature: str | None  # None: nothing to show (see issues)
+    issues: tuple[Issue, ...] = ()
+    notes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PreviewData:
+    scene: Scene | None
+    arrows: tuple[Arrow, ...]
+    notes: tuple[str, ...]
+    issues: tuple[Issue, ...]
+    built: bool  # True: built now; False: loaded from previews/ (or nothing shown)
+
+
+def _preview_issue(code: str, message: str, action: str,
+                   severity: IssueSeverity = IssueSeverity.INFO) -> Issue:
+    return Issue(category=IssueCategory.INPUT, severity=severity,
+                 stage=IssueStage.VISUALIZATION, code=code, message=message,
+                 suggested_action=action)
 
 
 def orphaned_command(status: Mapping[str, Any]) -> int | None:

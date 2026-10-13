@@ -18,6 +18,7 @@ import streamlit as st
 
 from app.components.widgets import render_issues
 from app.vawt_ui import state
+from app.vawt_ui.preview import preview_pane
 from app.vawt_ui.sections import (
     domain,
     export,
@@ -169,14 +170,6 @@ def action_bar(service: VawtService) -> None:
             st.session_state["vawt_save_failed"] = True
         state.add_messages(result.issues)
         st.rerun()
-
-
-@st.fragment
-def preview_pane() -> None:
-    with st.container(border=True):
-        st.markdown("**3D preview**")
-        st.caption("Rotor, rotating zone, domain and the finished mesh are shown here "
-                   "from V6 on (display artifacts, patch view, slices).")
 
 
 def status_strip(service: VawtService, initial: RunStatusView) -> None:
