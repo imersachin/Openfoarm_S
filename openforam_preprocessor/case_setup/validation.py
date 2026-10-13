@@ -113,6 +113,13 @@ def _boundary_issues(config: MachineProjectConfig,
                                f"{name}, which is not an OUTLET patch.", "Remove it or "
                                "change the patch type.", field=f"physics.outlets.{name}"))
     for name, inlet in sorted(physics.inlets.items()):
+        zero = (inlet.volumetric_flow_rate == 0 if isinstance(inlet, FlowRateInlet)
+                else (inlet.velocity.x, inlet.velocity.y, inlet.velocity.z) == (0, 0, 0))
+        if name in inlets and zero:
+            # k = omega = 0 at the inlet: k-omega SST divides by zero (SIGFPE).
+            found.append(_blocking("INLET_VALUE_ZERO", f"Inlet {name} has no inflow (zero "
+                                   "velocity or flow rate).", "Give a non-zero inflow, or "
+                                   "make the patch a WALL.", field=f"physics.inlets.{name}"))
         if name in inlets and isinstance(inlet, FlowRateInlet) and not inlet_area(
                 config, surfaces, name):
             found.append(_blocking("INLET_AREA_UNKNOWN", f"Inlet {name}: the flow rate needs "

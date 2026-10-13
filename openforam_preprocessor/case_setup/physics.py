@@ -100,7 +100,7 @@ class FlowRateInlet(BaseModel):
     model_config = _STRICT
 
     kind: Literal["FLOW_RATE"]
-    volumetric_flow_rate: PositiveFloat  # m^3/s
+    volumetric_flow_rate: float = Field(ge=0)  # m^3/s; zero is a finding (BLOCKING)
 
 
 InletCondition = Annotated[VelocityInlet | FlowRateInlet, Field(discriminator="kind")]

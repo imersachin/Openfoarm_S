@@ -377,6 +377,7 @@ real run on v2512.
 | Rotation speed zero or direction not set | BLOCKING (G6) |
 | A zone without rotation settings, or rotation set for an unknown zone; more than one rotating zone with physics (P5) | BLOCKING (G6) |
 | An inlet or outlet patch without its value, or a value for a patch of another type; k-ω SST without a length scale; a tip-speed ratio with no free-stream speed; a flow rate on an inlet whose area cannot be measured | BLOCKING (G6) |
+| An inlet with zero inflow (velocity (0 0 0) or flow rate 0): k = ω = 0, k-ω SST fails (`INLET_VALUE_ZERO`) | BLOCKING (G6) |
 | Time step gives more than a configurable rotation angle per step (default 1°, provisional) | WARNING (G6) |
 | Estimated Courant number above a configurable limit (the configured maximum; heuristic) | WARNING (G6) |
 
@@ -809,7 +810,9 @@ more.
    `case_setup/dictionaries.py`); the G6 runs prove them again. For G0's
    inputs the generated fields, `dynamicMeshDict`, `transportProperties`,
    `fvSchemes`, `fvSolution` and `turbulenceProperties` equal the G0 R3 files
-   (`test_g6_case_setup.py`); the Francis walls equal G0 R4's.
+   (`test_g6_case_setup.py`). For G0 R4's inputs every Francis field (U, p,
+   k, ω, ν_t) and the rotation and transport entries equal G0 R4's
+   (`test_g6_case_setup_followup.py`).
 
 Implementation:
 
@@ -818,15 +821,31 @@ Implementation:
   `case.py` (writes `case/`).
 - The case is its own directory, `case/`: `0/`, `constant/` (a copy of the
   assembled `polyMesh` and the physics dictionaries), `system/`. Case setup
-  never writes into `cases/`. A new setup removes generated files it no longer
-  writes (k, ω and ν_t after a switch to laminar); solver output (time
-  directories) is never touched.
+  never writes into `cases/`. A new setup removes only files the last setup
+  generated and this one does not write (k, ω and ν_t after a switch to
+  laminar); the list is `case/.case_setup_files.json`, and without a readable
+  list nothing is removed. Files the user adds (`decomposeParDict`,
+  `fvOptions`) and solver output (time directories) are never touched.
 - The pipeline's `machine_case_setup` operation (Python only) follows mesh
   validation when the project has physics and the mesh passed. It is cached
   on the assembled mesh's files and the generated files' content.
   `reports/case_setup.json` gives the derived values: ω in rad/s and rpm,
   kinematic and Pa outlet pressures, inlet k and ω, the time controls, and
   the heuristic Courant estimate (labelled as such).
+- The run result reports the mesh and case setup separately (G7 shows both):
+  each is SUCCESS, SKIPPED, FAILED or CANCELLED with a reason code. Case
+  setup SKIPPED reasons: `NO_PHYSICS`, `PHYSICS_INVALID`, `MESH_NOT_READY`;
+  FAILED: `CASE_SETUP_FAILED`. The overall run state is unchanged (FAILED
+  when physics findings skip case setup, although the mesh is valid).
+- When case setup does not succeed, an existing `case/` no longer matches the
+  project. It is kept (it may hold solver results) and marked stale:
+  `case/CASE_STALE.txt`, and `reports/case_setup.json` gives the status, the
+  reason, `stale: true` and the last successful report as `previous`. The
+  next successful setup removes the marker.
+- **Estimated first-cell y⁺ (section 9.2): deferred to G7.** It needs a
+  reference length (a chord) and speed the configuration does not hold, and
+  section 9.2 places it in the UI beside the layer settings. G7 implements it
+  as a labelled heuristic with its source cited.
 - Every patch of the mesh gets a condition; a mesh patch without a configured
   type stops case setup (`CASE_SETUP_FAILED`). A WALL inside a rotating zone
   is `noSlip`, zero velocity in the absolute frame (K6).

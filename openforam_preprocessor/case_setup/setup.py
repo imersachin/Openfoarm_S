@@ -299,7 +299,9 @@ def resolve(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
         if condition is None:
             raise CaseSetupError(f"Inlet {name} has no inlet value.")
         speed = _speed(condition, inlet_area(config, surfaces, name))
-        k = turbulence_k(speed, turbulence.intensity_percent) if sst else 0.0
+        if speed == 0:
+            raise CaseSetupError(f"Inlet {name} has no inflow (zero velocity or flow rate).")
+        k =turbulence_k(speed, turbulence.intensity_percent) if sst else 0.0
         w = turbulence_omega(k, turbulence.length_scale or 1.0) if sst else 0.0
         velocity = ((condition.velocity.x, condition.velocity.y, condition.velocity.z)
                     if isinstance(condition, VelocityInlet) else None)

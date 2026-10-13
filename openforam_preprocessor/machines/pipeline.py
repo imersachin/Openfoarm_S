@@ -10,10 +10,13 @@ runner, resource estimator):
 
 Physics findings never stop meshing (invariant 14): with an ERROR or
 BLOCKING physics finding the mesh is still built and checked, and case setup
-is skipped. Each OpenFOAM operation is reused only when its recorded inputs and outputs
-verify. A mesh whose result check fails is not recorded. Commands run from
-their case directory; logs go to logs/<case>/. Meshes are built untyped and
-the assembly sets the patch types (H3).
+is skipped. The result reports the mesh and case setup separately
+(StageResult); when case setup does not succeed, an existing case/ is marked
+stale and reports/case_setup.json says why. Each OpenFOAM operation is
+reused only when its recorded inputs and outputs verify. A mesh whose result
+check fails is not recorded. Commands run from their case directory; logs go
+to logs/<case>/. Meshes are built untyped and the assembly sets the patch
+types (H3).
 """
 
 from __future__ import annotations
@@ -29,10 +32,19 @@ import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from case_setup.case import case_files, render, write_case
+from case_setup.case import (
+    CASE_DIR,
+    STALE_MARKER,
+    case_files,
+    clear_stale,
+    mark_stale,
+    render,
+    write_case,
+)
 from case_setup.setup import CaseSetup, CaseSetupError
 from case_setup.validation import CaseSetupThresholds, check_physics
 from core.artifacts import ArtifactStore
@@ -93,6 +105,32 @@ _STAGES = {
 }
 
 
+class StageStatus(StrEnum):
+    SUCCESS = "SUCCESS"
+    SKIPPED = "SKIPPED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+@dataclass(frozen=True)
+class StageResult:
+    """The outcome of one part of the run (the mesh, or case setup). `reason`
+    is a code for SKIPPED, FAILED and CANCELLED; `message` is for the user."""
+
+    status: StageStatus
+    reason: str = ""
+    message: str = ""
+
+    def as_dict(self) -> dict[str, str]:
+        return {"status": self.status.value, "reason": self.reason, "message": self.message}
+
+
+_NO_PHYSICS = StageResult(StageStatus.SKIPPED, "NO_PHYSICS",
+                          "The project has no physics settings.")
+_MESH_NOT_READY = StageResult(StageStatus.SKIPPED, "MESH_NOT_READY",
+                              "Case setup needs a mesh that was built and passed its checks.")
+
+
 @dataclass(frozen=True)
 class MachineRunResult:
     succeeded: bool
@@ -104,6 +142,9 @@ class MachineRunResult:
     reused: tuple[str, ...] = ()
     mesh_report_path: Path | None = None
     run_record_path: Path | None = None
+    # Reported separately (G7 shows both); None only when the run did not start.
+    mesh: StageResult | None = None
+    case_setup: StageResult | None = None
 
 
 class _Stop(Exception):
@@ -137,6 +178,8 @@ class _Run:
     record_extra: Mapping[str, Any] = field(default_factory=dict)
     stage: str = "starting"
     step: int = 0
+    mesh: StageResult | None = None
+    case_setup: StageResult | None = None
 
     def case(self, name: str) -> Path:
         return self.root / CASES_DIR / name
@@ -234,7 +277,9 @@ class MachinePipeline:
             try:
                 result = await self._run(run, force, allow_high_resource_risk)
             except _Stop as stop:
+                self._stopped(run, stop)
                 result = self._result(run, False, stop.message, stop.state, stop.issues)
+            result = self._settle_case(run, result)
             run.status(run.stage, result.state, result.message)
             return replace(result, run_record_path=self._record(run, result, clock, None))
         except BaseException as error:  # keep evidence of unexpected failures
@@ -262,6 +307,8 @@ class MachinePipeline:
         checked = check_all(config, self.thresholds)
         run.issues.extend(checked.issues)
         if has_stopping_issue(run.issues):
+            run.mesh = StageResult(StageStatus.SKIPPED, "VALIDATION_FAILED",
+                                   "Validation found problems; the mesh was not built.")
             raise _Stop("Validation found problems that stop the run; no OpenFOAM command "
                         "was started.")
         # Physics findings: reported now, but they stop case setup only.
@@ -333,10 +380,20 @@ class MachinePipeline:
         report_path, succeeded, status = self._validate_mesh(run, cases)
         write_last_meshed(run.root, run.run_id, config, status)
         message = f"Mesh validation completed with status: {status}."
+        run.mesh = (StageResult(StageStatus.SUCCESS, message=message) if succeeded else
+                    StageResult(StageStatus.FAILED, "MESH_VALIDATION_FAILED", message))
         # 8. Case setup (G6): only on a mesh that passed, and only with physics.
-        if succeeded and config.physics is not None:
+        if config.physics is None:
+            run.case_setup = _NO_PHYSICS
+        elif not succeeded:
+            run.case_setup = _MESH_NOT_READY
+        else:
             run.status(CASE_SETUP)
-            if has_stopping_issue(physics):
+            stopping = sorted({i.code for i in physics if i.is_stopping})
+            if stopping:
+                run.case_setup = StageResult(
+                    StageStatus.SKIPPED, "PHYSICS_INVALID",
+                    f"The physics settings have problems: {', '.join(stopping)}.")
                 return self._result(run, False, message + " Case setup was not done: the "
                                     "physics settings have problems; the mesh is reused "
                                     "next time.", RunState.FAILED, report=report_path)
@@ -355,6 +412,7 @@ class MachinePipeline:
         try:
             setup, files = render(run.config, surfaces, mesh)
         except CaseSetupError as error:
+            run.case_setup = StageResult(StageStatus.FAILED, "CASE_SETUP_FAILED", str(error))
             raise _Stop("Case setup failed; the mesh is valid and is reused next time.", _issue(
                 IssueSeverity.BLOCKING, IssueCategory.CONFIGURATION, IssueStage.CASE_SETUP,
                 "CASE_SETUP_FAILED", str(error),
@@ -368,7 +426,36 @@ class MachinePipeline:
             run.executed.append(CASE_SETUP)
             write_case(run.root, files, mesh)
             run.store.record(CASE_SETUP, inputs, case_files(run.root, files))
+        clear_stale(run.root)
+        run.case_setup = StageResult(StageStatus.SUCCESS,
+                                     message=f"The case is set up in {CASE_DIR}/.")
         _write_case_report(run, setup)
+
+    def _stopped(self, run: _Run, stop: _Stop) -> None:
+        """Outcomes of a run that stopped early, for what it did not reach."""
+        if run.mesh is None:
+            code = next((i.code for i in stop.issues if i.is_stopping), "MESH_FAILED")
+            run.mesh = (StageResult(StageStatus.CANCELLED, "RUN_CANCELLED", stop.message)
+                        if stop.state is RunState.CANCELLED else
+                        StageResult(StageStatus.FAILED, code, stop.message))
+        if run.case_setup is None:
+            run.case_setup = _NO_PHYSICS if run.config.physics is None else _MESH_NOT_READY
+
+    def _settle_case(self, run: _Run, result: MachineRunResult) -> MachineRunResult:
+        """Attach both outcomes. When case setup did not succeed, an existing
+        case/ no longer matches the project: mark it stale (it is kept: it may
+        hold solver results) and say so in reports/case_setup.json."""
+        outcome = run.case_setup or _NO_PHYSICS
+        run.case_setup = outcome
+        message = result.message
+        if outcome.status is not StageStatus.SUCCESS:
+            stale = mark_stale(run.root, f"case setup {outcome.status.value} "
+                               f"({outcome.reason}): {outcome.message}")
+            _write_case_not_done(run, outcome, stale)
+            if stale:
+                message += (f" The existing {CASE_DIR}/ does not match this project and is "
+                            f"marked stale ({CASE_DIR}/{STALE_MARKER}).")
+        return replace(result, message=message, mesh=run.mesh, case_setup=outcome)
 
     # --- cache inputs -------------------------------------------------------------------------
 
@@ -566,6 +653,8 @@ class MachinePipeline:
             "state": result.state.value if result else RunState.FAILED.value,
             "succeeded": bool(result and result.succeeded),
             "message": result.message if result else f"Internal error: {error!r}",
+            "mesh": run.mesh.as_dict() if run.mesh else None,
+            "case_setup": run.case_setup.as_dict() if run.case_setup else None,
             "executed": list(run.executed),
             "reused": list(run.reused),
             "issues": [i.as_dict() for i in (result.issues if result else run.issues)],
@@ -583,7 +672,9 @@ def _write_case_report(run: _Run, setup: CaseSetup) -> None:
     physics, rotation, time = setup.physics, setup.rotation, setup.time
     payload = {
         "run_id": run.run_id,
-        "case": "case",
+        "status": StageStatus.SUCCESS.value,
+        "stale": False,
+        "case": CASE_DIR,
         "solver": "pimpleFoam",
         "note": "Prepared, not solved. A case that runs is not evidence that its results "
                 "are correct (invariant 15).",
@@ -601,6 +692,35 @@ def _write_case_report(run: _Run, setup: CaseSetup) -> None:
                  "reference_speed are heuristic, not the solver's values"},
     }
     path = run.root / CASE_SETUP_REPORT
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _write_case_not_done(run: _Run, outcome: StageResult, stale: bool) -> None:
+    """reports/case_setup.json when case setup was skipped or failed: why, and
+    whether case/ is stale; the last successful report is kept as `previous`.
+    Nothing is written for a project that never had physics or a case."""
+    path = run.root / CASE_SETUP_REPORT
+    if run.config.physics is None and not stale and not path.is_file():
+        return
+    previous: Any = None
+    try:
+        old = json.loads(path.read_text("utf-8"))
+        previous = old if old.get("status") == StageStatus.SUCCESS.value else old.get("previous")
+    except (OSError, ValueError, AttributeError):
+        pass
+    payload = {
+        "run_id": run.run_id,
+        "status": outcome.status.value,
+        "reason": outcome.reason,
+        "message": outcome.message,
+        "case": CASE_DIR,
+        "stale": stale,
+        "stale_note": (f"{CASE_DIR}/ is from an earlier setup and does not match this "
+                       "project; it was kept because it may hold solver results. Set up the "
+                       "case again before running the solver.") if stale else None,
+        "previous": previous,
+    }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
