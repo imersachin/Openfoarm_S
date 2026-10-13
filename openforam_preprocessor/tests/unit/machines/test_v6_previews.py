@@ -505,6 +505,74 @@ def test_flow_without_inlet_conditions(tmp_path: Path) -> None:
     assert "no inlet condition set" in arrow.label
 
 
+DUCT_INWARD = (np.cos(np.radians(20)), np.sin(np.radians(20)), 0.0)  # into the duct at x 0
+
+
+def _rewind(directory: Path, names: tuple[str, ...]) -> None:
+    """Rewrite the duct's per-patch STL files with their triangles reversed."""
+    import trimesh
+
+    from tests.fixtures.machines.g0.common.make_geometry import write_ascii
+
+    for name in names:
+        mesh = trimesh.load_mesh(directory / f"{name}.stl", process=False)
+        write_ascii(directory / f"{name}.stl",
+                    [(name, trimesh.Trimesh(mesh.vertices, mesh.faces[:, ::-1], process=False))])
+
+
+@pytest.mark.parametrize("rewound", [(), ("inlet", "outlet", "wall")])
+def test_inlet_arrow_points_into_the_domain_however_the_stl_is_wound(
+        tmp_path: Path, rewound: tuple[str, ...]) -> None:
+    config = machine("duct", tmp_path)
+    _rewind(tmp_path, rewound)
+    scene = build_setup_scene(config)
+
+    (arrow,), _ = flow_arrows(config, scene)
+    assert arrow.defined and np.allclose(arrow.head_direction, DUCT_INWARD)
+    assert np.allclose(scene.patch("inlet").normal, -np.asarray(DUCT_INWARD))  # out of fluid
+    assert scene.issues == ()
+    inward_note = "duct: its STL is wound with normals into the fluid; the arrows account for it."
+    assert (inward_note in scene.notes) == bool(rewound)
+
+    flow_rate = config.model_copy(update={"physics": _physics(
+        None, inlet={"kind": "FLOW_RATE", "volumetric_flow_rate": 0.1})})
+    (arrow,), _ = flow_arrows(flow_rate, scene)
+    assert np.allclose(arrow.head_direction, DUCT_INWARD)
+
+
+def test_regions_wound_differently_make_the_direction_uncertain(tmp_path: Path) -> None:
+    config = machine("duct", tmp_path)
+    _rewind(tmp_path, ("inlet",))  # the inlet inward-wound, the rest outward
+    scene = build_setup_scene(config)
+
+    (issue,) = scene.issues
+    assert (issue.code, issue.severity.value) == ("VIEW_WINDING_UNCERTAIN", "WARNING")
+    assert "regions are wound inconsistently" in issue.message
+    assert not scene.patch("inlet").certain
+    (arrow,), _ = flow_arrows(config, scene)
+    assert (arrow.defined, arrow.head, arrow.head_direction) == (False, None, None)
+    assert arrow.label == ("flow at inlet: direction uncertain (the surface's winding is "
+                           "unknown)")
+    along, _ = cut_planes(config, scene)  # no flow direction: the default plane
+    assert along.normal == (0.0, 0.0, 1.0)
+
+    from visualization.machine_scene import scene_figure
+
+    figure = scene_figure(scene, [arrow])
+    line = next(t for t in figure.data if t.name == arrow.label)
+    assert line.line.dash == "dash" and not [t for t in figure.data if t.type == "cone"]
+
+
+def test_stored_scene_keeps_the_uncertainty(tmp_path: Path) -> None:
+    config = machine("duct", tmp_path / "g")
+    _rewind(tmp_path / "g", ("inlet",))
+    first = setup_preview(tmp_path, config)
+    again = setup_preview(tmp_path, config)
+    assert not again.built and not again.scene.patch("inlet").certain
+    assert [i.code for i in again.scene.issues] == ["VIEW_WINDING_UNCERTAIN"]
+    assert first.scene.patches == again.scene.patches
+
+
 def test_flow_unknown_is_a_note(tmp_path: Path) -> None:
     config = machine("duct", tmp_path, patches=[])
     arrows, notes = flow_arrows(config, build_setup_scene(config))

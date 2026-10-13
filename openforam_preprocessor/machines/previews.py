@@ -59,7 +59,7 @@ from machines.config import (
     StlSource,
     box_face,
 )
-from machines.domains import cylinder_surface, read_imported
+from machines.domains import SurfaceInfo, cylinder_surface, read_imported
 from machines.validation import load_bodies
 from vawt.config import Axis, plane_axes
 from visualization.foam_reader import (
@@ -71,7 +71,7 @@ from visualization.foam_reader import (
     read_set,
 )
 
-PREVIEW_VERSION = 1  # bump when the stored format or its content changes
+PREVIEW_VERSION = 2  # bump when the stored format or its content changes
 PREVIEWS_DIR = "previews"
 KEEP_PER_VIEW = 3  # stored scenes kept per view (the newest)
 MIN_MARKERS_PER_SET = 100  # a thinned checkMesh set keeps at least this many
@@ -154,6 +154,9 @@ class PatchFrame:
     centroid: tuple[float, float, float]
     normal: tuple[float, float, float]  # unit; zero if undefined
     area: float
+    # False: the surface's winding could not be determined (regions wound
+    # inconsistently, or not closed), so the normal may point either way.
+    certain: bool = True
 
 
 @dataclass(frozen=True)
@@ -405,6 +408,23 @@ def _untransformed(source: StlSource) -> trimesh.Trimesh | None:
     return mesh
 
 
+def surface_orientation(surface: SurfaceInfo) -> tuple[int, str | None]:
+    """(+1 normals out of the fluid, -1 into it, 0 unknown; why unknown).
+    An imported surface encloses its fluid; whatever way the STL was wound,
+    the sign of the closed union's volume says which way its normals face,
+    provided every region is wound the same way (each shared edge traversed
+    in opposite directions) and the union is closed."""
+    if not surface.closed:
+        return 0, f"the surface is not closed ({surface.open_edges} open edges)"
+    union = surface.union()
+    if not union.is_winding_consistent:
+        return 0, "its regions are wound inconsistently"
+    volume = float(union.volume)
+    if volume == 0.0:
+        return 0, "the surface encloses no volume"
+    return (1 if volume > 0 else -1), None
+
+
 def _setup_inputs(config: MachineProjectConfig, limits: PreviewLimits) -> dict[str, Any]:
     dumped = config.model_dump(mode="json")
     return {"version": PREVIEW_VERSION, "view": "setup",
@@ -503,6 +523,16 @@ def build_setup_scene(config: MachineProjectConfig, limits: PreviewLimits | None
         if surface.owner.startswith("rotating_zones.") and surface.regions:
             zone_points[surface.name] = np.vstack(
                 [np.asarray(r.mesh.vertices) for r in surface.regions])
+        sign, doubt = surface_orientation(surface) if surface.regions else (1, None)
+        if doubt is not None:
+            issues.append(_issue(
+                "VIEW_WINDING_UNCERTAIN", f"{surface.name}: {doubt}, so which way its "
+                "patches face is unknown; flow arrows through them are drawn as "
+                "'direction uncertain'.", "Check and repair the surface's STL files.",
+                IssueCategory.GEOMETRY, IssueSeverity.WARNING, surface=surface.name))
+        elif sign < 0:
+            notes.append(f"{surface.name}: its STL is wound with normals into the fluid; "
+                         "the arrows account for it.")
         for region in surface.regions:
             patch = by_ref.get((SourceKind.REGION, region.name))
             if region.name in joint_of:
@@ -511,7 +541,10 @@ def build_setup_scene(config: MachineProjectConfig, limits: PreviewLimits | None
             elif patch is not None:
                 meshes.append((f"{patch.name}: region of {surface.name}", patch.type.value,
                                region.mesh))
-                frames.append(_frame(patch.name, patch.type.value, region.mesh))
+                frame = _frame(patch.name, patch.type.value, region.mesh)
+                frames.append(dataclasses.replace(
+                    frame, normal=_t(np.asarray(frame.normal) * (sign or 1)),
+                    certain=doubt is None))
             else:
                 meshes.append((f"{region.name}: region of {surface.name} (no patch)",
                                UNASSIGNED, region.mesh))
@@ -672,6 +705,20 @@ def flow_arrows(config: MachineProjectConfig, scene: Scene) -> tuple[list[Arrow]
         arrows.append(Arrow(name, "flow", np.vstack([start - direction * length, tip]),
                             _t(tip), _t(direction), label))
 
+    def through(frame: PatchFrame, label: str) -> None:
+        """Into the domain through a patch: its normal reversed, or, when the
+        surface's winding is unknown, a headless line labelled uncertain."""
+        inward = -np.asarray(frame.normal)
+        if frame.certain:
+            add(f"flow at {frame.name}", np.asarray(frame.centroid), inward, label)
+            return
+        centre = np.asarray(frame.centroid)
+        arrows.append(Arrow(
+            f"flow at {frame.name}", "flow",
+            np.vstack([centre - inward * length, centre + inward * length]), None, None,
+            f"flow at {frame.name}: direction uncertain (the surface's winding is unknown)",
+            defined=False))
+
     for name, inlet in sorted(inlets.items()):
         if isinstance(inlet, VelocityInlet):
             vector = np.array([inlet.velocity.x, inlet.velocity.y, inlet.velocity.z])
@@ -688,8 +735,7 @@ def flow_arrows(config: MachineProjectConfig, scene: Scene) -> tuple[list[Arrow]
                 notes.append(f"Inlet {name}: its surface is not shown, so its flow-rate "
                              "direction cannot be drawn.")
                 continue
-            add(f"flow at {name}", at(name), -np.asarray(frame.normal),
-                f"flow at {name}: flow-rate inlet, normal into the domain")
+            through(frame, f"flow at {name}: flow-rate inlet, normal into the domain")
     if arrows:
         return arrows, notes
     # No inlet condition gave a direction: the flow axis, else the inlet patches.
@@ -702,8 +748,8 @@ def flow_arrows(config: MachineProjectConfig, scene: Scene) -> tuple[list[Arrow]
         return arrows, notes
     for frame in scene.patches:
         if frame.kind == PatchType.INLET.value and any(frame.normal):
-            add(f"flow at {frame.name}", np.asarray(frame.centroid), -np.asarray(frame.normal),
-                f"flow at {frame.name}: into the domain through the inlet patch ({why})")
+            through(frame, f"flow at {frame.name}: into the domain through the inlet "
+                           f"patch ({why})")
     if not arrows:
         notes.append("Flow direction unknown: no inlet condition, flow axis or inlet patch "
                      "gives one.")
@@ -1015,7 +1061,7 @@ def _decode(data: Mapping[str, np.ndarray]) -> Scene:
         tuple(Markers(m["name"], m["kind"], data[f"m{i}"], tuple(m["labels"]), m["shown"],
                       m["total"]) for i, m in enumerate(meta["markers"])),
         tuple(PatchFrame(p["name"], p["kind"], _t(p["centroid"]), _t(p["normal"]),
-                         float(p["area"])) for p in meta["patches"]),
+                         float(p["area"]), bool(p["certain"])) for p in meta["patches"]),
         (_t(bounds[0]), _t(bounds[1])) if bounds else None,
         tuple(meta["notes"]), tuple(Issue.from_dict(i) for i in meta["issues"]),
         tuple(ZoneFrame(z["name"], Axis(z["axis"]), _t(z["centre"]), float(z["radius"]),

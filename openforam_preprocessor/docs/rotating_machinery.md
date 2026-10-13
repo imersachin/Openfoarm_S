@@ -497,7 +497,7 @@ Stop after each. Do not start the next without an explicit instruction.
 | G4 | HAWT | Preset, pipeline, real end-to-end mesh |
 | G5 | Francis | Imported multi-part domain, two interfaces, real end-to-end mesh |
 | G6 | Case setup | Physics, fields, dictionaries, solver smoke test |
-| G7 | UI | Sections in section 13 |
+| G7 | UI | Sections in section 13; the browser checklist includes the rotation-direction arrow (section 26) |
 | G8 | VAWT with pole, verification | Preset, real end-to-end mesh; performance against V5 budgets |
 
 VAWT with pole is last because the existing VAWT preset already covers most of
@@ -923,8 +923,16 @@ Rules:
   is at the zone's mid-span (an imported zone's origin need not be there), and
   a flow-rate inlet's arrow uses its region's normal. When no inlet condition
   gives a direction, the flow axis is used, else the inlet patch normal.
-  Imported region normals are taken as pointing out of the fluid; an
-  inward-wound region would reverse that arrow (nothing here checks it).
+- **Winding of imported surfaces** (each domain part and imported zone):
+  the sign of the closed union's volume says whether the STL's normals point
+  out of the fluid or into it, so an inlet arrow points into the domain
+  whichever way the file was wound (an inward-wound surface also gets a
+  note). If the regions are wound inconsistently (a shared edge traversed
+  the same way twice) or the surface is not closed, the direction cannot be
+  known: a WARNING (`VIEW_WINDING_UNCERTAIN`), and flow arrows through its
+  patches are dashed, headless and labelled "direction uncertain"
+  (`test_v6_previews.py`, an inward-wound duct and one with only its inlet
+  reversed).
 - **Cuts of concave faces:** a face that crosses the plane more than twice is
   paired along the cut line (even-odd rule), so the outline is right
   wherever the face's vertex list starts (snappy meshes have a few).
@@ -936,6 +944,12 @@ Rules:
   counting builds and reads on section switches, and in a new session).
 - Display only: nothing here feeds meshing, validation or case setup. A mesh
   that looks right is not evidence of CFD accuracy (said in the pane).
+- **Browser check of the rotation direction moves to G7 (owner).** In the
+  VAWT app the arc always reads "rotation not set": the VAWT model has no
+  physics, so a signed rotation cannot be entered there. The V6 browser
+  checklist covers everything else; the G7 checklist adds the rotation
+  arrow (positive and negative, for axes other than z) in the machines UI.
+  Until then, the arc's direction is verified by unit tests only.
 
 Measurements (WSL Ubuntu 24.04, Python 3.12):
 
