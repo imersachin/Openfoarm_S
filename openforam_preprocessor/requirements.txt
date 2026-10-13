@@ -1,0 +1,19 @@
+# Exact versions the test suite passes with (Python 3.12, WSL Ubuntu 24.04).
+# Install:  pip install -r requirements.txt
+# The allowed ranges are in pyproject.toml. OpenFOAM v2512 is installed
+# separately (package openfoam2512), not with pip.
+
+# Application
+pydantic==2.13.5
+numpy==2.5.3
+scipy==1.18.1      # trimesh connected components
+trimesh==4.12.2
+networkx==3.7      # trimesh split repair (fill_holes)
+psutil==7.2.2      # available RAM for resource preflight
+streamlit==1.65.0
+plotly==6.9.0
+
+# Development: tests, lint, type checks
+pytest==8.4.2
+ruff==0.16.10
+mypy==1.20.2
