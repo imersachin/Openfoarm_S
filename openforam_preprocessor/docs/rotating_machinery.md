@@ -1091,3 +1091,26 @@ Implementation:
 **Browser check (owner):** the G7 checklist adds the rotation direction
 against the real rotor (section 26): set it in Rotor speed or Operating point
 and compare the 3D pane's arc with the rotor.
+
+**Fixes after the G7 testing review** (`tests/unit/ui_machines/test_g7_review_fixes.py`):
+
+- **HIGH: accepting HIGH RESOURCE RISK in Review now reaches the run.** The
+  acceptance was only a checkbox's state, dropped as soon as Run was shown,
+  so such a project could not be meshed. It is now kept apart from the
+  checkbox, for the saved revision it was given for (a new revision asks
+  again); BLOCKED still cannot be overridden. The VAWT app stores its
+  acceptance the same way (`app/vawt_ui/sections/review.py`); it predates G7
+  and is not changed here.
+- "Use this thickness" asks for the minimum thickness that absolute sizing
+  requires (never assumed) instead of leaving the draft unreadable.
+- Showing Boundary values or Operating point no longer edits the draft: an
+  outlet's default entry (0 Pa) is written on Apply, and a fluid preset gives
+  it to the outlets already typed.
+- y+ reference speeds for Francis: a flow-rate inlet's Q / inlet area, and
+  the imported runner's measured radius for omega x R. The rpm suggestion's
+  label now says what it is: the relative speed sqrt((omega R)^2 + U^2) when
+  there is an inflow speed, omega x R alone otherwise.
+- The Mesh section lists every acceptance limit at its model default (a new
+  Custom project had none to edit) and has the Save bar.
+- A saved project whose machine has no profile yet (VAWT_POLE until G8) is
+  left as it is, never retyped by the machine choice.

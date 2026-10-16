@@ -102,8 +102,14 @@ def project_picker() -> None:
 
 
 def choose_machine() -> None:
-    """A project folder without a saved configuration or a machine yet."""
+    """A project folder without a saved configuration or a machine yet. A saved
+    project whose machine has no profile (VAWT_POLE until G8) is not retyped."""
     st.title("Choose the machine")
+    saved = state.saved_raw()
+    if saved is not None:
+        st.error(f"This project is saved as a {saved.get('machine')} machine, which this "
+                 "app has no profile for yet; it is left as it is.")
+        return
     st.caption(f"`{state.service().root}` has no machine yet.")
     chosen = machine_choice("machines_folder_machine")
     if st.button("Use this machine", key="machines_use_machine", type="primary",
@@ -241,8 +247,8 @@ def main() -> None:
     active = state.section() if state.section() in profile.section_keys() else "project"
     spec = profile.section(active)
     with content:
-        if spec is not None and spec.group in EDITABLE:
-            action_bar(service)
+        if spec is not None and (spec.group in EDITABLE or active == "mesh"):
+            action_bar(service)  # Mesh edits the acceptance limits
         renderer(active)(state.Context(service, profile, state.draft(), analysis, run_view,
                                        service.ui_settings()))
     with preview:

@@ -55,13 +55,16 @@ def section_issues(ctx: state.Context, key: str) -> None:
 
 
 @contextmanager
-def apply_form(key: str) -> Iterator[None]:
+def apply_form(key: str, on_apply: Callable[[], None] | None = None) -> Iterator[None]:
     """A form whose fields write to the draft only when Apply is pressed;
-    Apply then reruns the page so marks and issues follow."""
+    Apply then runs on_apply (an edit that only Apply may make) and reruns the
+    page so marks and issues follow."""
     with st.form(f"machines_form_{key}", border=False):
         yield
         applied = st.form_submit_button("Apply", type="primary")
     if applied:
+        if on_apply is not None:
+            on_apply()
         st.rerun()
 
 

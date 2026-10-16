@@ -9,7 +9,7 @@ import streamlit as st
 from app.components.widgets import render_issues
 from app.machines_ui import state
 from app.machines_ui.sections.common import confirm, live
-from app.machines_ui.sections.review import ALLOW_HIGH_RISK, operation_label
+from app.machines_ui.sections.review import high_risk_accepted, operation_label
 from mesh.estimator import ResourceStatus
 from vawt.service import RunView
 
@@ -30,8 +30,7 @@ def start_blockers(ctx: state.Context) -> list[str]:
         status = preflight.assessment.status if preflight.assessment else None
         if status is ResourceStatus.BLOCKED:
             reasons.append("Resource preflight BLOCKED meshing (see Review).")
-        elif status is ResourceStatus.HIGH_RESOURCE_RISK and not st.session_state.get(
-                ALLOW_HIGH_RISK):
+        elif status is ResourceStatus.HIGH_RESOURCE_RISK and not high_risk_accepted():
             reasons.append("High resource risk: accept it in Review first.")
     return reasons
 
@@ -93,7 +92,7 @@ def render(ctx: state.Context) -> None:
     start, cancel = st.columns(2)
     if start.button("Start run", key="machines_start", type="primary", disabled=bool(blockers)):
         result = ctx.service.start_run(
-            allow_high_resource_risk=bool(st.session_state.get(ALLOW_HIGH_RISK)))
+            allow_high_resource_risk=high_risk_accepted())
         state.add_messages(result.issues)
         st.rerun()
     if cancel.button("Cancel run", key="machines_cancel", disabled=not ctx.run.can_cancel):

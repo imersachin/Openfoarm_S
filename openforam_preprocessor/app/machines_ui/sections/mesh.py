@@ -13,13 +13,26 @@ import streamlit as st
 from app.components.widgets import render_issues
 from app.machines_ui import state
 from app.machines_ui.sections.common import apply_form
-from app.machines_ui.sections.fields import number_fields
+from app.machines_ui.sections.fields import bool_field, float_field, int_field
+from vawt.config import StrictMeshQualityLimits
 from vawt.service import SectionState
 
 ASSESSMENTS = (("mesh_validity", "Mesh validity"), ("mesh_quality", "Mesh quality"),
                ("simulation_suitability", "Simulation suitability"),
                ("cfd_accuracy", "CFD accuracy"))
 STAGE_MARKS = {"SUCCESS": "●", "SKIPPED": "○", "FAILED": "✕", "CANCELLED": "■"}
+
+
+def limits_fields(ctx: state.Context) -> None:
+    """Every acceptance limit, shown at its model default when the draft has none."""
+    for name, default in StrictMeshQualityLimits().model_dump(mode="json").items():
+        path, label = f"quality.{name}", name.replace("_", " ")
+        if isinstance(default, bool):
+            bool_field(ctx.draft, path, label, default=default)
+        elif isinstance(default, int):
+            int_field(ctx.draft, path, label, default=default)
+        elif isinstance(default, float) or default is None:
+            float_field(ctx.draft, path, label, default=default)
 
 
 def stage_view(stage: dict[str, Any] | None, what: str) -> None:
@@ -99,5 +112,5 @@ def render(ctx: state.Context) -> None:
         report_view(report, ctx)
     st.markdown("**Acceptance limits** (changing them re-runs validation only)")
     with apply_form("quality"):
-        number_fields(ctx.draft, "quality")
+        limits_fields(ctx)
     folder_check(ctx)

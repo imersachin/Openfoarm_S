@@ -15,6 +15,7 @@ from machines.operations import MACHINE_EXECUTABLES
 from machines.pipeline import MachinePipeline
 from machines.profiles import ProfileRegistry, default_registry
 from machines.service import MachineService, _CheckCache
+from mesh.estimator import SystemResources
 from tests.fakes import PLENTY, openfoam_env
 from tests.fakes_machines import FakeMachineRunner
 from vawt.runtime import RunRegistry
@@ -34,6 +35,7 @@ class MachinesUi:
         self.registry = RunRegistry()
         self.checks = _CheckCache()
         self.profiles: ProfileRegistry = default_registry()
+        self.resources: SystemResources = PLENTY  # tests lower it for the resource gates
         monkeypatch.setattr(state, "SERVICE_FACTORY", self.make_service)
         monkeypatch.setattr(state, "REGISTRY_FACTORY", lambda: self.profiles)
         for key, value in self.env.items():
@@ -43,10 +45,10 @@ class MachinesUi:
 
     def make_service(self, root: Path) -> MachineService:
         pipeline = MachinePipeline(FakeMachineRunner(), environment=self.env,
-                                   system_probe=lambda _: PLENTY)
+                                   system_probe=lambda _: self.resources)
         return MachineService(root, pipeline=pipeline, registry=self.registry, env=self.env,
                               mounts=read_mounts("/dev/sdd / ext4 rw 0 0\n"),
-                              system_probe=lambda _: PLENTY, check_cache=self.checks,
+                              system_probe=lambda _: self.resources, check_cache=self.checks,
                               profiles=self.profiles)
 
     def service(self, name: str) -> MachineService:
@@ -92,6 +94,26 @@ def texts(app: AppTest) -> str:
 
 def charts(app: AppTest) -> list[Any]:
     return list(app.get("plotly_chart"))
+
+
+def resources_at(ui: MachinesUi, status: str, name: str = "demo") -> None:
+    """The smallest RAM that is not BLOCKED (HIGH RESOURCE RISK), or 1 byte
+    (BLOCKED), for the saved project `name` (bisection, as the VAWT tests)."""
+    service = ui.service(name)
+    if status == "BLOCKED":
+        ui.resources = SystemResources(available_ram_bytes=1, available_disk_bytes=10**13,
+                                       cpu_count=8)
+        return
+    low, high = 1, 2**40
+    while high - low > 1:
+        middle = (low + high) // 2
+        ui.resources = SystemResources(available_ram_bytes=middle,
+                                       available_disk_bytes=10**13, cpu_count=8)
+        assessment = service.preflight().assessment
+        assert assessment is not None
+        low, high = (middle, high) if assessment.status.value == "BLOCKED" else (low, middle)
+    ui.resources = SystemResources(available_ram_bytes=high, available_disk_bytes=10**13,
+                                   cpu_count=8)
 
 
 def write_profile(directory: Path, data: dict[str, Any]) -> None:

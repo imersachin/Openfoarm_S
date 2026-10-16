@@ -35,9 +35,8 @@ def render(ctx: state.Context) -> None:
         st.info("Type the inlet and outlet patches (Patch types) and build the water "
                 "passage first.")
         return
-    default_outlets(ctx, outlets)
     runner = zones[0]
-    with apply_form("operating_point"):
+    with apply_form("operating_point", on_apply=lambda: default_outlets(ctx, outlets)):
         for name in inlets:
             float_field(ctx.draft, f"physics.inlets.{name}.volumetric_flow_rate",
                         f"Discharge Q at {name} (m³/s)", min_value=0.0,

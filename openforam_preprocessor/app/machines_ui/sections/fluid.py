@@ -24,7 +24,11 @@ def render(ctx: state.Context) -> None:
         for column, (name, fluid) in zip(columns, PRESETS.items(), strict=True):
             if column.button(f"{name}: density {fluid.density:g} kg/m³, ν "
                              f"{fluid.kinematic_viscosity:g} m²/s", key=f"machines_fluid_{name}"):
-                ctx.draft["physics"] = PhysicsConfig(fluid=fluid).model_dump(mode="json")
+                physics = PhysicsConfig(fluid=fluid).model_dump(mode="json")
+                # Outlets already typed take the default 0 Pa (the empty entry).
+                physics["outlets"] = {str(p["name"]): {} for p in ctx.draft.get("patches") or []
+                                      if p.get("type") == "OUTLET" and p.get("name")}
+                ctx.draft["physics"] = physics
                 state.bump_generation()
                 st.rerun()
         return

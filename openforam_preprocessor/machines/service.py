@@ -33,6 +33,7 @@ from case_setup.physics import (
     VelocityInlet,
     rpm_to_rad_s,
 )
+from case_setup.setup import inlet_area
 from case_setup.validation import CaseSetupThresholds, check_physics
 from case_setup.wall_cells import WallEstimate, first_layer_for, y_plus_of
 from core.artifacts.hashing import sha256_json
@@ -757,37 +758,65 @@ class MachineService(RunControl):
 
     # --- wall cells and operating point (estimates) ------------------------------------------
 
-    @staticmethod
-    def speed_suggestions(raw: Mapping[str, Any]) -> tuple[SpeedSuggestion, ...]:
+    def speed_suggestions(self, raw: Mapping[str, Any]) -> tuple[SpeedSuggestion, ...]:
         """Reference speeds for the y+ estimate, from the draft's physics; each
-        labelled with what it is. Never applied by themselves."""
+        labelled with what it is. Never applied by themselves.
+
+        Inflow: a velocity inlet's speed, or a flow-rate inlet's Q / inlet area.
+        Rotating walls: for a tip-speed ratio, the relative tip speed; for an
+        rpm, omega x the zone's radius (a cylinder's, or an imported zone's
+        measured from its surface), an upper bound of the tip speed, combined
+        with the inflow when there is one."""
         config, _ = parse_config(dict(raw))
         if config is None or config.physics is None:
             return ()
         physics = config.physics
-        inflow = [math.hypot(i.velocity.x, i.velocity.y, i.velocity.z)
-                  for i in physics.inlets.values() if isinstance(i, VelocityInlet)]
         suggestions = []
-        if inflow:
-            suggestions.append(SpeedSuggestion("inlet speed (stationary walls)", max(inflow)))
+        inflow: list[float] = []
+        surfaces = None
+        for name, inlet in sorted(physics.inlets.items()):
+            if isinstance(inlet, VelocityInlet):
+                speed = math.hypot(inlet.velocity.x, inlet.velocity.y, inlet.velocity.z)
+                suggestions.append(SpeedSuggestion(
+                    f"inlet {name}: inlet speed (stationary walls)", speed))
+            else:
+                if surfaces is None:
+                    surfaces = self.checks.get(config, self.thresholds).surfaces
+                area = inlet_area(config, surfaces, name)
+                if not area:
+                    continue
+                speed = inlet.volumetric_flow_rate / area
+                suggestions.append(SpeedSuggestion(
+                    f"inlet {name}: Q / inlet area (stationary walls)", speed))
+            inflow.append(speed)
+        u = max(inflow) if inflow else None
         for zone in config.rotating_zones:
             rotation = physics.rotation.get(zone.name)
             if rotation is None:
                 continue
-            speed = rotation.speed
-            if isinstance(speed, TipSpeedRatio):
-                free = speed.free_stream_speed or (max(inflow) if inflow else None)
+            given = rotation.speed
+            if isinstance(given, TipSpeedRatio):
+                free = given.free_stream_speed or u
                 if free is None:
                     continue
-                tip = speed.tip_speed_ratio * free
+                tip = given.tip_speed_ratio * free
                 suggestions.append(SpeedSuggestion(
                     f"{zone.name}: relative tip speed, sqrt((lambda U)^2 + U^2)",
                     math.hypot(tip, free)))
-            elif isinstance(speed, RpmSpeed) and isinstance(zone.shape, CylinderZone):
-                tip = abs(rpm_to_rad_s(speed.rpm)) * zone.shape.diameter / 2.0
-                suggestions.append(SpeedSuggestion(
-                    f"{zone.name}: omega x zone radius (an upper bound of the tip speed)",
-                    math.hypot(tip, max(inflow)) if inflow else tip))
+            elif isinstance(given, RpmSpeed):
+                radius = (zone.shape.diameter / 2.0 if isinstance(zone.shape, CylinderZone)
+                          else self.zone_radius(raw, zone.name))
+                if not radius:
+                    continue
+                tip = abs(rpm_to_rad_s(given.rpm)) * radius
+                if u is None:
+                    suggestions.append(SpeedSuggestion(
+                        f"{zone.name}: omega x zone radius, an upper bound of the tip speed",
+                        tip))
+                else:
+                    suggestions.append(SpeedSuggestion(
+                        f"{zone.name}: relative speed at the zone radius, "
+                        "sqrt((omega R)^2 + U^2), an upper bound", math.hypot(tip, u)))
         return tuple(s for s in suggestions if s.speed > 0)
 
     @staticmethod

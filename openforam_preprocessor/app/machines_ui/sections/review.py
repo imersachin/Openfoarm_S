@@ -17,7 +17,21 @@ from machines.operations import (
 )
 from mesh.estimator import ResourceStatus
 
+# The acceptance is kept apart from its checkbox (a widget's state is dropped as
+# soon as another section is shown), for the saved revision it was given for.
 ALLOW_HIGH_RISK = "machines_allow_high_risk"
+ACCEPT_BOX = "machines_allow_high_risk_box"
+
+
+def high_risk_accepted() -> bool:
+    """The high resource risk was accepted for the saved revision a run uses."""
+    stored = st.session_state.get(ALLOW_HIGH_RISK)
+    return isinstance(stored, dict) and stored.get("revision") == state.revision()
+
+
+def _remember_acceptance() -> None:
+    accepted = bool(st.session_state.get(ACCEPT_BOX))
+    st.session_state[ALLOW_HIGH_RISK] = {"revision": state.revision()} if accepted else None
 OPERATION_LABELS = {
     VALIDATE: "Validate the configuration",
     GENERATE_CASES: "Write the OpenFOAM dictionaries",
@@ -72,6 +86,7 @@ def render(ctx: state.Context) -> None:
     st.markdown(f"Resource status: **{assessment.status.value}**")
     render_issues(assessment.issues)
     if assessment.status is ResourceStatus.HIGH_RESOURCE_RISK:
-        st.checkbox("I accept the high resource risk for the next run", key=ALLOW_HIGH_RISK)
+        st.checkbox("I accept the high resource risk for the next run (this saved revision)",
+                    value=high_risk_accepted(), key=ACCEPT_BOX, on_change=_remember_acceptance)
     elif assessment.status is ResourceStatus.BLOCKED:
         st.error("Meshing is blocked: reduce the mesh settings. This cannot be overridden.")

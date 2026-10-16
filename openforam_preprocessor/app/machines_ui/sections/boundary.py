@@ -33,8 +33,9 @@ def inlet_kind(ctx: state.Context, name: str) -> str | None:
 
 
 def default_outlets(ctx: state.Context, outlets: list[str]) -> None:
-    """An outlet without a value takes the model's default, 0 Pa: its entry is
-    the empty one, which means exactly that (an outlet needs an entry)."""
+    """On Apply: an outlet without a value takes the model's default, 0 Pa (the
+    empty entry means exactly that; an outlet needs an entry). Never on showing
+    the section."""
     values = ctx.draft["physics"].setdefault("outlets", {})
     for name in outlets:
         values.setdefault(name, {})
@@ -49,9 +50,8 @@ def render(ctx: state.Context) -> None:
     if not inlets and not outlets:
         st.info("No patch is typed INLET or OUTLET yet (Patches).")
         return
-    default_outlets(ctx, outlets)
     kinds = {name: inlet_kind(ctx, name) for name in inlets}
-    with apply_form("boundary"):
+    with apply_form("boundary", on_apply=lambda: default_outlets(ctx, outlets)):
         for name, kind in kinds.items():
             if kind == "VELOCITY":
                 vector_field(ctx.draft, f"physics.inlets.{name}.velocity",

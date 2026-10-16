@@ -89,13 +89,24 @@ def estimates(ctx: state.Context, reference: WallReference) -> None:
         thickness = result.reverse.first_layer_thickness
         st.markdown(f"For a target **y+ = {reference.target_y_plus:g}**: estimated first "
                     f"layer thickness **≈ {thickness:.3g} m**.")
+        minimum = st.number_input(
+            "Minimum layer thickness (m), required with absolute sizing", min_value=0.0,
+            value=None, format="%g", key="machines_use_min_thickness",
+            help="snappyHexMesh drops layers thinner than this; never assumed.")
         for index, body in enumerate(bodies):
+            current = get_path(ctx.draft, f"bodies.{index}.layers.min_thickness_m")
+            chosen = minimum or current
             if st.button(f"Use {thickness:.3g} m for {body.get('name')}",
-                         key=f"machines_use_layer_{index}"):
+                         key=f"machines_use_layer_{index}", disabled=not chosen):
                 layers = ctx.draft["bodies"][index].setdefault("layers", {})
-                layers.update(enabled=True, sizing="ABSOLUTE", first_layer_thickness=thickness)
+                layers.update(enabled=True, sizing="ABSOLUTE", first_layer_thickness=thickness,
+                              min_thickness_m=float(chosen))
                 state.bump_generation()
                 st.rerun()
+        if bodies and not minimum and not all(
+                get_path(ctx.draft, f"bodies.{i}.layers.min_thickness_m")
+                for i in range(len(bodies))):
+            st.caption("Give the minimum layer thickness to use this thickness.")
     elif not shown:
         for note in result.notes:
             st.caption(note)

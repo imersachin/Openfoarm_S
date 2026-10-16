@@ -241,14 +241,40 @@ def test_wall_estimate_both_ways(service: MachineService, hawt: dict[str, Any]) 
 def test_reference_speeds_are_labelled(service: MachineService, hawt: dict[str, Any]) -> None:
     rpm = service.speed_suggestions({**hawt, "physics": physics()})
     labels = {s.label: s.speed for s in rpm}
-    assert labels["inlet speed (stationary walls)"] == pytest.approx(5.0)
+    assert labels["inlet inlet: inlet speed (stationary walls)"] == pytest.approx(5.0)
     tip = 300.0 * 2 * 3.141592653589793 / 60 * 0.6  # omega x zone radius 0.6 m
-    assert labels["rotating: omega x zone radius (an upper bound of the tip speed)"] == \
-        pytest.approx((tip ** 2 + 25.0) ** 0.5)
+    relative = ("rotating: relative speed at the zone radius, sqrt((omega R)^2 + U^2), "
+                "an upper bound")
+    assert labels[relative] == pytest.approx((tip ** 2 + 25.0) ** 0.5)
+    alone = service.speed_suggestions({**hawt, "physics": physics(inlets={})})
+    assert [(s.label, s.speed) for s in alone] == [
+        ("rotating: omega x zone radius, an upper bound of the tip speed", pytest.approx(tip))]
     tsr = service.speed_suggestions({**hawt, "physics": physics(rotation={"rotating": {
         "speed": {"kind": "TIP_SPEED_RATIO", "tip_speed_ratio": 6.0, "radius": 0.5},
         "direction": "NEGATIVE"}})})
     assert [s.speed for s in tsr][1] == pytest.approx((30.0 ** 2 + 5.0 ** 2) ** 0.5)
+
+
+def test_francis_reference_speeds(service: MachineService, tmp_path: Path) -> None:
+    from case_setup.setup import inlet_area
+    from machines.domains import read_imported
+    from machines.validation import parse_config
+
+    drafted = configs.francis(tmp_path / "g")
+    drafted["physics"] = physics(
+        rotation={"runner": {"speed": {"kind": "RPM", "rpm": 500.0}, "direction": "POSITIVE"}},
+        inlets={"inlet": {"kind": "FLOW_RATE", "volumetric_flow_rate": 0.25}})
+    config = parse_config(drafted)[0]
+    assert config is not None
+    area = inlet_area(config, read_imported(config), "inlet")
+    assert area
+    suggestions = {s.label: s.speed for s in service.speed_suggestions(drafted)}
+    assert suggestions["inlet inlet: Q / inlet area (stationary walls)"] == \
+        pytest.approx(0.25 / area)
+    runner = suggestions["runner: relative speed at the zone radius, sqrt((omega R)^2 + U^2), "
+                         "an upper bound"]
+    omega_r = 500 * 2 * 3.141592653589793 / 60 * 0.3  # the runner surface's radius, 0.3 m
+    assert runner == pytest.approx((omega_r ** 2 + (0.25 / area) ** 2) ** 0.5, rel=1e-6)
 
 
 def test_operating_reference(service: MachineService, hawt: dict[str, Any]) -> None:
