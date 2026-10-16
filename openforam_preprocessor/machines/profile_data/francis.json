@@ -1,0 +1,35 @@
+{
+  "id": "francis",
+  "label": "Francis turbine",
+  "description": "Francis turbine: the water passage from named surfaces (spiral casing, stay vanes, guide vanes, runner, draft tube), joined by AMI joints, and an operating point.",
+  "machine": "FRANCIS",
+  "preset": "FRANCIS",
+  "order": 30,
+  "terms": {"zone": "runner", "speed": "runner speed N"},
+  "speed_inputs": ["RPM"],
+  "slots": [
+    {"key": "spiral_casing", "label": "Spiral casing", "role": "part", "required": true},
+    {"key": "stay_vanes", "label": "Stay vanes", "role": "part", "required": false,
+     "help": "Optional: some models merge the stay vanes into the spiral casing."},
+    {"key": "guide_vanes", "label": "Guide vanes", "role": "part", "required": true},
+    {"key": "runner", "label": "Runner", "role": "runner", "required": true},
+    {"key": "draft_tube", "label": "Draft tube", "role": "part", "required": true}
+  ],
+  "sections": [
+    {"key": "project"},
+    {"key": "parts", "label": "Water passage", "help": "One STL per part, its patches as named regions; the rotation axis, a point on it and the runner outlet diameter."},
+    {"key": "patches", "label": "Patch types"},
+    {"key": "refinement"},
+    {"key": "layers", "label": "Wall cells (y+)"},
+    {"key": "fluid"},
+    {"key": "operating_point"},
+    {"key": "time"},
+    {"key": "review"},
+    {"key": "run"},
+    {"key": "mesh"},
+    {"key": "case"},
+    {"key": "export"},
+    {"key": "history"},
+    {"key": "logs"}
+  ]
+}

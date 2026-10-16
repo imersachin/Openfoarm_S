@@ -1,0 +1,30 @@
+{
+  "id": "hawt",
+  "label": "HAWT",
+  "description": "Horizontal-axis wind turbine: one rotor STL, flow along the rotor axis, a disc-shaped rotating zone and a cylinder or box domain.",
+  "machine": "HAWT",
+  "preset": "HAWT",
+  "order": 20,
+  "terms": {"body": "rotor", "zone": "rotating zone", "speed": "rotor speed"},
+  "speed_inputs": ["RPM", "TIP_SPEED_RATIO"],
+  "sections": [
+    {"key": "project"},
+    {"key": "bodies", "label": "Rotor", "help": "The rotor STL, its units and transform, and the preset that drafts the zone and domain."},
+    {"key": "zones", "label": "Rotating zone"},
+    {"key": "domain"},
+    {"key": "patches"},
+    {"key": "refinement"},
+    {"key": "layers", "label": "Boundary layers"},
+    {"key": "fluid"},
+    {"key": "boundary", "label": "Inlet and outlet"},
+    {"key": "rotation", "label": "Rotor speed"},
+    {"key": "time"},
+    {"key": "review"},
+    {"key": "run"},
+    {"key": "mesh"},
+    {"key": "case"},
+    {"key": "export"},
+    {"key": "history"},
+    {"key": "logs"}
+  ]
+}

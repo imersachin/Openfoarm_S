@@ -1,0 +1,30 @@
+{
+  "id": "vawt",
+  "label": "VAWT",
+  "description": "Vertical-axis wind turbine: one rotor STL in a box domain, one cylindrical rotating zone with an AMI interface. Wake boxes and CELL_ZONE interfaces stay in the VAWT app.",
+  "machine": "VAWT",
+  "preset": "VAWT",
+  "order": 10,
+  "terms": {"body": "rotor", "zone": "rotating zone", "speed": "rotor speed"},
+  "speed_inputs": ["RPM", "TIP_SPEED_RATIO"],
+  "sections": [
+    {"key": "project"},
+    {"key": "bodies", "label": "Rotor", "help": "The rotor STL, its units and transform, and the preset that drafts the zone and domain."},
+    {"key": "zones", "label": "Rotating zone"},
+    {"key": "domain"},
+    {"key": "patches"},
+    {"key": "refinement"},
+    {"key": "layers", "label": "Boundary layers"},
+    {"key": "fluid"},
+    {"key": "boundary", "label": "Inlet and outlet"},
+    {"key": "rotation", "label": "Rotor speed"},
+    {"key": "time"},
+    {"key": "review"},
+    {"key": "run"},
+    {"key": "mesh"},
+    {"key": "case"},
+    {"key": "export"},
+    {"key": "history"},
+    {"key": "logs"}
+  ]
+}

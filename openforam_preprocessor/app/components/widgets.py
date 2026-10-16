@@ -22,21 +22,39 @@ def _key(path: str) -> str:
     return f"cfg{st.session_state.get(GENERATION, 0)}:{path}"
 
 
+def widget_key(path: str) -> str:
+    """The widget key of a draft path (recreated when the generation is bumped)."""
+    return _key(path)
+
+
 def get_path(data: dict[str, Any], path: str) -> Any:
+    """The value at a dotted path; a numeric part indexes a list ("bodies.0.name")."""
     value: Any = data
     for part in path.split("."):
-        if not isinstance(value, dict):
+        if isinstance(value, list) and part.isdigit():
+            index = int(part)
+            value = value[index] if index < len(value) else None
+        elif isinstance(value, dict):
+            value = value.get(part)
+        else:
             return None
-        value = value.get(part)
     return value
 
 
 def set_path(data: dict[str, Any], path: str, value: Any) -> None:
+    """Set the value at a dotted path, creating dicts on the way; a numeric part
+    indexes an existing list item."""
     *parents, leaf = path.split(".")
-    target = data
+    target: Any = data
     for part in parents:
-        target = target.setdefault(part, {})
-    target[leaf] = value
+        if isinstance(target, list) and part.isdigit():
+            target = target[int(part)]
+        else:
+            target = target.setdefault(part, {})
+    if isinstance(target, list) and leaf.isdigit():
+        target[int(leaf)] = value
+    else:
+        target[leaf] = value
 
 
 def float_field(draft: dict[str, Any], path: str, label: str, *,

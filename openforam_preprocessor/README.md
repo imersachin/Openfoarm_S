@@ -63,6 +63,22 @@ the WSL file system (Windows: `\\wsl.localhost\<distro>\...`); a project on
 a Windows drive works but is slower and is flagged. Stop the app with Ctrl+C;
 an active run is cancelled first.
 
+## Run the rotating-machines app (G7)
+
+VAWT, HAWT, Francis and Custom, each with its own sections; mesh and case
+setup (never the solver). It runs inside WSL like the VAWT app, on port 8502:
+
+```bat
+set VAWT_WSL_DISTRO=Ubuntu-24.04
+set VAWT_PYTHON=/path/to/venv/bin/python
+scripts\run_machines_app.cmd
+```
+
+Or inside WSL: `bash scripts/run_machines_app.sh` (also `MACHINES_PORT`,
+`MACHINES_PROJECTS_DIR`, `OPENFOAM_BASHRC`). Open <http://localhost:8502>.
+Projects are kept in `~/machine_projects` in the WSL file system. Machine
+profiles are data files in `machines/profile_data/`.
+
 ## Test
 
 ```bash

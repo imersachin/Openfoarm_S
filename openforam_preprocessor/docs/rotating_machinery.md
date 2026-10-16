@@ -464,6 +464,12 @@ Sections:
 The 3D pane (V6) shows bodies, domain, zones and patch colours, so the patch
 table can be checked by eye.
 
+G7 (section 27): the app opens with a machine choice (VAWT, HAWT, Francis,
+Custom) and each machine shows its own sections and terms, from a profile.
+The table above is the Custom profile; Francis replaces Bodies, Domain and
+Rotating zones with its water passage, and Boundary values and Rotation with
+its operating point.
+
 ---
 
 ## 14. Testing
@@ -497,7 +503,7 @@ Stop after each. Do not start the next without an explicit instruction.
 | G4 | HAWT | Preset, pipeline, real end-to-end mesh |
 | G5 | Francis | Imported multi-part domain, two interfaces, real end-to-end mesh |
 | G6 | Case setup | Physics, fields, dictionaries, solver smoke test |
-| G7 | UI | Sections in section 13; the browser checklist includes the rotation-direction arrow (section 26) |
+| G7 | UI | Sections in section 13, per machine profile (section 27); the browser checklist includes the rotation-direction arrow (section 26) |
 | G8 | VAWT with pole, verification | Preset, real end-to-end mesh; performance against V5 budgets |
 
 VAWT with pole is last because the existing VAWT preset already covers most of
@@ -978,3 +984,110 @@ the numpy cut already draws the cell outlines on the plane.
 **Revisit** if a mesh at `max_global_cells` (2,000,000 cells; extrapolated
 linearly, not measured: about 6 s to build) takes over 10 s to build on first
 view, or if filled cuts coloured by a cell quantity are asked for.
+
+---
+
+## 27. Decisions for G7 (owner)
+
+Approved with five answers and two additions. Evidence:
+`tests/unit/machines/test_g7_*.py`, `tests/unit/case_setup/test_g7_wall_cells.py`,
+`tests/unit/ui_machines/test_g7_app.py`, `tests/integration/test_g7_machines_real.py`
+(OpenFOAM v2512). The app is `app/machines_app.py` (`scripts/run_machines_app.sh`
+or `.cmd`, port 8502); the VAWT app stays (section 12) for what only it meshes.
+
+1. **Q1 Francis:** five named slots, one STL each, its patches as named regions
+   inside it: spiral casing, stay vanes (optional: some models merge them into
+   the casing), guide vanes, runner, draft tube. Each slot's file is stored in
+   `inputs/<slot>/`, so two files of one name never collide. The slots become
+   the existing preset's input (`machines.presets.francis.slots_base`): parts
+   in passage order, the runner as the imported zone; the preset proposes the
+   joints (shown with their measurements) and the patch types stay unchosen
+   (E5), only suggested.
+2. **Q2 Operating point:** discharge Q (m³/s, a flow-rate inlet), runner speed
+   N (rpm) and its direction, outlet static pressure (Pa, default 0: an
+   outlet's empty entry is exactly that default). **The net head is not an
+   input:** a rated value can be kept as a reference, labelled so, with the
+   specific speed n_q = n Q^½ / H^¾ (rpm, m³/s, m) beside it, also labelled a
+   reference. Neither reaches the case.
+3. **Q3 y⁺** (section 9.2, deferred from G6), `case_setup/wall_cells.py`:
+   Re = U L / ν, Cf = 0.026 / Re^(1/7) (turbulent flat plate; F. M. White,
+   Fluid Mechanics), u_τ = U √(Cf/2). OpenFOAM's yPlus is at the wall cell's
+   centre, so a first layer h gives y⁺ = (h/2) u_τ / ν and the reverse is
+   h = 2 y⁺ ν / u_τ. U and L are reference inputs the configuration does not
+   hold (a blade's relative speed and chord): the user gives them; suggested
+   speeds come from the physics, each labelled (inlet speed for stationary
+   walls; the relative tip speed √((λU)² + U²) for a tip-speed ratio; ω × zone
+   radius, an upper bound, for an rpm). Every place it appears says it is an
+   estimate, with its source. A "use this thickness" button sets a body's
+   first layer; nothing is applied by itself.
+4. **Q4:** VAWT_POLE stays off the chooser (G8).
+5. **Q5:** mesh and case setup run end to end from the UI through the
+   background worker and the resource preflight (HIGH RESOURCE RISK needs
+   acceptance in Review; BLOCKED cannot be overridden). No solving.
+
+**Addition A — profiles as data** (`machines/profiles.py`,
+`machines/profile_data/*.json`): a pydantic `MachineProfile` (sections and
+their labels, terms, preset, Francis slots, allowed speed inputs, chooser
+order) in a `ProfileRegistry` loaded from data files. A section is one of the
+known renderers (`SECTION_CATALOGUE`); each owns configuration fields, and a
+finding goes to the present section owning the longest prefix of its field
+(else what it names: a body, owner, zone, patch or region; else Review only).
+VAWT, HAWT, Francis and Custom ship as profiles. A new machine type is a new
+file (the test loads a Kaplan profile from data and the app renders its
+sections); its projects are saved as the closest model type (CUSTOM). The
+project's profile is kept in `.preprocessor/machines/ui.json` with the
+reference values above: never a run input, so not in the configuration.
+
+**Addition B — mesh checks on a folder** (`machines/mesh_folder.py`): patch
+presence, faces and types; the background block emptied; cell zones; region
+count; AMI sum(weights); quality against limits; and a new AMI pairing check
+from the boundary file alone (every cyclicAMI patch names an existing
+cyclicAMI neighbour that names it back). They take a mesh folder, log text
+and a plain `MeshExpectation`, never the configuration. `machines.mesh_checks`
+now derives the expectation from the generated cases and calls them, with the
+same findings (its tests pass unchanged). The Mesh section has "Check a mesh
+folder" for any polyMesh, one this app did not build too; nothing is run.
+**Not refactored (the rest):**
+- The expectation itself (patch names and types, cell zones, region count,
+  AMI pairs) still comes from the configuration through the generated cases.
+- The AMI pairing check is not yet a result check of the pipeline: the fake
+  OpenFOAM's boundary files carry no neighbourPatch, so adding it there needs
+  the fakes extended first.
+- The VAWT pipeline's own result checks (`vawt/pipeline.py`: patches, zones,
+  region count) still read its cases.
+- Quality and the region count need checkMesh output; the folder check never
+  runs checkMesh itself.
+- Physics and case-setup checks (`case_setup/validation.py`) need the
+  configuration by nature.
+
+Implementation:
+
+- `machines/service.py`, `MachineService`: as `VawtService` for the machine
+  pipeline. The run control both share (status, re-attach, interrupted runs,
+  unreadable lock, orphaned process, logs, log tail) moved unchanged into
+  `vawt.service.RunControl`. STL-reading checks are cached by configuration
+  (without physics) and file identity: a physics change re-reads nothing.
+- Section status: EMPTY, INCOMPLETE (a value never assumed is missing),
+  ERROR, STALE (changed since the last mesh; both sides as the model writes
+  them, so a default left out of a draft is no change), READY. Physics
+  sections are EMPTY with "mesh only" until a fluid preset starts the physics.
+- While only the physics is incomplete, the other sections keep their checks
+  (the draft cannot be saved). Showing a section never edits the draft: a
+  field writes only a value the user changed.
+- The 3D pane draws the draft even with incomplete physics (the arrows leave
+  it out, said so) or untyped patches (drawn as regions without a patch, said
+  so): display only. The rotation arc now follows the physics.
+- The VAWT profile uses the SIMPLE preset and leaves out the wake box and the
+  Fluent export, each with a note: this pipeline meshes neither (D6). The
+  EXTENDED preset, CELL_ZONE and rotor-only layouts stay in the VAWT app.
+- Results apart: Mesh (its stage result, validity and quality, limits, the
+  folder check) and Case setup (its stage result with the reason code,
+  derived values, the stale marker, the case files).
+- Headless timings (server side, small fixtures): a section switch about
+  0.02 s with nothing re-read (tested by counting check runs and preview
+  builds). Real v2512 through the service: HAWT mesh and case setup 15.5 s,
+  Francis from the slots 24.6 s.
+
+**Browser check (owner):** the G7 checklist adds the rotation direction
+against the real rotor (section 26): set it in Rotor speed or Operating point
+and compare the 3D pane's arc with the rotor.

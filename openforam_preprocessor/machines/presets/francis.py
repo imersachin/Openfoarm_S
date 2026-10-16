@@ -179,6 +179,33 @@ def francis_draft(base: Mapping[str, Any], diameter: float,
                         dict(FRANCIS_VALUES))
 
 
+SPECIFIC_SPEED_SOURCE = ("Reference only: n_q = n Q^(1/2) / H^(3/4) with n in rpm, Q in "
+                         "m^3/s and H in m (the usual turbine specific-speed convention). "
+                         "The net head is not a case input.")
+
+
+def specific_speed(speed_rpm: float, discharge: float, net_head: float) -> float:
+    """n_q = n Q^(1/2) / H^(3/4) (rpm, m^3/s, m): a reference value only."""
+    if not (speed_rpm > 0 and discharge > 0 and net_head > 0):
+        raise ValueError("Speed, discharge and net head must be positive.")
+    return float(speed_rpm * discharge ** 0.5 / net_head ** 0.75)
+
+
+def slots_base(project_name: str, axis: str, origin: Mapping[str, float],
+               parts: Sequence[tuple[str, Mapping[str, Any]]],
+               runner: tuple[str, Mapping[str, Any]]) -> dict[str, Any]:
+    """The francis_draft base from named slots (G7, decision Q1): one STL per
+    slot, its patches as named regions inside it. parts: (part name, StlSource
+    data) in passage order (spiral casing, stay vanes, guide vanes, draft
+    tube); runner: (zone name, StlSource data)."""
+
+    def surface(name: str, file: Mapping[str, Any]) -> dict[str, Any]:
+        return {"name": name, "format": "NAMED_REGIONS", "files": [dict(file)]}
+
+    return {"project_name": project_name, "axis": axis, "origin": dict(origin),
+            "runner": surface(*runner), "parts": [surface(*part) for part in parts]}
+
+
 def with_types(data: Mapping[str, Any],
                types: Mapping[str, PatchType | str]) -> dict[str, Any]:
     """The draft with the chosen types set on the named patches."""

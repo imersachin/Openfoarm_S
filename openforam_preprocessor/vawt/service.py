@@ -319,7 +319,159 @@ GEOMETRY_CACHE = _GeometryCache()
 
 # --- the service ---------------------------------------------------------------------
 
-class VawtService:
+class RunControl:
+    """Run control shared by the VAWT and machine services: cancel, status
+    (with re-attach, interrupted runs, an unreadable lock, an orphaned
+    OpenFOAM process), logs and the log tail. Needs `root` and `registry`."""
+
+    root: Path
+    registry: RunRegistry
+
+    def cancel_run(self) -> bool:
+        """Cancel this process's active run of the project. False if there is none
+        (a run held by another process cannot be cancelled from here)."""
+        return self.registry.cancel(self.root)
+
+    def run_status(self) -> RunStatusView:
+        status = read_status(self.root)
+        active = self.registry.latest(self.root)
+        if active is not None and not active.done:
+            own = status if status is not None and status.get("run_id") == active.run_id else None
+            return self._view(RunView.RUNNING, own, run_id=active.run_id, can_cancel=True)
+        lock = RunLock(self.root)
+        if self._unreadable_lock(lock):
+            return self._view(RunView.LOCK_UNREADABLE, status, issues=(_issue(
+                IssueSeverity.BLOCKING, "RUN_LOCK_UNREADABLE",
+                f"The run lock {lock.path} names no run; it was left by a process that "
+                "stopped while creating it.",
+                "Remove the lock (remove_unreadable_lock, after confirming that no run "
+                "of this project is active anywhere), then start the run again.",
+                explanation="No run can start while the lock exists, and the lock does "
+                "not say which process holds it.", lock=str(lock.path)),))
+        if lock.is_held_by_live_run():
+            running = status if status is not None and status.get("state") == "RUNNING" else None
+            return self._view(RunView.RUNNING_ELSEWHERE, running, issues=(_issue(
+                IssueSeverity.BLOCKING, "RUN_IN_PROGRESS",
+                "Another process is running this project; it cannot be cancelled from here.",
+                "Wait for it to finish, or stop it where it was started.",
+                holder=lock.holder()),))
+        if status is None:
+            return RunStatusView(RunView.NONE)
+        if status.get("state") == RunState.RUNNING.value:
+            return self._interrupted(status)
+        state = RunView(status.get("state", RunView.FAILED.value))
+        issues: tuple[Issue, ...] = ()
+        if active is not None and active.run_id == status.get("run_id") and active.result:
+            issues = active.result.issues
+        return self._view(state, status, issues=issues)
+
+    def _view(self, state: RunView, status: Mapping[str, Any] | None, *,
+              run_id: str | None = None, can_cancel: bool = False, orphan_pid: int | None = None,
+              issues: tuple[Issue, ...] = ()) -> RunStatusView:
+        status = status or {}
+        command = status.get("command") or {}
+        return RunStatusView(
+            state=state, run_id=run_id or status.get("run_id"), stage=status.get("stage"),
+            step=int(status.get("step", 0)), total_steps=int(status.get("total_steps", 0)),
+            started_at=status.get("started_at"), updated_at=status.get("updated_at"),
+            message=str(status.get("message", "")), can_cancel=can_cancel,
+            log=command.get("log") if isinstance(command, Mapping) else None,
+            orphan_pid=orphan_pid, issues=issues)
+
+    def _interrupted(self, status: Mapping[str, Any]) -> RunStatusView:
+        """The status says running but no live run holds the lock: the process
+        that ran it ended without finishing (crash, kill, WSL shutdown)."""
+        issues = [_issue(
+            IssueSeverity.WARNING, "RUN_INTERRUPTED",
+            f"The run {str(status.get('run_id', ''))[:8]} stopped without finishing, during "
+            f"{status.get('stage')}.",
+            "Start the run again: the interrupted operation re-runs; earlier results are "
+            "reused only if their files still verify.",
+            explanation="The process running it ended (crash, kill or WSL shutdown).",
+            run_id=status.get("run_id"), run_stage=status.get("stage"))]
+        orphan = orphaned_command(status)
+        if orphan is not None:
+            command = status.get("command") or {}
+            issues.append(_issue(
+                IssueSeverity.BLOCKING, "ORPHANED_OPENFOAM_PROCESS",
+                f"{command.get('name')} (PID {orphan}) from the interrupted run is still "
+                "running and writing into the project.",
+                "Terminate it (terminate_orphan) or wait for it to end before starting "
+                "another run.", pid=orphan, command=command))
+        return self._view(RunView.INTERRUPTED, status, orphan_pid=orphan, issues=tuple(issues))
+
+    @staticmethod
+    def _unreadable_lock(lock: RunLock) -> bool:
+        try:
+            age = time.time() - lock.path.stat().st_mtime
+        except OSError:
+            return False
+        return lock.holder() is None and age > UNREADABLE_LOCK_AGE_S
+
+    def remove_unreadable_lock(self) -> bool:
+        """Remove a run lock that names no run (only after the user confirmed).
+        False, and nothing removed, if the lock is readable, recent or absent."""
+        lock = RunLock(self.root)
+        if not self._unreadable_lock(lock):
+            return False
+        lock.path.unlink(missing_ok=True)
+        return True
+
+    def terminate_orphan(self) -> bool:
+        """Terminate the OpenFOAM process left by an interrupted run (only after
+        the user confirmed). False if there is none."""
+        pid = self.run_status().orphan_pid
+        if pid is None:
+            return False
+        try:
+            process = psutil.Process(pid)
+            process.terminate()
+            try:
+                process.wait(ORPHAN_TERMINATE_WAIT_S)
+            except psutil.TimeoutExpired:
+                process.kill()
+                process.wait(ORPHAN_TERMINATE_WAIT_S)
+        except psutil.NoSuchProcess:
+            pass
+        return True
+
+    def logs(self) -> list[str]:
+        """Command logs, relative to the project, by sub-case and name."""
+        return sorted(p.relative_to(self.root).as_posix()
+                      for p in (self.root / "logs").glob("*/*.log"))
+
+    def log_tail(self, max_bytes: int = LOG_TAIL_BYTES, log: str | None = None) -> LogTail:
+        """The end of a log, read by seek: at most max_bytes, whatever its size.
+        log: one of logs(); default the active log, else the most recent one."""
+        if log is not None:
+            if log not in self.logs():
+                return LogTail(None, "", False, 0)
+            relative: Any = log
+        else:
+            status = read_status(self.root) or {}
+            command = status.get("command") or {}
+            relative = command.get("log") if isinstance(command, Mapping) else None
+        path = self.root / relative if isinstance(relative, str) else None
+        if path is None or not path.is_file():
+            logs = [p for p in (self.root / "logs").glob("*/*.log")
+                    if not p.name.endswith(".stderr.log")]
+            if not logs:
+                return LogTail(None, "", False, 0)
+            path = max(logs, key=lambda p: p.stat().st_mtime_ns)
+        with path.open("rb") as stream:
+            size = stream.seek(0, os.SEEK_END)
+            start = max(0, size - max_bytes)
+            stream.seek(start)
+            data = stream.read(max_bytes)
+        if start > 0:  # drop the partial first line
+            newline = data.find(b"\n")
+            data = data[newline + 1:] if newline >= 0 else data
+        return LogTail(path.relative_to(self.root).as_posix(),
+                       data.decode("utf-8", errors="replace"), start > 0, size,
+                       bytes_read=min(size, max_bytes))
+
+
+class VawtService(RunControl):
     def __init__(
         self,
         root: Path,
@@ -632,114 +784,6 @@ class VawtService:
                 "Follow its progress, or cancel it before starting another."),))
         return StartResult(True, run_id, location)
 
-    def cancel_run(self) -> bool:
-        """Cancel this process's active run of the project. False if there is none
-        (a run held by another process cannot be cancelled from here)."""
-        return self.registry.cancel(self.root)
-
-    def run_status(self) -> RunStatusView:
-        status = read_status(self.root)
-        active = self.registry.latest(self.root)
-        if active is not None and not active.done:
-            own = status if status is not None and status.get("run_id") == active.run_id else None
-            return self._view(RunView.RUNNING, own, run_id=active.run_id, can_cancel=True)
-        lock = RunLock(self.root)
-        if self._unreadable_lock(lock):
-            return self._view(RunView.LOCK_UNREADABLE, status, issues=(_issue(
-                IssueSeverity.BLOCKING, "RUN_LOCK_UNREADABLE",
-                f"The run lock {lock.path} names no run; it was left by a process that "
-                "stopped while creating it.",
-                "Remove the lock (remove_unreadable_lock, after confirming that no run "
-                "of this project is active anywhere), then start the run again.",
-                explanation="No run can start while the lock exists, and the lock does "
-                "not say which process holds it.", lock=str(lock.path)),))
-        if lock.is_held_by_live_run():
-            running = status if status is not None and status.get("state") == "RUNNING" else None
-            return self._view(RunView.RUNNING_ELSEWHERE, running, issues=(_issue(
-                IssueSeverity.BLOCKING, "RUN_IN_PROGRESS",
-                "Another process is running this project; it cannot be cancelled from here.",
-                "Wait for it to finish, or stop it where it was started.",
-                holder=lock.holder()),))
-        if status is None:
-            return RunStatusView(RunView.NONE)
-        if status.get("state") == RunState.RUNNING.value:
-            return self._interrupted(status)
-        state = RunView(status.get("state", RunView.FAILED.value))
-        issues: tuple[Issue, ...] = ()
-        if active is not None and active.run_id == status.get("run_id") and active.result:
-            issues = active.result.issues
-        return self._view(state, status, issues=issues)
-
-    def _view(self, state: RunView, status: Mapping[str, Any] | None, *,
-              run_id: str | None = None, can_cancel: bool = False, orphan_pid: int | None = None,
-              issues: tuple[Issue, ...] = ()) -> RunStatusView:
-        status = status or {}
-        command = status.get("command") or {}
-        return RunStatusView(
-            state=state, run_id=run_id or status.get("run_id"), stage=status.get("stage"),
-            step=int(status.get("step", 0)), total_steps=int(status.get("total_steps", 0)),
-            started_at=status.get("started_at"), updated_at=status.get("updated_at"),
-            message=str(status.get("message", "")), can_cancel=can_cancel,
-            log=command.get("log") if isinstance(command, Mapping) else None,
-            orphan_pid=orphan_pid, issues=issues)
-
-    def _interrupted(self, status: Mapping[str, Any]) -> RunStatusView:
-        """The status says running but no live run holds the lock: the process
-        that ran it ended without finishing (crash, kill, WSL shutdown)."""
-        issues = [_issue(
-            IssueSeverity.WARNING, "RUN_INTERRUPTED",
-            f"The run {str(status.get('run_id', ''))[:8]} stopped without finishing, during "
-            f"{status.get('stage')}.",
-            "Start the run again: the interrupted operation re-runs; earlier results are "
-            "reused only if their files still verify.",
-            explanation="The process running it ended (crash, kill or WSL shutdown).",
-            run_id=status.get("run_id"), run_stage=status.get("stage"))]
-        orphan = orphaned_command(status)
-        if orphan is not None:
-            command = status.get("command") or {}
-            issues.append(_issue(
-                IssueSeverity.BLOCKING, "ORPHANED_OPENFOAM_PROCESS",
-                f"{command.get('name')} (PID {orphan}) from the interrupted run is still "
-                "running and writing into the project.",
-                "Terminate it (terminate_orphan) or wait for it to end before starting "
-                "another run.", pid=orphan, command=command))
-        return self._view(RunView.INTERRUPTED, status, orphan_pid=orphan, issues=tuple(issues))
-
-    @staticmethod
-    def _unreadable_lock(lock: RunLock) -> bool:
-        try:
-            age = time.time() - lock.path.stat().st_mtime
-        except OSError:
-            return False
-        return lock.holder() is None and age > UNREADABLE_LOCK_AGE_S
-
-    def remove_unreadable_lock(self) -> bool:
-        """Remove a run lock that names no run (only after the user confirmed).
-        False, and nothing removed, if the lock is readable, recent or absent."""
-        lock = RunLock(self.root)
-        if not self._unreadable_lock(lock):
-            return False
-        lock.path.unlink(missing_ok=True)
-        return True
-
-    def terminate_orphan(self) -> bool:
-        """Terminate the OpenFOAM process left by an interrupted run (only after
-        the user confirmed). False if there is none."""
-        pid = self.run_status().orphan_pid
-        if pid is None:
-            return False
-        try:
-            process = psutil.Process(pid)
-            process.terminate()
-            try:
-                process.wait(ORPHAN_TERMINATE_WAIT_S)
-            except psutil.TimeoutExpired:
-                process.kill()
-                process.wait(ORPHAN_TERMINATE_WAIT_S)
-        except psutil.NoSuchProcess:
-            pass
-        return True
-
     # --- outputs ----------------------------------------------------------------------
 
     def reports(self) -> dict[str, dict[str, Any] | None]:
@@ -765,41 +809,6 @@ class VawtService:
                     files[path.relative_to(self.root).as_posix()] = stream.read(
                         max_bytes).decode("utf-8", errors="replace")
         return files
-
-    def logs(self) -> list[str]:
-        """Command logs, relative to the project, by sub-case and name."""
-        return sorted(p.relative_to(self.root).as_posix()
-                      for p in (self.root / "logs").glob("*/*.log"))
-
-    def log_tail(self, max_bytes: int = LOG_TAIL_BYTES, log: str | None = None) -> LogTail:
-        """The end of a log, read by seek: at most max_bytes, whatever its size.
-        log: one of logs(); default the active log, else the most recent one."""
-        if log is not None:
-            if log not in self.logs():
-                return LogTail(None, "", False, 0)
-            relative: Any = log
-        else:
-            status = read_status(self.root) or {}
-            command = status.get("command") or {}
-            relative = command.get("log") if isinstance(command, Mapping) else None
-        path = self.root / relative if isinstance(relative, str) else None
-        if path is None or not path.is_file():
-            logs = [p for p in (self.root / "logs").glob("*/*.log")
-                    if not p.name.endswith(".stderr.log")]
-            if not logs:
-                return LogTail(None, "", False, 0)
-            path = max(logs, key=lambda p: p.stat().st_mtime_ns)
-        with path.open("rb") as stream:
-            size = stream.seek(0, os.SEEK_END)
-            start = max(0, size - max_bytes)
-            stream.seek(start)
-            data = stream.read(max_bytes)
-        if start > 0:  # drop the partial first line
-            newline = data.find(b"\n")
-            data = data[newline + 1:] if newline >= 0 else data
-        return LogTail(path.relative_to(self.root).as_posix(),
-                       data.decode("utf-8", errors="replace"), start > 0, size,
-                       bytes_read=min(size, max_bytes))
 
     # --- 3D preview (V6) -------------------------------------------------------------
 

@@ -1,0 +1,29 @@
+{
+  "id": "custom",
+  "label": "Custom",
+  "description": "The general workflow: any bodies, a box, cylinder or imported domain, rotating zones, patches and joints, set up section by section.",
+  "machine": "CUSTOM",
+  "preset": "NONE",
+  "order": 90,
+  "speed_inputs": ["RPM", "TIP_SPEED_RATIO"],
+  "sections": [
+    {"key": "project"},
+    {"key": "bodies"},
+    {"key": "domain"},
+    {"key": "zones"},
+    {"key": "patches"},
+    {"key": "refinement"},
+    {"key": "layers"},
+    {"key": "fluid"},
+    {"key": "boundary"},
+    {"key": "rotation"},
+    {"key": "time"},
+    {"key": "review"},
+    {"key": "run"},
+    {"key": "mesh"},
+    {"key": "case"},
+    {"key": "export"},
+    {"key": "history"},
+    {"key": "logs"}
+  ]
+}
