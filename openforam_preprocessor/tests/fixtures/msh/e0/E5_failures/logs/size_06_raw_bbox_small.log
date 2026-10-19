@@ -1,0 +1,5 @@
+src.msh: 2541 nodes, box [0.0, 0.0, 0.0] [1.0, 0.5, 0.5], 0.3 MB in 0.00 s
+box_22.msh: 769 nodes, box [0.0, 0.0, 0.0] [1.0, 0.5, 0.5], 0.1 MB in 0.00 s
+box_41.msh: 769 nodes, box [0.0, 0.0, 0.0] [1.0, 0.5, 0.5], 0.1 MB in 0.00 s
+box_22_bin.msh: not read: binary MSH (0.00 s)
+rotating.msh: 5242 nodes, box [-1.0, -1.0, -1.0] [3.0, 1.0, 1.0], 1.0 MB in 0.01 s

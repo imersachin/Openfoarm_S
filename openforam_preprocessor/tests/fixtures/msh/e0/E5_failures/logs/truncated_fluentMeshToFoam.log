@@ -1,0 +1,36 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : fluentMeshToFoam <work>/E5/in/truncated.msh -case <work>/E5/truncated_fluentMeshToFoam
+Date   : Oct 19 2026
+Time   : 07:39:49
+Host   : DESKTOP-162QBLJ
+PID    : 16858
+I/O    : uncollated
+Case   : <work>/E5/truncated_fluentMeshToFoam
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Dimension of grid: 3
+Number of points: 2541
+Number of cells: 2000
+number of faces: 6500
+Reading points
+Reading mixed faces
+
+
+FINISHED LEXING
+
+

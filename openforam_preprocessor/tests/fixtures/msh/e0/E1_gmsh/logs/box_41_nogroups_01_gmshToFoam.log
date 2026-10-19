@@ -1,0 +1,37 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : gmshToFoam <work>/E1/msh/box_41_nogroups.msh -case <work>/E1/box_41_nogroups
+Date   : Oct 19 2026
+Time   : 07:39:38
+Host   : DESKTOP-162QBLJ
+PID    : 14260
+I/O    : uncollated
+Case   : <work>/E1/box_41_nogroups
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Starting to read mesh format at line 2
+Read format version 4.1  ascii 0
+
+Starting to read points at line 35
+Vertices to be read: 769
+Vertices read: 769
+
+Starting to read cells at line 1603
+Cells to be read:4066
+
+Unhandled element 15 at line 1605in/on physical region ID: 0
+Perhaps you created a higher order mesh?

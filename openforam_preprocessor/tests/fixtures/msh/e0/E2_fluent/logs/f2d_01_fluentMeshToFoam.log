@@ -1,0 +1,74 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : fluentMeshToFoam <work>/E2/src/fluentInterface/src.msh -case <work>/E2/f2d
+Date   : Oct 19 2026
+Time   : 07:39:40
+Host   : DESKTOP-162QBLJ
+PID    : 14899
+I/O    : uncollated
+Case   : <work>/E2/f2d
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Dimension of grid: 3
+Number of points: 2541
+Number of cells: 2000
+number of faces: 6500
+Reading points
+Reading mixed faces
+Reading mixed faces
+Reading mixed faces
+Reading mixed faces
+Other readCellGroupData: 1 1 7d0 1 0
+Reading mixed cells
+Read zone1:1 name:fluid-1 patchTypeID:fluid
+Reading zone data
+Read zone1:2 name:interior-1 patchTypeID:interior
+Reading zone data
+Read zone1:10 name:inlet patchTypeID:pressure-outlet
+Reading zone data
+Read zone1:11 name:outlet patchTypeID:pressure-outlet
+Reading zone data
+Read zone1:12 name:walls patchTypeID:wall
+Reading zone data
+
+
+FINISHED LEXING
+
+
+dimension of grid: 3
+Creating shapes for 3-D cells
+Building patch-less mesh...--> FOAM Warning : 
+    From Foam::polyMesh::polyMesh(const Foam::IOobject&, Foam::pointField&&, const Foam::cellShapeList&, const Foam::faceListList&, const Foam::wordList&, const Foam::wordList&, const Foam::word&, const Foam::word&, const Foam::wordList&, bool)
+    in file meshes/polyMesh/polyMeshFromShapeMesh.C at line 635
+    Found 1000 undefined faces in mesh; adding to default patch defaultFaces
+done.
+
+Building boundary and internal patches.
+Creating patch 0 for zone: 2 start: 1 end: 5500 type: interior name: interior-1
+Creating patch 1 for zone: 10 start: 5501 end: 5600 type: pressure-outlet name: inlet
+Creating patch 2 for zone: 11 start: 5601 end: 5700 type: pressure-outlet name: outlet
+Creating patch 3 for zone: 12 start: 5701 end: 6500 type: wall name: walls
+Patch interior-1 is internal to the mesh  and is not being added to the boundary.
+Adding new patch inlet of type patch as patch 0
+Adding new patch outlet of type patch as patch 1
+Adding new patch walls of type wall as patch 2
+
+Writing mesh... to "constant/polyMesh"  done.
+
+
+End
+

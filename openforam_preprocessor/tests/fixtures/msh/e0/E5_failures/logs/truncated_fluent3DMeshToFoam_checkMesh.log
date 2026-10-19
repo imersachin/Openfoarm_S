@@ -1,0 +1,137 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : checkMesh -case <work>/E5/truncated_fluent3DMeshToFoam -allTopology -meshQuality
+Date   : Oct 19 2026
+Time   : 07:39:49
+Host   : DESKTOP-162QBLJ
+PID    : 16846
+I/O    : uncollated
+Case   : <work>/E5/truncated_fluent3DMeshToFoam
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+--> FOAM Warning : 
+    From static Foam::instantList Foam::timeSelector::select0(Foam::Time&, const Foam::argList&)
+    in file db/Time/timeSelector.C at line 284
+    No time specified or available, selecting 'constant'
+Create mesh for time = constant
+--> FOAM Warning : 
+    From Foam::polyMesh::polyMesh(const Foam::IOobject&, bool)
+    in file meshes/polyMesh/polyMesh.C at line 325
+    Missing mesh boundary on one or more domains
+
+Check mesh...
+    Enabling all (cell, face, edge, point) topology checks.
+    Enabling user-defined geometry checks.
+
+Time = constant
+
+Mesh stats 
+    points:           2541
+    internal points:  2541
+    edges:            1496
+    internal edges:   1496
+    internal edges using one boundary point:   0
+    internal edges using two boundary points:  0
+    faces:            979
+    internal faces:   979
+    cells:            538
+    faces per cell:   3.6394052
+    boundary patches: 0
+    point zones:      0
+    face zones:       0
+    cell zones:       0
+
+Overall number of cells of each type:
+    hexahedra:     107
+    prisms:        0
+    wedges:        0
+    pyramids:      0
+    tet wedges:    0
+    tetrahedra:    0
+    polyhedra:     431
+    Breakdown of polyhedra by number of faces:
+        faces   number of cells
+            1   180
+            2   18
+            3   5
+            4   55
+            5   173
+
+Checking topology...
+    Boundary definition OK.
+    Illegal cells (less than 4 faces or out of range faces) found,  number of cells: 203
+  <<Writing 203 illegal cells to set illegalCells
+ ***Unused points found in the mesh, number unused by faces: 1916 number unused by cells: 1916
+  <<Writing 1916 unused points to set unusedPoints
+    Upper triangular ordering OK.
+    Face vertices OK.
+ ***Open cells found, number of cells: 431. This problem may be fixable using the zipUpMesh utility.
+  <<Writing 431 cells with over used edges to set zipUpCells
+    Face-face connectivity OK.
+  <<Writing 180 cells with zero or one non-boundary face to set oneInternalFaceCells
+  <<Writing 18 cells with two non-boundary faces to set twoInternalFacesCells
+    Number of regions: 1 (OK).
+
+Checking patch topology for multiply connected surfaces...
+                   Patch    Faces   Points  Surface topology
+                    ".*"        0        0                        ok (empty)
+
+
+Checking faceZone topology for multiply connected surfaces...
+    No faceZones found.
+
+Checking basic cellZone addressing...
+    No cellZones found.
+
+Checking basic pointZone addressing...
+    No pointZones found.
+
+Checking geometry...
+    Overall domain bounding box (0 0 0) (1 0.5 0.5)
+    Mesh has 3 geometric (non-empty/wedge) directions (1 1 1)
+    Mesh has 3 solution (non-empty) directions (1 1 1)
+    Boundary openness (0 0 0) OK.
+ ***Open cells found, max cell openness: 1, number of open cells 431
+  <<Writing 431 non closed cells to set nonClosedCells
+  <<Writing 198 cells with high aspect ratio to set highAspectRatioCells
+    Minimum face area = 0.0025. Maximum face area = 0.0025.  Face area magnitudes OK.
+ ***Zero or negative cell volume detected.  Minimum negative volume: 0, Number of negative volume cells: 180
+  <<Writing 180 zero volume cells to set zeroVolumeCells
+    Mesh non-orthogonality Max: 161.24851 average: 8.2825923
+ ***Number of non-orthogonality errors: 4.
+  <<Writing 4 non-orthogonal faces to set nonOrthoFaces
+ ***Error in face pyramids: 4 faces are incorrectly oriented.
+  <<Writing 4 faces with incorrect orientation to set wrongOrientedFaces
+ ***Max skewness = 7.970717, 1 highly skew faces detected which may impair the quality of the results
+  <<Writing 1 skew faces to set skewFaces
+    Coupled point location match (average 0) OK.
+Checking faces in error :
+    non-orthogonality >  65 degrees                        : 4
+    faces with face pyramid volume < 1e-13                 : 180
+    faces with face-decomposition tet quality < 1e-15      : 0
+    faces with concavity >  80 degrees                     : 0
+    faces with skewness >   4 (internal) or  20 (boundary) : 0
+    faces with interpolation weights (0..1)  <  0.05       : 0
+    faces with volume ratio of neighbour cells <  0.01     : 0
+    faces with face twist <  0.02                          : 0
+    faces on cells with determinant < 0.001                : 36
+  <<Writing 220 faces in error to set meshQualityFaces
+
+Failed 9 mesh checks.
+
+End
+

@@ -1,0 +1,2 @@
+baffleFaces faceZone faceLabels 0
+plate faceZone faceLabels 100

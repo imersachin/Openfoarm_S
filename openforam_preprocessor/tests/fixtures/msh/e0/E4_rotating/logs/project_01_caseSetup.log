@@ -1,0 +1,5 @@
+omega 31.415927 rad/s, radius 0.5, zone rotating
+patch kinds: rotor MOVING_WALL, inlet INLET, y_min SLIP, z_max SLIP, y_max SLIP, z_min SLIP, outlet OUTLET, AMI1 CONSTRAINT, AMI2 CONSTRAINT
+files: 0/U, 0/k, 0/nut, 0/omega, 0/p, constant/dynamicMeshDict, constant/transportProperties, constant/turbulenceProperties, system/controlDict, system/fvSchemes, system/fvSolution
+imported mesh files unchanged by case setup: True (8 files)
+case mesh is a byte-identical copy: True

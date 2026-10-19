@@ -1,0 +1,27 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      topoSetDict;
+}
+
+// E3: a plate at x 0.5 over y < 0.25 (the E2 box: 20 x 10 x 10 cells), as a
+// face zone for createBaffles.
+actions
+(
+    {
+        name    plate;
+        type    faceSet;
+        action  new;
+        source  boxToFace;
+        box     (0.49 -1 -1) (0.51 0.25 1);
+    }
+    {
+        name    baffleFaces;
+        type    faceZoneSet;
+        action  new;
+        source  setToFaceZone;
+        faceSet plate;
+    }
+);

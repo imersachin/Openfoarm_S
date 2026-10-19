@@ -1,0 +1,19 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      topoSetDict;
+}
+
+// E2: a cell zone "half" (x < 0.5), to see whether it survives the round trip.
+actions
+(
+    {
+        name    half;
+        type    cellZoneSet;
+        action  new;
+        source  boxToCell;
+        box     (-1 -1 -1) (0.5 1 1);
+    }
+);

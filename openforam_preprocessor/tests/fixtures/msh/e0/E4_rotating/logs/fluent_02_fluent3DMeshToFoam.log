@@ -1,0 +1,81 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : fluent3DMeshToFoam <work>/E4/ami/fluentInterface/ami.msh -case <work>/E4/fluent
+Date   : Oct 19 2026
+Time   : 07:39:48
+Host   : DESKTOP-162QBLJ
+PID    : 16349
+I/O    : uncollated
+Case   : <work>/E4/fluent
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Dimension of grid: 3
+Number of points: 5242
+Number of cells: 24197
+Number of faces: 51007
+PointGroup: 3 start: 0 end: 5241.  Reading points...done.
+FaceGroup: 2 start: 0 end: 45780.  Reading mixed faces...done.
+FaceGroup: 10 start: 45781 end: 45884.  Reading mixed faces...done.
+FaceGroup: 11 start: 45885 end: 46346.  Reading mixed faces...done.
+FaceGroup: 12 start: 46347 end: 47232.  Reading mixed faces...done.
+FaceGroup: 13 start: 47233 end: 48118.  Reading mixed faces...done.
+FaceGroup: 14 start: 48119 end: 49004.  Reading mixed faces...done.
+FaceGroup: 15 start: 49005 end: 49890.  Reading mixed faces...done.
+FaceGroup: 16 start: 49891 end: 50350.  Reading mixed faces...done.
+FaceGroup: 17 start: 50351 end: 50678.  Reading mixed faces...done.
+FaceGroup: 18 start: 50679 end: 51006.  Reading mixed faces...done.
+CellGroup: 1 start: 0 end: 24196 type: 1
+Zone: 1 name: fluid-1 type: fluid.  Reading zone data...done.
+Zone: 2 name: interior-1 type: interior.  Reading zone data...done.
+Zone: 10 name: rotor type: wall.  Reading zone data...done.
+Zone: 11 name: inlet type: pressure-outlet.  Reading zone data...done.
+Zone: 12 name: y_min type: pressure-outlet.  Reading zone data...done.
+Zone: 13 name: z_max type: pressure-outlet.  Reading zone data...done.
+Zone: 14 name: y_max type: pressure-outlet.  Reading zone data...done.
+Zone: 15 name: z_min type: pressure-outlet.  Reading zone data...done.
+Zone: 16 name: outlet type: pressure-outlet.  Reading zone data...done.
+Zone: 17 name: AMI1 type: pressure-outlet.  Reading zone data...done.
+Zone: 18 name: AMI2 type: pressure-outlet.  Reading zone data...done.
+
+FINISHED LEXING
+
+Creating patch 0 for zone: 10 name: rotor type: wall
+Creating patch 1 for zone: 11 name: inlet type: pressure-outlet
+Creating patch 2 for zone: 12 name: y_min type: pressure-outlet
+Creating patch 3 for zone: 13 name: z_max type: pressure-outlet
+Creating patch 4 for zone: 14 name: y_max type: pressure-outlet
+Creating patch 5 for zone: 15 name: z_min type: pressure-outlet
+Creating patch 6 for zone: 16 name: outlet type: pressure-outlet
+Creating patch 7 for zone: 17 name: AMI1 type: pressure-outlet
+Creating patch 8 for zone: 18 name: AMI2 type: pressure-outlet
+Creating cellZone 0 name: fluid-1 type: fluid
+Creating faceZone 0 name: interior-1 type: interior
+faceZone from Fluent indices: 0 to: 45780 type: interior
+patch 0 from Fluent indices: 45781 to: 45884 type: wall
+patch 1 from Fluent indices: 45885 to: 46346 type: pressure-outlet
+patch 2 from Fluent indices: 46347 to: 47232 type: pressure-outlet
+patch 3 from Fluent indices: 47233 to: 48118 type: pressure-outlet
+patch 4 from Fluent indices: 48119 to: 49004 type: pressure-outlet
+patch 5 from Fluent indices: 49005 to: 49890 type: pressure-outlet
+patch 6 from Fluent indices: 49891 to: 50350 type: pressure-outlet
+patch 7 from Fluent indices: 50351 to: 50678 type: pressure-outlet
+patch 8 from Fluent indices: 50679 to: 51006 type: pressure-outlet
+
+Writing mesh to "<work>/E4/fluent/constant/region0"
+
+End
+

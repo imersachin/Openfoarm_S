@@ -20,6 +20,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+msh = [
+  "gmsh>=4.11,<5",  # optional: re-save Gmsh files as MSH 2.2 ASCII for gmshToFoam
+]
 dev = [
   "pytest>=8.3,<9",
   "ruff>=0.9,<1",
@@ -47,5 +50,5 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 packages = ["app", "case_setup", "core", "geometry", "machines", "mesh", "openfoam", "vawt", "visualization"]
 
 [[tool.mypy.overrides]]
-module = ["trimesh.*", "plotly.*", "psutil.*", "scipy.*"]
+module = ["trimesh.*", "plotly.*", "psutil.*", "scipy.*", "gmsh"]
 ignore_missing_imports = true

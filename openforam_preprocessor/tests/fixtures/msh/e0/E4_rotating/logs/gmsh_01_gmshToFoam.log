@@ -1,0 +1,103 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : gmshToFoam <work>/E4/rotating.msh -case <work>/E4/gmsh
+Date   : Oct 19 2026
+Time   : 07:39:44
+Host   : DESKTOP-162QBLJ
+PID    : 16128
+I/O    : uncollated
+Case   : <work>/E4/gmsh
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Starting to read mesh format at line 2
+Read format version 4.1  ascii 0
+
+Starting to read physical names at line 5
+Physical names:11
+    Surface 1	inlet
+    Surface 2	outlet
+    Surface 3	y_min
+    Surface 4	y_max
+    Surface 5	z_min
+    Surface 6	z_max
+    Surface 7	ami_stat
+    Surface 8	ami_rot
+    Surface 9	rotor
+    Volume 10	stationary
+    Volume 11	rotating
+
+Starting to read points at line 92
+Vertices to be read: 5242
+Vertices read: 5242
+
+Starting to read cells at line 10641
+Cells to be read:29423
+
+Mapping region 9 to Foam patch 0
+Mapping region 7 to Foam patch 1
+Mapping region 1 to Foam patch 2
+Mapping region 3 to Foam patch 3
+Mapping region 6 to Foam patch 4
+Mapping region 4 to Foam patch 5
+Mapping region 5 to Foam patch 6
+Mapping region 2 to Foam patch 7
+Mapping region 8 to Foam patch 8
+Mapping region 10 to Foam cellZone 0
+Mapping region 11 to Foam cellZone 1
+Cells:
+    total: 24197
+    hex  : 0
+    prism: 0
+    pyr  : 0
+    tet  : 24197
+
+CellZones:
+Zone	Size
+    0	23408
+    1	789
+
+Patch 0 gets name rotor
+Patch 1 gets name ami_stat
+Patch 2 gets name inlet
+Patch 3 gets name y_min
+Patch 4 gets name z_max
+Patch 5 gets name y_max
+Patch 6 gets name z_min
+Patch 7 gets name outlet
+Patch 8 gets name ami_rot
+
+--> FOAM Warning : 
+    From Foam::polyMesh::polyMesh(const Foam::IOobject&, Foam::pointField&&, const Foam::cellShapeList&, const Foam::faceListList&, const Foam::wordList&, const Foam::wordList&, const Foam::word&, const Foam::word&, const Foam::wordList&, bool)
+    in file meshes/polyMesh/polyMeshFromShapeMesh.C at line 635
+    Found 5226 undefined faces in mesh; adding to default patch defaultFaces
+Finding faces of patch 0
+Finding faces of patch 1
+Finding faces of patch 2
+Finding faces of patch 3
+Finding faces of patch 4
+Finding faces of patch 5
+Finding faces of patch 6
+Finding faces of patch 7
+Finding faces of patch 8
+
+FaceZones:
+Zone	Size
+
+Writing zone 0 to cellZone stationary and cellSet
+Writing zone 1 to cellZone rotating and cellSet
+End
+

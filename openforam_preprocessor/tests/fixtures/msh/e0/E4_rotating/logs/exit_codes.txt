@@ -1,0 +1,13 @@
+gmsh_00_make                             exit=0     1s  py <repo>/tests/fixtures/msh/e0/common/make_gmsh.py rotating <work>/E4/rotating.msh --version 4.1
+gmsh_01_gmshToFoam                       exit=0     0s  gmshToFoam <work>/E4/rotating.msh -case <work>/E4/gmsh
+gmsh_02_checkMesh                        exit=0     0s  checkMesh -case <work>/E4/gmsh -allTopology -meshQuality
+ami_01_setWallType                       exit=0     0s  in_case <work>/E4/ami foamDictionary constant/polyMesh/boundary -entry entry0/rotor/type -set wall
+ami_02_createPatch                       exit=0     1s  createPatch -case <work>/E4/ami -overwrite
+ami_03_checkMesh                         exit=0     0s  checkMesh -case <work>/E4/ami -allTopology -meshQuality
+ami_04_folderChecks                      exit=0     1s  py <repo>/tests/fixtures/msh/e0/E4_rotating/e4_case.py folder <work>/E4/ami <repo>/tests/fixtures/msh/e0/E4_rotating/logs/ami_03_checkMesh.log
+project_01_caseSetup                     exit=0     1s  py <repo>/tests/fixtures/msh/e0/E4_rotating/e4_case.py setup <work>/E4/ami <work>/E4/project
+project_02_pimpleFoam                    exit=0     1s  in_case <work>/E4/project/case pimpleFoam
+project_03_meshUnchanged                 exit=0     0s  py <repo>/tests/fixtures/msh/e0/E4_rotating/../common/compare_points.py <work>/E4/ami/constant/polyMesh <work>/E4/project/case/constant/polyMesh
+fluent_01_foamMeshToFluent               exit=0     0s  foamMeshToFluent -case <work>/E4/ami
+fluent_02_fluent3DMeshToFoam             exit=0     0s  fluent3DMeshToFoam <work>/E4/ami/fluentInterface/ami.msh -case <work>/E4/fluent
+fluent_03_checkMesh                      exit=0     1s  checkMesh -case <work>/E4/fluent -allTopology -meshQuality

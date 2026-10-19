@@ -1,0 +1,10 @@
+
+
+--> FOAM FATAL ERROR: (openfoam-2512)
+Mesh is not 3D, dimension of grid: 0
+
+    From int main(int, char**)
+    in file fluent3DMeshToFoam.L at line 862.
+
+FOAM exiting
+

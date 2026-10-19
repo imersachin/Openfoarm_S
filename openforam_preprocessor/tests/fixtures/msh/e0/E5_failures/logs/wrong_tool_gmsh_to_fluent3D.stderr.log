@@ -1,0 +1,11 @@
+
+
+--> FOAM FATAL ERROR: (openfoam-2512)
+Do not understand characters: $
+    on line 1
+
+    From virtual int yyFlexLexer::yylex()
+    in file fluent3DMeshToFoam.L at line 768.
+
+FOAM exiting
+

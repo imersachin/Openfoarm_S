@@ -1,0 +1,20 @@
+
+
+--> FOAM FATAL ERROR: (openfoam-2512)
+Cannot dereference nullptr at index -1 in range [0,0)
+
+
+    From const T& Foam::UPtrList<T>::at(Foam::label) const [with T = Foam::polyPatch; Foam::label = int]
+    in file ./src/OpenFOAM/lnInclude/UPtrListI.H at line 161.
+
+FOAM aborting
+
+[stack trace]
+=============
+#1  Foam::error::simpleExit(int, bool) in /usr/lib/openfoam/openfoam2512/platforms/linux64GccDPInt32Opt/lib/libOpenFOAM.so
+#2  ? in /usr/lib/openfoam/openfoam2512/platforms/linux64GccDPInt32Opt/bin/gmshToFoam
+#3  ? in /usr/lib/openfoam/openfoam2512/platforms/linux64GccDPInt32Opt/bin/gmshToFoam
+#4  ? in /lib/x86_64-linux-gnu/libc.so.6
+#5  __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
+#6  ? in /usr/lib/openfoam/openfoam2512/platforms/linux64GccDPInt32Opt/bin/gmshToFoam
+=============

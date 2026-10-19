@@ -1,0 +1,11 @@
+box_22                       144066 bytes
+box_22_bin                   175275 bytes
+box_22_nogroups              146185 bytes
+box_22_nowalls               122725 bytes
+box_41                       118846 bytes
+box_41_as22                  144066 bytes
+box_41_bin                   176534 bytes
+box_41_bin_as22              144066 bytes
+box_41_nogroups              120268 bytes
+box_41_nogroups_as22         146185 bytes
+box_v1                       143633 bytes

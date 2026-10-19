@@ -1,0 +1,5 @@
+mm_f3d_scale: 2541 points, box [0.0, 0.0, 0.0] [1.0, 0.5, 0.5]
+mm_transform: 2541 points, box [0.0, 0.0, 0.0] [1.0, 0.5, 0.5]
+src: 2541 points, box [0.0, 0.0, 0.0] [1.0, 0.5, 0.5]
+mm_transform vs mm_f3d_scale: max |difference| 0.000e+00 m (same order)
+src vs mm_f3d_scale: max |difference| 0.000e+00 m (same order)

@@ -1,0 +1,38 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      createPatchDict;
+}
+
+// E4: one AMI pair from the two copies of the zone surface in the Gmsh file.
+// Entries as tests/fixtures/machines/g0/R3_hawt/merged/system/createPatchDict.
+pointSync false;
+patches
+(
+    {
+        name AMI1;
+        patchInfo
+        {
+            type            cyclicAMI;
+            matchTolerance  0.0001;
+            neighbourPatch  AMI2;
+            transform       noOrdering;
+        }
+        constructFrom patches;
+        patches (ami_stat);
+    }
+    {
+        name AMI2;
+        patchInfo
+        {
+            type            cyclicAMI;
+            matchTolerance  0.0001;
+            neighbourPatch  AMI1;
+            transform       noOrdering;
+        }
+        constructFrom patches;
+        patches (ami_rot);
+    }
+);

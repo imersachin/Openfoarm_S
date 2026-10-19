@@ -1,0 +1,12 @@
+src_01_blockMesh                         exit=0     0s  blockMesh -case <work>/E3/src
+src_02_topoSet                           exit=0     0s  topoSet -case <work>/E3/src
+src_03_createBaffles                     exit=0     0s  createBaffles -case <work>/E3/src -overwrite
+src_04_checkMesh                         exit=0     0s  checkMesh -case <work>/E3/src -allTopology -meshQuality
+src_05_detectBaffles                     exit=0     0s  mergeOrSplitBaffles -case <work>/E3/src -detectOnly
+src_06_foamMeshToFluent                  exit=0     0s  foamMeshToFluent -case <work>/E3/src
+f3d_01_fluent3DMeshToFoam                exit=0     1s  fluent3DMeshToFoam <work>/E3/src/fluentInterface/src.msh -case <work>/E3/f3d
+f3d_02_checkMesh                         exit=0     0s  checkMesh -case <work>/E3/f3d -allTopology -meshQuality
+f3d_03_detectBaffles                     exit=0     0s  mergeOrSplitBaffles -case <work>/E3/f3d -detectOnly
+f2d_01_fluentMeshToFoam                  exit=0     0s  fluentMeshToFoam <work>/E3/src/fluentInterface/src.msh -case <work>/E3/f2d
+f2d_02_checkMesh                         exit=0     0s  checkMesh -case <work>/E3/f2d -allTopology -meshQuality
+f2d_03_detectBaffles                     exit=0     0s  mergeOrSplitBaffles -case <work>/E3/f2d -detectOnly

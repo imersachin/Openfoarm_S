@@ -1,0 +1,3 @@
+ami: 5242 points, box [-1.0, -1.0, -1.0] [3.0, 1.0, 1.0]
+case: 5242 points, box [-1.0, -1.0, -1.0] [3.0, 1.0, 1.0]
+case vs ami: max |difference| 0.000e+00 m (same order)

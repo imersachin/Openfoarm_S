@@ -1,0 +1,6 @@
+patches: rotor wall 104, inlet patch 462, y_min patch 886, z_max patch 886, y_max patch 886, z_min patch 886, outlet patch 460, AMI1 cyclicAMI 328, AMI2 cyclicAMI 328
+cell zones: rotating, stationary
+AMI pairs: (('AMI1', 'AMI2'),)
+regions: 2
+validity: VALID quality: WITHIN_LIMITS
+issues: none

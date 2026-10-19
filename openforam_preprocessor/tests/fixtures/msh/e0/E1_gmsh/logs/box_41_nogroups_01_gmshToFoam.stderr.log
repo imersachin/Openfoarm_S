@@ -1,0 +1,12 @@
+
+
+--> FOAM FATAL IO ERROR: (openfoam-2512)
+Bad token - could not get int32
+
+file: input at line 0.
+
+    From Foam::Istream& Foam::operator>>(Istream&, int32_t&)
+    in file primitives/ints/int32/int32IO.C at line 96.
+
+FOAM exiting
+

@@ -1,0 +1,57 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : fluent3DMeshToFoam <work>/E2/mm/fluentInterface/mm.msh -scale 0.001 -case <work>/E2/mm_f3d_scale
+Date   : Oct 19 2026
+Time   : 07:39:41
+Host   : DESKTOP-162QBLJ
+PID    : 14951
+I/O    : uncollated
+Case   : <work>/E2/mm_f3d_scale
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Dimension of grid: 3
+Number of points: 2541
+Number of cells: 2000
+Number of faces: 6500
+PointGroup: 3 start: 0 end: 2540.  Reading points...done.
+FaceGroup: 2 start: 0 end: 5499.  Reading mixed faces...done.
+FaceGroup: 10 start: 5500 end: 5599.  Reading mixed faces...done.
+FaceGroup: 11 start: 5600 end: 5699.  Reading mixed faces...done.
+FaceGroup: 12 start: 5700 end: 6499.  Reading mixed faces...done.
+CellGroup: 1 start: 0 end: 1999 type: 1
+Zone: 1 name: fluid-1 type: fluid.  Reading zone data...done.
+Zone: 2 name: interior-1 type: interior.  Reading zone data...done.
+Zone: 10 name: inlet type: pressure-outlet.  Reading zone data...done.
+Zone: 11 name: outlet type: pressure-outlet.  Reading zone data...done.
+Zone: 12 name: walls type: wall.  Reading zone data...done.
+
+FINISHED LEXING
+
+Creating patch 0 for zone: 10 name: inlet type: pressure-outlet
+Creating patch 1 for zone: 11 name: outlet type: pressure-outlet
+Creating patch 2 for zone: 12 name: walls type: wall
+Creating cellZone 0 name: fluid-1 type: fluid
+Creating faceZone 0 name: interior-1 type: interior
+faceZone from Fluent indices: 0 to: 5499 type: interior
+patch 0 from Fluent indices: 5500 to: 5599 type: pressure-outlet
+patch 1 from Fluent indices: 5600 to: 5699 type: pressure-outlet
+patch 2 from Fluent indices: 5700 to: 6499 type: wall
+
+Writing mesh to "<work>/E2/mm_f3d_scale/constant/region0"
+
+End
+

@@ -1,0 +1,35 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      createBafflesDict;
+}
+
+// E3: a wall baffle pair on the face zone (two wall patches on the same faces,
+// as a Fluent wall / wall-shadow pair).
+// Base: tutorials/incompressible/pimpleFoam/RAS/TJunctionFan/system/createBafflesDict
+internalFacesOnly true;
+
+baffles
+{
+    plate
+    {
+        type        faceZone;
+        zoneName    baffleFaces;
+
+        patches
+        {
+            master
+            {
+                name            plate;
+                type            wall;
+            }
+            slave
+            {
+                name            plate-shadow;
+                type            wall;
+            }
+        }
+    }
+}

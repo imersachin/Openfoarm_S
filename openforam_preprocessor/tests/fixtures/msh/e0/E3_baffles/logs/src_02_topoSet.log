@@ -1,0 +1,42 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : topoSet -case <work>/E3/src
+Date   : Oct 19 2026
+Time   : 07:39:42
+Host   : DESKTOP-162QBLJ
+PID    : 15510
+I/O    : uncollated
+Case   : <work>/E3/src
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create polyMesh for time = 0
+
+Reading topoSetDict
+
+Time = 0
+    mesh not changed.
+Created faceSet plate
+    Applying source boxToFace
+    Adding faces with centre within boxes 1((0.49 -1 -1) (0.51 0.25 1))
+    faceSet plate now size 50
+Created faceZoneSet baffleFaces
+    Applying source setToFaceZone
+    Adding all faces from face set: plate ...
+    faceZoneSet baffleFaces now size 50
+
+End
+

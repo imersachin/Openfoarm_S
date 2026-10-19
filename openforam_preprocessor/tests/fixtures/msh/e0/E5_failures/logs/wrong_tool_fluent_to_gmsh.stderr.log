@@ -1,0 +1,12 @@
+
+
+--> FOAM FATAL IO ERROR: (openfoam-2512)
+Wrong token type - expected word, found on line 0: punctuation '('
+
+file: input at line 0.
+
+    From Foam::Istream& Foam::operator>>(Istream&, word&)
+    in file primitives/strings/word/wordIO.C at line 71.
+
+FOAM exiting
+

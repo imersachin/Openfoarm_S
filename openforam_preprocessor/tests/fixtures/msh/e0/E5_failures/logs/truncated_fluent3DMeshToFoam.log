@@ -1,0 +1,42 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : fluent3DMeshToFoam <work>/E5/in/truncated.msh -case <work>/E5/truncated_fluent3DMeshToFoam
+Date   : Oct 19 2026
+Time   : 07:39:49
+Host   : DESKTOP-162QBLJ
+PID    : 16841
+I/O    : uncollated
+Case   : <work>/E5/truncated_fluent3DMeshToFoam
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Dimension of grid: 3
+Number of points: 2541
+Number of cells: 2000
+Number of faces: 6500
+PointGroup: 3 start: 0 end: 2540.  Reading points...done.
+FaceGroup: 2 start: 0 end: 5499.  Reading mixed faces...
+FINISHED LEXING
+
+--> FOAM Warning : 
+    From int main(int, char**)
+    in file fluent3DMeshToFoam.L at line 1037
+    Unknown FaceGroup 2 not in a zone
+
+Writing mesh to "<work>/E5/truncated_fluent3DMeshToFoam/constant/region0"
+
+End
+

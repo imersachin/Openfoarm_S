@@ -12,6 +12,8 @@ networkx==3.7      # trimesh split repair (fill_holes)
 psutil==7.2.2      # available RAM for resource preflight
 streamlit==1.65.0
 plotly==6.9.0
+gmsh==4.15.2       # optional: .msh import re-saves Gmsh files as MSH 2.2 ASCII;
+                   # needs apt packages libglu1-mesa libxft2 (Ubuntu 24.04)
 
 # Development: tests, lint, type checks
 pytest==8.4.2

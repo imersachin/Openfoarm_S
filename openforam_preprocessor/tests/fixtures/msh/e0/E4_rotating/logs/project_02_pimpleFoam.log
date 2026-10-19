@@ -1,0 +1,1168 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _bd2b6720-20260127 OPENFOAM=2512 version=2512
+Arch   : "LSB;label=32;scalar=64"
+Exec   : pimpleFoam
+Date   : Oct 19 2026
+Time   : 07:39:47
+Host   : DESKTOP-162QBLJ
+PID    : 16297
+I/O    : uncollated
+Case   : <work>/E4/project/case
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+memory pool : not available
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+Selecting dynamicFvMesh dynamicMotionSolverFvMesh
+Selecting motion solver: solidBody
+Applying motion to cellZone: rotating
+Selecting solid-body motion function rotatingMotion
+
+PIMPLE: no residual control data found. Calculations will employ 2 corrector loops
+
+Reading field p
+
+Reading field U
+
+Reading/calculating face flux field phi
+
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 328
+AMI: Patch target faces: 328
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 17 points 3((-0.2 0.12594 -0.205366) (-0.2 0.107686 -0.34911) (-0.2 0.0026682 -0.270907))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 4 points 3((-0.2 -0.107686 -0.34911) (-0.2 0.0026682 -0.270907) (-0.2 -1.44977e-15 -0.400969))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 51 points 3((-0.2 -1.44977e-15 -0.400969) (-0.2 0.107686 -0.34911) (-0.2 0.0745211 -0.494415))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 0 points 3((-0.2 0.107686 -0.34911) (-0.2 -1.44977e-15 -0.400969) (-0.2 0.0026682 -0.270907))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.12594 -0.205366) (-0.2 0.107686 -0.34911) (-0.2 0.0026682 -0.270907))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.107686 -0.34911) (-0.2 0.0026682 -0.270907) (-0.2 -1.44977e-15 -0.400969))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 -1.44977e-15 -0.400969) (-0.2 0.107686 -0.34911) (-0.2 0.0745211 -0.494415))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.107686 -0.34911) (-0.2 -1.44977e-15 -0.400969) (-0.2 0.0026682 -0.270907))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 17 points 3((-0.2 0.12594 -0.205366) (-0.2 0.107686 -0.34911) (-0.2 0.0026682 -0.270907))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 4 points 3((-0.2 -0.107686 -0.34911) (-0.2 0.0026682 -0.270907) (-0.2 -1.44977e-15 -0.400969))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 51 points 3((-0.2 -1.44977e-15 -0.400969) (-0.2 0.107686 -0.34911) (-0.2 0.0745211 -0.494415))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 0 points 3((-0.2 0.107686 -0.34911) (-0.2 -1.44977e-15 -0.400969) (-0.2 0.0026682 -0.270907))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.12594 -0.205366) (-0.2 0.107686 -0.34911) (-0.2 0.0026682 -0.270907))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.107686 -0.34911) (-0.2 0.0026682 -0.270907) (-0.2 -1.44977e-15 -0.400969))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 -1.44977e-15 -0.400969) (-0.2 0.107686 -0.34911) (-0.2 0.0745211 -0.494415))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.107686 -0.34911) (-0.2 -1.44977e-15 -0.400969) (-0.2 0.0026682 -0.270907))
+AMI: Patch source sum(weights) min:0.999781 max:1.00176 average:1.00007
+AMI: Patch target sum(weights) min:0.999989 max:1.0018 average:1.00007
+Selecting incompressible transport model Newtonian
+Selecting turbulence model type RAS
+Selecting RAS turbulence model kOmegaSST
+Selecting patchDistMethod meshWave
+RAS
+{
+    RASModel        kOmegaSST;
+    turbulence      on;
+    printCoeffs     on;
+    alphaK1         0.85;
+    alphaK2         1;
+    alphaOmega1     0.5;
+    alphaOmega2     0.856;
+    gamma1          0.555556;
+    gamma2          0.44;
+    beta1           0.075;
+    beta2           0.0828;
+    betaStar        0.09;
+    a1              0.31;
+    b1              1;
+    c1              10;
+    F3              false;
+    decayControl    false;
+    kInf            0;
+    omegaInf        0;
+}
+
+No MRF models present
+
+No finite volume options present
+Constructing face velocity Uf
+
+Courant Number mean: 0.000347396 max: 0.0518429
+Courant Number mean: 0.000347396 max: 0.0518429
+
+Starting time loop
+
+Courant Number mean: 0.000347396 max: 0.0518429
+deltaT = 0.000555556
+Time = 0.000555556
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 328
+AMI: Patch target faces: 328
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 17 points 3((-0.2 0.129505 -0.203137) (-0.2 0.113763 -0.347177) (-0.2 0.00739577 -0.270819))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 4 points 3((-0.2 -0.101577 -0.350936) (-0.2 0.00739577 -0.270819) (-0.2 0.00699787 -0.400908))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 51 points 3((-0.2 0.00699787 -0.400908) (-0.2 0.113763 -0.347177) (-0.2 0.0831385 -0.49304))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 0 points 3((-0.2 0.113763 -0.347177) (-0.2 0.00699787 -0.400908) (-0.2 0.00739577 -0.270819))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.129505 -0.203137) (-0.2 0.113763 -0.347177) (-0.2 0.00739577 -0.270819))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.101577 -0.350936) (-0.2 0.00739577 -0.270819) (-0.2 0.00699787 -0.400908))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.00699787 -0.400908) (-0.2 0.113763 -0.347177) (-0.2 0.0831385 -0.49304))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.113763 -0.347177) (-0.2 0.00699787 -0.400908) (-0.2 0.00739577 -0.270819))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 17 points 3((-0.2 0.129505 -0.203137) (-0.2 0.113763 -0.347177) (-0.2 0.00739577 -0.270819))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 4 points 3((-0.2 -0.101577 -0.350936) (-0.2 0.00739577 -0.270819) (-0.2 0.00699787 -0.400908))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 51 points 3((-0.2 0.00699787 -0.400908) (-0.2 0.113763 -0.347177) (-0.2 0.0831385 -0.49304))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 0 points 3((-0.2 0.113763 -0.347177) (-0.2 0.00699787 -0.400908) (-0.2 0.00739577 -0.270819))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.129505 -0.203137) (-0.2 0.113763 -0.347177) (-0.2 0.00739577 -0.270819))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.101577 -0.350936) (-0.2 0.00739577 -0.270819) (-0.2 0.00699787 -0.400908))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.00699787 -0.400908) (-0.2 0.113763 -0.347177) (-0.2 0.0831385 -0.49304))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.113763 -0.347177) (-0.2 0.00699787 -0.400908) (-0.2 0.00739577 -0.270819))
+AMI: Patch source sum(weights) min:0.999743 max:1.00733 average:1.00101
+AMI: Patch target sum(weights) min:0.999999 max:1.00733 average:1.00101
+smoothSolver:  Solving for Ux, Initial residual = 1, Final residual = 7.08122e-05, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 1, Final residual = 0.000282022, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 1, Final residual = 0.000360569, No Iterations 1
+GAMG:  Solving for p, Initial residual = 1, Final residual = 5.73689e-07, No Iterations 16
+time step continuity errors : sum local = 4.18841e-10, global = -1.20202e-10, cumulative = -1.20202e-10
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.053514, Final residual = 6.82018e-07, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.0416511, Final residual = 4.50313e-07, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.0415837, Final residual = 5.06115e-07, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.140848, Final residual = 5.41536e-07, No Iterations 9
+time step continuity errors : sum local = 4.44022e-08, global = 1.20352e-08, cumulative = 1.1915e-08
+smoothSolver:  Solving for omega, Initial residual = 0.343515, Final residual = 1.13672e-07, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 1, Final residual = 1.92942e-07, No Iterations 3
+ExecutionTime = 0.15 s  ClockTime = 0 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.999743 |       0.999999 | 
+        max(weight)  |        1.00733 |        1.00733 | 
+        ave(weight)  |        1.00101 |        1.00101 | 
+        min(address) |              3 |              2 | 
+        max(address) |              9 |              9 | 
+        ave(address) |        5.44207 |        5.44207 | 
+
+Courant Number mean: 0.0625645 max: 0.831178
+deltaT = 0.000555556
+Time = 0.00111111
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 328
+AMI: Patch target faces: 328
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 17 points 3((-0.2 0.13303 -0.200846) (-0.2 0.119804 -0.345139) (-0.2 0.0121211 -0.270649))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 4 points 3((-0.2 -0.0954368 -0.352655) (-0.2 0.0121211 -0.270649) (-0.2 0.0139936 -0.400725))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 51 points 3((-0.2 0.0139936 -0.400725) (-0.2 0.119804 -0.345139) (-0.2 0.0917306 -0.491513))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 0 points 3((-0.2 0.119804 -0.345139) (-0.2 0.0139936 -0.400725) (-0.2 0.0121211 -0.270649))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.13303 -0.200846) (-0.2 0.119804 -0.345139) (-0.2 0.0121211 -0.270649))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0954368 -0.352655) (-0.2 0.0121211 -0.270649) (-0.2 0.0139936 -0.400725))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0139936 -0.400725) (-0.2 0.119804 -0.345139) (-0.2 0.0917306 -0.491513))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.119804 -0.345139) (-0.2 0.0139936 -0.400725) (-0.2 0.0121211 -0.270649))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 17 points 3((-0.2 0.13303 -0.200846) (-0.2 0.119804 -0.345139) (-0.2 0.0121211 -0.270649))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 4 points 3((-0.2 -0.0954368 -0.352655) (-0.2 0.0121211 -0.270649) (-0.2 0.0139936 -0.400725))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 51 points 3((-0.2 0.0139936 -0.400725) (-0.2 0.119804 -0.345139) (-0.2 0.0917306 -0.491513))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 0 points 3((-0.2 0.119804 -0.345139) (-0.2 0.0139936 -0.400725) (-0.2 0.0121211 -0.270649))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.13303 -0.200846) (-0.2 0.119804 -0.345139) (-0.2 0.0121211 -0.270649))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0954368 -0.352655) (-0.2 0.0121211 -0.270649) (-0.2 0.0139936 -0.400725))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0139936 -0.400725) (-0.2 0.119804 -0.345139) (-0.2 0.0917306 -0.491513))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.119804 -0.345139) (-0.2 0.0139936 -0.400725) (-0.2 0.0121211 -0.270649))
+AMI: Patch source sum(weights) min:0.999932 max:1.01371 average:1.00188
+AMI: Patch target sum(weights) min:0.999645 max:1.0137 average:1.00188
+smoothSolver:  Solving for Ux, Initial residual = 0.809614, Final residual = 0.00120542, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.320797, Final residual = 0.000383961, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.320871, Final residual = 0.000400158, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.111648, Final residual = 5.60824e-07, No Iterations 11
+time step continuity errors : sum local = 5.38495e-08, global = 1.53514e-08, cumulative = 2.72664e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.207931, Final residual = 4.90086e-08, No Iterations 3
+smoothSolver:  Solving for Uy, Initial residual = 0.0435338, Final residual = 4.956e-07, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.0437641, Final residual = 6.42194e-07, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.382275, Final residual = 7.79074e-07, No Iterations 10
+time step continuity errors : sum local = 2.7161e-08, global = -7.96081e-09, cumulative = 1.93056e-08
+smoothSolver:  Solving for omega, Initial residual = 0.21137, Final residual = 4.68087e-08, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.768277, Final residual = 7.09866e-08, No Iterations 3
+ExecutionTime = 0.25 s  ClockTime = 0 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |       0.999932 |       0.999645 | 
+        max(weight)  |        1.01371 |         1.0137 | 
+        ave(weight)  |        1.00188 |        1.00188 | 
+        min(address) |              2 |              3 | 
+        max(address) |              9 |              9 | 
+        ave(address) |        5.43902 |        5.43902 | 
+
+Courant Number mean: 0.064406 max: 0.890375
+deltaT = 0.000555556
+Time = 0.00166667
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 328
+AMI: Patch target faces: 328
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 17 points 3((-0.2 0.136515 -0.198494) (-0.2 0.12581 -0.342996) (-0.2 0.0168427 -0.270396))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 4 points 3((-0.2 -0.0892676 -0.354267) (-0.2 0.0168427 -0.270396) (-0.2 0.0209851 -0.400419))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 51 points 3((-0.2 0.0209851 -0.400419) (-0.2 0.12581 -0.342996) (-0.2 0.100295 -0.489838))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 0 points 3((-0.2 0.12581 -0.342996) (-0.2 0.0209851 -0.400419) (-0.2 0.0168427 -0.270396))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.136515 -0.198494) (-0.2 0.12581 -0.342996) (-0.2 0.0168427 -0.270396))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0892676 -0.354267) (-0.2 0.0168427 -0.270396) (-0.2 0.0209851 -0.400419))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0209851 -0.400419) (-0.2 0.12581 -0.342996) (-0.2 0.100295 -0.489838))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.12581 -0.342996) (-0.2 0.0209851 -0.400419) (-0.2 0.0168427 -0.270396))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 17 points 3((-0.2 0.136515 -0.198494) (-0.2 0.12581 -0.342996) (-0.2 0.0168427 -0.270396))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 4 points 3((-0.2 -0.0892676 -0.354267) (-0.2 0.0168427 -0.270396) (-0.2 0.0209851 -0.400419))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 51 points 3((-0.2 0.0209851 -0.400419) (-0.2 0.12581 -0.342996) (-0.2 0.100295 -0.489838))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 0 points 3((-0.2 0.12581 -0.342996) (-0.2 0.0209851 -0.400419) (-0.2 0.0168427 -0.270396))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.136515 -0.198494) (-0.2 0.12581 -0.342996) (-0.2 0.0168427 -0.270396))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0892676 -0.354267) (-0.2 0.0168427 -0.270396) (-0.2 0.0209851 -0.400419))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0209851 -0.400419) (-0.2 0.12581 -0.342996) (-0.2 0.100295 -0.489838))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.12581 -0.342996) (-0.2 0.0209851 -0.400419) (-0.2 0.0168427 -0.270396))
+AMI: Patch source sum(weights) min:1 max:1.01913 average:1.00263
+AMI: Patch target sum(weights) min:1 max:1.01912 average:1.00263
+smoothSolver:  Solving for Ux, Initial residual = 0.143985, Final residual = 0.000222693, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.151267, Final residual = 0.000194993, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.149986, Final residual = 0.000198325, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.554032, Final residual = 4.57032e-07, No Iterations 10
+time step continuity errors : sum local = 5.77563e-09, global = -1.64456e-09, cumulative = 1.7661e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.0101761, Final residual = 1.26832e-07, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.00829669, Final residual = 8.38811e-08, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.00824858, Final residual = 8.10794e-08, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.197107, Final residual = 5.65817e-07, No Iterations 9
+time step continuity errors : sum local = 3.67802e-09, global = 1.02607e-09, cumulative = 1.86871e-08
+smoothSolver:  Solving for omega, Initial residual = 0.152905, Final residual = 3.45239e-08, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.594274, Final residual = 5.53636e-08, No Iterations 3
+ExecutionTime = 0.33 s  ClockTime = 0 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |              1 |              1 | 
+        max(weight)  |        1.01913 |        1.01912 | 
+        ave(weight)  |        1.00263 |        1.00263 | 
+        min(address) |              3 |              3 | 
+        max(address) |              8 |              8 | 
+        ave(address) |        5.44207 |        5.44207 | 
+
+Courant Number mean: 0.0645447 max: 0.866531
+deltaT = 0.000555556
+Time = 0.00222222
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 328
+AMI: Patch target faces: 328
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 17 points 3((-0.2 0.139958 -0.196081) (-0.2 0.131777 -0.340748) (-0.2 0.0215592 -0.270061))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 4 points 3((-0.2 -0.0830712 -0.355771) (-0.2 0.0215592 -0.270061) (-0.2 0.0279702 -0.399992))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 51 points 3((-0.2 0.0279702 -0.399992) (-0.2 0.131777 -0.340748) (-0.2 0.108828 -0.488013))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 0 points 3((-0.2 0.131777 -0.340748) (-0.2 0.0279702 -0.399992) (-0.2 0.0215592 -0.270061))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.139958 -0.196081) (-0.2 0.131777 -0.340748) (-0.2 0.0215592 -0.270061))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0830712 -0.355771) (-0.2 0.0215592 -0.270061) (-0.2 0.0279702 -0.399992))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0279702 -0.399992) (-0.2 0.131777 -0.340748) (-0.2 0.108828 -0.488013))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.131777 -0.340748) (-0.2 0.0279702 -0.399992) (-0.2 0.0215592 -0.270061))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 17 points 3((-0.2 0.139958 -0.196081) (-0.2 0.131777 -0.340748) (-0.2 0.0215592 -0.270061))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 4 points 3((-0.2 -0.0830712 -0.355771) (-0.2 0.0215592 -0.270061) (-0.2 0.0279702 -0.399992))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 51 points 3((-0.2 0.0279702 -0.399992) (-0.2 0.131777 -0.340748) (-0.2 0.108828 -0.488013))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 0 points 3((-0.2 0.131777 -0.340748) (-0.2 0.0279702 -0.399992) (-0.2 0.0215592 -0.270061))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.139958 -0.196081) (-0.2 0.131777 -0.340748) (-0.2 0.0215592 -0.270061))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0830712 -0.355771) (-0.2 0.0215592 -0.270061) (-0.2 0.0279702 -0.399992))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0279702 -0.399992) (-0.2 0.131777 -0.340748) (-0.2 0.108828 -0.488013))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.131777 -0.340748) (-0.2 0.0279702 -0.399992) (-0.2 0.0215592 -0.270061))
+AMI: Patch source sum(weights) min:1 max:1.02361 average:1.00325
+AMI: Patch target sum(weights) min:1 max:1.02361 average:1.00325
+smoothSolver:  Solving for Ux, Initial residual = 0.0634806, Final residual = 9.12287e-05, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.0615139, Final residual = 8.39529e-05, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.0614122, Final residual = 8.64724e-05, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.349615, Final residual = 4.01989e-07, No Iterations 10
+time step continuity errors : sum local = 1.96898e-09, global = -5.55748e-10, cumulative = 1.81313e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.00274899, Final residual = 3.56783e-08, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.0023593, Final residual = 2.96457e-08, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.00235238, Final residual = 4.04719e-08, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.0824718, Final residual = 3.87755e-07, No Iterations 9
+time step continuity errors : sum local = 1.3936e-09, global = 3.94537e-10, cumulative = 1.85259e-08
+smoothSolver:  Solving for omega, Initial residual = 0.119277, Final residual = 2.69343e-08, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.489147, Final residual = 4.52663e-08, No Iterations 3
+ExecutionTime = 0.41 s  ClockTime = 0 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |              1 |              1 | 
+        max(weight)  |        1.02361 |        1.02361 | 
+        ave(weight)  |        1.00325 |        1.00325 | 
+        min(address) |              3 |              3 | 
+        max(address) |              8 |              8 | 
+        ave(address) |        5.44207 |        5.44207 | 
+
+Courant Number mean: 0.0645119 max: 0.856382
+deltaT = 0.000555556
+Time = 0.00277778
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 328
+AMI: Patch target faces: 328
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 17 points 3((-0.2 0.143359 -0.193608) (-0.2 0.137703 -0.338396) (-0.2 0.0262691 -0.269643))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 4 points 3((-0.2 -0.0768494 -0.357167) (-0.2 0.0262691 -0.269643) (-0.2 0.0349467 -0.399443))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 51 points 3((-0.2 0.0349467 -0.399443) (-0.2 0.137703 -0.338396) (-0.2 0.117329 -0.486039))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 0 points 3((-0.2 0.137703 -0.338396) (-0.2 0.0349467 -0.399443) (-0.2 0.0262691 -0.269643))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.143359 -0.193608) (-0.2 0.137703 -0.338396) (-0.2 0.0262691 -0.269643))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0768494 -0.357167) (-0.2 0.0262691 -0.269643) (-0.2 0.0349467 -0.399443))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0349467 -0.399443) (-0.2 0.137703 -0.338396) (-0.2 0.117329 -0.486039))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.137703 -0.338396) (-0.2 0.0349467 -0.399443) (-0.2 0.0262691 -0.269643))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 17 points 3((-0.2 0.143359 -0.193608) (-0.2 0.137703 -0.338396) (-0.2 0.0262691 -0.269643))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 4 points 3((-0.2 -0.0768494 -0.357167) (-0.2 0.0262691 -0.269643) (-0.2 0.0349467 -0.399443))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 51 points 3((-0.2 0.0349467 -0.399443) (-0.2 0.137703 -0.338396) (-0.2 0.117329 -0.486039))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 0 points 3((-0.2 0.137703 -0.338396) (-0.2 0.0349467 -0.399443) (-0.2 0.0262691 -0.269643))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.143359 -0.193608) (-0.2 0.137703 -0.338396) (-0.2 0.0262691 -0.269643))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0768494 -0.357167) (-0.2 0.0262691 -0.269643) (-0.2 0.0349467 -0.399443))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0349467 -0.399443) (-0.2 0.137703 -0.338396) (-0.2 0.117329 -0.486039))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.137703 -0.338396) (-0.2 0.0349467 -0.399443) (-0.2 0.0262691 -0.269643))
+AMI: Patch source sum(weights) min:1 max:1.02717 average:1.00375
+AMI: Patch target sum(weights) min:1 max:1.02716 average:1.00375
+smoothSolver:  Solving for Ux, Initial residual = 0.0468848, Final residual = 6.2536e-05, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.0426245, Final residual = 5.72578e-05, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.0427533, Final residual = 5.77829e-05, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.159625, Final residual = 5.51332e-07, No Iterations 9
+time step continuity errors : sum local = 1.71467e-09, global = -5.01203e-10, cumulative = 1.80247e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.00157584, Final residual = 2.17516e-08, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.00147855, Final residual = 2.08348e-08, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.00149186, Final residual = 2.32676e-08, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.0350044, Final residual = 7.88768e-07, No Iterations 7
+time step continuity errors : sum local = 2.2369e-09, global = 6.29814e-10, cumulative = 1.86545e-08
+smoothSolver:  Solving for omega, Initial residual = 0.0973094, Final residual = 2.21681e-08, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.418208, Final residual = 3.90314e-08, No Iterations 3
+ExecutionTime = 0.49 s  ClockTime = 0 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |              1 |              1 | 
+        max(weight)  |        1.02717 |        1.02716 | 
+        ave(weight)  |        1.00375 |        1.00375 | 
+        min(address) |              3 |              3 | 
+        max(address) |              8 |              8 | 
+        ave(address) |        5.44207 |        5.44207 | 
+
+Courant Number mean: 0.0644646 max: 0.850799
+deltaT = 0.000555556
+Time = 0.00333333
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 328
+AMI: Patch target faces: 328
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 17 points 3((-0.2 0.146716 -0.191077) (-0.2 0.143588 -0.335941) (-0.2 0.0309711 -0.269144))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 4 points 3((-0.2 -0.0706043 -0.358454) (-0.2 0.0309711 -0.269144) (-0.2 0.0419127 -0.398772))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 51 points 3((-0.2 0.0419127 -0.398772) (-0.2 0.143588 -0.335941) (-0.2 0.125793 -0.483917))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 0 points 3((-0.2 0.143588 -0.335941) (-0.2 0.0419127 -0.398772) (-0.2 0.0309711 -0.269144))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.146716 -0.191077) (-0.2 0.143588 -0.335941) (-0.2 0.0309711 -0.269144))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0706043 -0.358454) (-0.2 0.0309711 -0.269144) (-0.2 0.0419127 -0.398772))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0419127 -0.398772) (-0.2 0.143588 -0.335941) (-0.2 0.125793 -0.483917))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.143588 -0.335941) (-0.2 0.0419127 -0.398772) (-0.2 0.0309711 -0.269144))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 17 points 3((-0.2 0.146716 -0.191077) (-0.2 0.143588 -0.335941) (-0.2 0.0309711 -0.269144))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 4 points 3((-0.2 -0.0706043 -0.358454) (-0.2 0.0309711 -0.269144) (-0.2 0.0419127 -0.398772))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 51 points 3((-0.2 0.0419127 -0.398772) (-0.2 0.143588 -0.335941) (-0.2 0.125793 -0.483917))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 0 points 3((-0.2 0.143588 -0.335941) (-0.2 0.0419127 -0.398772) (-0.2 0.0309711 -0.269144))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.146716 -0.191077) (-0.2 0.143588 -0.335941) (-0.2 0.0309711 -0.269144))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0706043 -0.358454) (-0.2 0.0309711 -0.269144) (-0.2 0.0419127 -0.398772))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0419127 -0.398772) (-0.2 0.143588 -0.335941) (-0.2 0.125793 -0.483917))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.143588 -0.335941) (-0.2 0.0419127 -0.398772) (-0.2 0.0309711 -0.269144))
+AMI: Patch source sum(weights) min:1 max:1.02981 average:1.00412
+AMI: Patch target sum(weights) min:1 max:1.02982 average:1.00412
+smoothSolver:  Solving for Ux, Initial residual = 0.0427084, Final residual = 5.49667e-05, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.0376309, Final residual = 4.87687e-05, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.0377841, Final residual = 4.98466e-05, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.088688, Final residual = 6.28079e-07, No Iterations 8
+time step continuity errors : sum local = 1.65294e-09, global = -4.54662e-10, cumulative = 1.81998e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.00134085, Final residual = 1.8079e-08, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.00135395, Final residual = 1.97255e-08, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.00134528, Final residual = 1.89941e-08, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.0218858, Final residual = 6.56224e-07, No Iterations 6
+time step continuity errors : sum local = 1.63518e-09, global = 4.75684e-10, cumulative = 1.86755e-08
+smoothSolver:  Solving for omega, Initial residual = 0.0817955, Final residual = 1.90394e-08, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.367455, Final residual = 3.37405e-08, No Iterations 3
+ExecutionTime = 0.56 s  ClockTime = 0 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |              1 |              1 | 
+        max(weight)  |        1.02981 |        1.02982 | 
+        ave(weight)  |        1.00412 |        1.00412 | 
+        min(address) |              3 |              3 | 
+        max(address) |              8 |              8 | 
+        ave(address) |        5.43902 |        5.43902 | 
+
+Courant Number mean: 0.0644203 max: 0.845328
+deltaT = 0.000555556
+Time = 0.00388889
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 328
+AMI: Patch target faces: 328
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 17 points 3((-0.2 0.150029 -0.188487) (-0.2 0.149429 -0.333384) (-0.2 0.0356636 -0.268562))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 4 points 3((-0.2 -0.0643377 -0.359631) (-0.2 0.0356636 -0.268562) (-0.2 0.0488658 -0.39798))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 51 points 3((-0.2 0.0488658 -0.39798) (-0.2 0.149429 -0.333384) (-0.2 0.13422 -0.481648))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 0 points 3((-0.2 0.149429 -0.333384) (-0.2 0.0488658 -0.39798) (-0.2 0.0356636 -0.268562))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.150029 -0.188487) (-0.2 0.149429 -0.333384) (-0.2 0.0356636 -0.268562))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0643377 -0.359631) (-0.2 0.0356636 -0.268562) (-0.2 0.0488658 -0.39798))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0488658 -0.39798) (-0.2 0.149429 -0.333384) (-0.2 0.13422 -0.481648))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.149429 -0.333384) (-0.2 0.0488658 -0.39798) (-0.2 0.0356636 -0.268562))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 17 points 3((-0.2 0.150029 -0.188487) (-0.2 0.149429 -0.333384) (-0.2 0.0356636 -0.268562))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 4 points 3((-0.2 -0.0643377 -0.359631) (-0.2 0.0356636 -0.268562) (-0.2 0.0488658 -0.39798))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 51 points 3((-0.2 0.0488658 -0.39798) (-0.2 0.149429 -0.333384) (-0.2 0.13422 -0.481648))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 0 points 3((-0.2 0.149429 -0.333384) (-0.2 0.0488658 -0.39798) (-0.2 0.0356636 -0.268562))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.150029 -0.188487) (-0.2 0.149429 -0.333384) (-0.2 0.0356636 -0.268562))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0643377 -0.359631) (-0.2 0.0356636 -0.268562) (-0.2 0.0488658 -0.39798))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0488658 -0.39798) (-0.2 0.149429 -0.333384) (-0.2 0.13422 -0.481648))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.149429 -0.333384) (-0.2 0.0488658 -0.39798) (-0.2 0.0356636 -0.268562))
+AMI: Patch source sum(weights) min:1 max:1.03153 average:1.00436
+AMI: Patch target sum(weights) min:1 max:1.03164 average:1.00437
+smoothSolver:  Solving for Ux, Initial residual = 0.0406602, Final residual = 5.14984e-05, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.035029, Final residual = 4.40318e-05, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.0351602, Final residual = 4.55023e-05, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.0631313, Final residual = 7.07245e-07, No Iterations 7
+time step continuity errors : sum local = 1.67501e-09, global = -4.56789e-10, cumulative = 1.82187e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.00125893, Final residual = 1.59678e-08, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.00128464, Final residual = 1.53028e-08, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.00128657, Final residual = 1.69775e-08, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.0180351, Final residual = 7.84503e-07, No Iterations 6
+time step continuity errors : sum local = 1.76969e-09, global = -5.23098e-10, cumulative = 1.76956e-08
+smoothSolver:  Solving for omega, Initial residual = 0.0702618, Final residual = 1.68283e-08, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.328969, Final residual = 2.99454e-08, No Iterations 3
+ExecutionTime = 0.63 s  ClockTime = 0 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |              1 |              1 | 
+        max(weight)  |        1.03153 |        1.03164 | 
+        ave(weight)  |        1.00436 |        1.00437 | 
+        min(address) |              3 |              3 | 
+        max(address) |              8 |              8 | 
+        ave(address) |        5.42988 |        5.42988 | 
+
+Courant Number mean: 0.0643807 max: 0.841951
+deltaT = 0.000555556
+Time = 0.00444444
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 328
+AMI: Patch target faces: 328
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 17 points 3((-0.2 0.153295 -0.18584) (-0.2 0.155225 -0.330725) (-0.2 0.0403452 -0.267899))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 4 points 3((-0.2 -0.0580514 -0.360699) (-0.2 0.0403452 -0.267899) (-0.2 0.0558041 -0.397067))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 51 points 3((-0.2 0.0558041 -0.397067) (-0.2 0.155225 -0.330725) (-0.2 0.142605 -0.479232))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 0 points 3((-0.2 0.155225 -0.330725) (-0.2 0.0558041 -0.397067) (-0.2 0.0403452 -0.267899))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.153295 -0.18584) (-0.2 0.155225 -0.330725) (-0.2 0.0403452 -0.267899))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0580514 -0.360699) (-0.2 0.0403452 -0.267899) (-0.2 0.0558041 -0.397067))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0558041 -0.397067) (-0.2 0.155225 -0.330725) (-0.2 0.142605 -0.479232))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.155225 -0.330725) (-0.2 0.0558041 -0.397067) (-0.2 0.0403452 -0.267899))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 17 points 3((-0.2 0.153295 -0.18584) (-0.2 0.155225 -0.330725) (-0.2 0.0403452 -0.267899))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 4 points 3((-0.2 -0.0580514 -0.360699) (-0.2 0.0403452 -0.267899) (-0.2 0.0558041 -0.397067))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 51 points 3((-0.2 0.0558041 -0.397067) (-0.2 0.155225 -0.330725) (-0.2 0.142605 -0.479232))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 0 points 3((-0.2 0.155225 -0.330725) (-0.2 0.0558041 -0.397067) (-0.2 0.0403452 -0.267899))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.153295 -0.18584) (-0.2 0.155225 -0.330725) (-0.2 0.0403452 -0.267899))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0580514 -0.360699) (-0.2 0.0403452 -0.267899) (-0.2 0.0558041 -0.397067))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0558041 -0.397067) (-0.2 0.155225 -0.330725) (-0.2 0.142605 -0.479232))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.155225 -0.330725) (-0.2 0.0558041 -0.397067) (-0.2 0.0403452 -0.267899))
+AMI: Patch source sum(weights) min:1 max:1.03265 average:1.00448
+AMI: Patch target sum(weights) min:1 max:1.03266 average:1.00449
+smoothSolver:  Solving for Ux, Initial residual = 0.0391758, Final residual = 4.91588e-05, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.0331994, Final residual = 4.0816e-05, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.0333545, Final residual = 4.25081e-05, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.0493434, Final residual = 5.92831e-07, No Iterations 7
+time step continuity errors : sum local = 1.28826e-09, global = 3.84667e-10, cumulative = 1.80803e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.00121077, Final residual = 1.53767e-08, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.00125181, Final residual = 1.45512e-08, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.0012594, Final residual = 1.53102e-08, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.0164611, Final residual = 3.94636e-07, No Iterations 7
+time step continuity errors : sum local = 8.19192e-10, global = -2.29896e-10, cumulative = 1.78504e-08
+smoothSolver:  Solving for omega, Initial residual = 0.0613564, Final residual = 1.51728e-08, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.298346, Final residual = 2.68984e-08, No Iterations 3
+ExecutionTime = 0.71 s  ClockTime = 1 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |              1 |              1 | 
+        max(weight)  |        1.03265 |        1.03266 | 
+        ave(weight)  |        1.00448 |        1.00449 | 
+        min(address) |              3 |              3 | 
+        max(address) |              8 |              8 | 
+        ave(address) |        5.43293 |        5.43293 | 
+
+Courant Number mean: 0.064344 max: 0.838853
+deltaT = 0.000555556
+Time = 0.005
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 328
+AMI: Patch target faces: 328
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 17 points 3((-0.2 0.156515 -0.183137) (-0.2 0.160973 -0.327966) (-0.2 0.0450145 -0.267154))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 4 points 3((-0.2 -0.0517475 -0.361658) (-0.2 0.0450145 -0.267154) (-0.2 0.0627254 -0.396032))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 51 points 3((-0.2 0.0627254 -0.396032) (-0.2 0.160973 -0.327966) (-0.2 0.150947 -0.476671))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 0 points 3((-0.2 0.160973 -0.327966) (-0.2 0.0627254 -0.396032) (-0.2 0.0450145 -0.267154))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.156515 -0.183137) (-0.2 0.160973 -0.327966) (-0.2 0.0450145 -0.267154))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0517475 -0.361658) (-0.2 0.0450145 -0.267154) (-0.2 0.0627254 -0.396032))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0627254 -0.396032) (-0.2 0.160973 -0.327966) (-0.2 0.150947 -0.476671))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.160973 -0.327966) (-0.2 0.0627254 -0.396032) (-0.2 0.0450145 -0.267154))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 17 points 3((-0.2 0.156515 -0.183137) (-0.2 0.160973 -0.327966) (-0.2 0.0450145 -0.267154))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 4 points 3((-0.2 -0.0517475 -0.361658) (-0.2 0.0450145 -0.267154) (-0.2 0.0627254 -0.396032))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 51 points 3((-0.2 0.0627254 -0.396032) (-0.2 0.160973 -0.327966) (-0.2 0.150947 -0.476671))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 0 points 3((-0.2 0.160973 -0.327966) (-0.2 0.0627254 -0.396032) (-0.2 0.0450145 -0.267154))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.156515 -0.183137) (-0.2 0.160973 -0.327966) (-0.2 0.0450145 -0.267154))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0517475 -0.361658) (-0.2 0.0450145 -0.267154) (-0.2 0.0627254 -0.396032))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0627254 -0.396032) (-0.2 0.160973 -0.327966) (-0.2 0.150947 -0.476671))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.160973 -0.327966) (-0.2 0.0627254 -0.396032) (-0.2 0.0450145 -0.267154))
+AMI: Patch source sum(weights) min:1 max:1.03295 average:1.00447
+AMI: Patch target sum(weights) min:1 max:1.03296 average:1.00448
+smoothSolver:  Solving for Ux, Initial residual = 0.0379491, Final residual = 4.73804e-05, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.0317729, Final residual = 3.84214e-05, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.0319652, Final residual = 4.02398e-05, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.0413542, Final residual = 7.44734e-07, No Iterations 7
+time step continuity errors : sum local = 1.50066e-09, global = 4.03063e-10, cumulative = 1.82535e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.00117541, Final residual = 1.47527e-08, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.00122704, Final residual = 1.33836e-08, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.00122276, Final residual = 1.46808e-08, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.0156698, Final residual = 4.58561e-07, No Iterations 7
+time step continuity errors : sum local = 8.84877e-10, global = -2.50768e-10, cumulative = 1.80027e-08
+smoothSolver:  Solving for omega, Initial residual = 0.0542522, Final residual = 1.38096e-08, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.272555, Final residual = 2.45662e-08, No Iterations 3
+ExecutionTime = 0.78 s  ClockTime = 1 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |              1 |              1 | 
+        max(weight)  |        1.03295 |        1.03296 | 
+        ave(weight)  |        1.00447 |        1.00448 | 
+        min(address) |              3 |              3 | 
+        max(address) |              8 |              8 | 
+        ave(address) |        5.44512 |        5.44512 | 
+
+Courant Number mean: 0.064311 max: 0.836128
+deltaT = 0.000555556
+Time = 0.00555556
+
+PIMPLE: iteration 1
+AMI: Creating AMI for source:AMI1 and target:AMI2
+AMI: Patch source faces: 328
+AMI: Patch target faces: 328
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 17 points 3((-0.2 0.159688 -0.180377) (-0.2 0.166672 -0.325107) (-0.2 0.0496702 -0.266328))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 4 points 3((-0.2 -0.0454279 -0.362506) (-0.2 0.0496702 -0.266328) (-0.2 0.0696275 -0.394877))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 51 points 3((-0.2 0.0696275 -0.394877) (-0.2 0.166672 -0.325107) (-0.2 0.159243 -0.473964))
+--> FOAM Warning : 
+    From virtual void Foam::faceAreaWeightAMI::calcInterArea(Foam::label, Foam::label, Foam::scalar&, Foam::vector&) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 427
+    Invalid normal for source face 0 points 3((0.2 -0.147378 0.477786) (0.2 -0.0606673 0.384286) (0.2 -0.161231 0.334253)) target face 0 points 3((-0.2 0.166672 -0.325107) (-0.2 0.0696275 -0.394877) (-0.2 0.0496702 -0.266328))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.159688 -0.180377) (-0.2 0.166672 -0.325107) (-0.2 0.0496702 -0.266328))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0454279 -0.362506) (-0.2 0.0496702 -0.266328) (-0.2 0.0696275 -0.394877))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0696275 -0.394877) (-0.2 0.166672 -0.325107) (-0.2 0.159243 -0.473964))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 219 points 3((0.2 1.22465e-16 0.5) (0.2 -0.0606673 0.384286) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.166672 -0.325107) (-0.2 0.0696275 -0.394877) (-0.2 0.0496702 -0.266328))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 17 points 3((-0.2 0.159688 -0.180377) (-0.2 0.166672 -0.325107) (-0.2 0.0496702 -0.266328))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 4 points 3((-0.2 -0.0454279 -0.362506) (-0.2 0.0496702 -0.266328) (-0.2 0.0696275 -0.394877))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 51 points 3((-0.2 0.0696275 -0.394877) (-0.2 0.166672 -0.325107) (-0.2 0.159243 -0.473964))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 122 points 3((0.2 -0.161231 0.334253) (0.2 -0.0606673 0.384286) (0.2 -0.060249 0.265176)) target face 0 points 3((-0.2 0.166672 -0.325107) (-0.2 0.0696275 -0.394877) (-0.2 0.0496702 -0.266328))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 17 points 3((-0.2 0.159688 -0.180377) (-0.2 0.166672 -0.325107) (-0.2 0.0496702 -0.266328))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 4 points 3((-0.2 -0.0454279 -0.362506) (-0.2 0.0496702 -0.266328) (-0.2 0.0696275 -0.394877))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 51 points 3((-0.2 0.0696275 -0.394877) (-0.2 0.166672 -0.325107) (-0.2 0.159243 -0.473964))
+--> FOAM Warning : 
+    From virtual bool Foam::faceAreaWeightAMI::overlaps(Foam::label, Foam::label, Foam::scalar) const
+    in file AMIInterpolation/AMIInterpolation/faceAreaWeightAMI/faceAreaWeightAMI.C at line 502
+    Invalid normal for source face 69 points 3((0.2 -0.161231 0.334253) (0.2 -0.28166 0.413119) (0.2 -0.147378 0.477786)) target face 0 points 3((-0.2 0.166672 -0.325107) (-0.2 0.0696275 -0.394877) (-0.2 0.0496702 -0.266328))
+AMI: Patch source sum(weights) min:1 max:1.03222 average:1.00434
+AMI: Patch target sum(weights) min:1 max:1.03223 average:1.00435
+smoothSolver:  Solving for Ux, Initial residual = 0.0368614, Final residual = 4.59045e-05, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 0.0305858, Final residual = 3.6413e-05, No Iterations 1
+smoothSolver:  Solving for Uz, Initial residual = 0.0308028, Final residual = 3.85056e-05, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.0358971, Final residual = 8.72336e-07, No Iterations 7
+time step continuity errors : sum local = 1.64275e-09, global = 4.47515e-10, cumulative = 1.84502e-08
+PIMPLE: iteration 2
+smoothSolver:  Solving for Ux, Initial residual = 0.00112924, Final residual = 1.26642e-08, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.00119558, Final residual = 1.26781e-08, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.00120058, Final residual = 1.52464e-08, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.0152733, Final residual = 4.90741e-07, No Iterations 7
+time step continuity errors : sum local = 8.86386e-10, global = -2.51942e-10, cumulative = 1.81983e-08
+smoothSolver:  Solving for omega, Initial residual = 0.0484501, Final residual = 1.26653e-08, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 0.250725, Final residual = 2.27993e-08, No Iterations 3
+ExecutionTime = 0.87 s  ClockTime = 1 s
+
+AMIWeights AMIWeights1 write:
+    Patches: 
+        Source: AMI1
+        Target: AMI2
+
+                     |           AMI1 |           AMI2 | 
+        min(weight)  |              1 |              1 | 
+        max(weight)  |        1.03222 |        1.03223 | 
+        ave(weight)  |        1.00434 |        1.00435 | 
+        min(address) |              3 |              3 | 
+        max(address) |              8 |              8 | 
+        ave(address) |        5.43902 |        5.43902 | 
+
+End
+

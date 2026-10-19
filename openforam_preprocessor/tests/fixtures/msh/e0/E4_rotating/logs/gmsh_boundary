@@ -1,0 +1,86 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2512                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    arch        "LSB;label=32;scalar=64";
+    class       polyBoundaryMesh;
+    location    "constant/polyMesh";
+    object      boundary;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+9
+(
+    rotor
+    {
+        type            patch;
+        physicalType    patch;
+        nFaces          104;
+        startFace       45781;
+    }
+    ami_stat
+    {
+        type            patch;
+        physicalType    patch;
+        nFaces          328;
+        startFace       45885;
+    }
+    inlet
+    {
+        type            patch;
+        physicalType    patch;
+        nFaces          462;
+        startFace       46213;
+    }
+    y_min
+    {
+        type            patch;
+        physicalType    patch;
+        nFaces          886;
+        startFace       46675;
+    }
+    z_max
+    {
+        type            patch;
+        physicalType    patch;
+        nFaces          886;
+        startFace       47561;
+    }
+    y_max
+    {
+        type            patch;
+        physicalType    patch;
+        nFaces          886;
+        startFace       48447;
+    }
+    z_min
+    {
+        type            patch;
+        physicalType    patch;
+        nFaces          886;
+        startFace       49333;
+    }
+    outlet
+    {
+        type            patch;
+        physicalType    patch;
+        nFaces          460;
+        startFace       50219;
+    }
+    ami_rot
+    {
+        type            patch;
+        physicalType    patch;
+        nFaces          328;
+        startFace       50679;
+    }
+)
+
+// ************************************************************************* //

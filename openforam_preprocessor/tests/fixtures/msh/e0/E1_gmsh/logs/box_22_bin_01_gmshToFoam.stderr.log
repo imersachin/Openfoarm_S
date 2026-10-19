@@ -1,0 +1,12 @@
+
+
+--> FOAM FATAL IO ERROR: (openfoam-2512)
+Can only read ascii msh files.
+
+file: <work>/E1/msh/box_22_bin.msh at line 3.
+
+    From Foam::scalar readMeshFormat(Foam::IFstream&)
+    in file gmshToFoam.C at line 256.
+
+FOAM exiting
+
