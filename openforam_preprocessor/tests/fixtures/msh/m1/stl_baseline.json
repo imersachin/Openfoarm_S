@@ -1,0 +1,22 @@
+{
+  "duct": {
+    "meshing_inputs": "043e564256af4674ae6a65b441b14cf1ed3db683683cb8f423381088a4bc4c1b",
+    "saved": "06fc89262fa51a797d8a2480dc25b463089d8c3f4d415b4bb09cde7b9a324cd9"
+  },
+  "francis": {
+    "meshing_inputs": "e904ae93110715f95f98e4f15695d86a4d7a488b6a263c4a5a57e72dbbc7a6a1",
+    "saved": "48770144792444edd779363b4d3595f032436ff32d035bd40bd3e33125884b31"
+  },
+  "hawt": {
+    "meshing_inputs": "16f0b26b29de92e08affa60dbf798145c7480431af47823ba395ba537a2f136a",
+    "saved": "f1c67a7644c154d6145703e96f20b9262c743b7e154bb94e0bdf4eccd593c344"
+  },
+  "pole_annular": {
+    "meshing_inputs": "eb4a81339cdf70ae9a83e3951898fe09dda33567f6aa77fa8fdd436c74752ce3",
+    "saved": "e0390637d372f733d5e469671a3606f112e976a165cedfb8474789aa1039aac9"
+  },
+  "pole_split": {
+    "meshing_inputs": "8013f7d70ed3af8ac65321b687aa5dedf6567e370014cff470067274e350f734",
+    "saved": "9e98b4bac45172d71b182fff19a85608e6c9b297180690e0bb77bce1ab94068d"
+  }
+}

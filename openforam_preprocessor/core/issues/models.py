@@ -48,6 +48,7 @@ class IssueStage(StrEnum):
     ZONE_CREATION = "ZONE_CREATION"  # topoSet
     MERGE_MESHES = "MERGE_MESHES"  # mergeMeshes
     PATCH_CREATION = "PATCH_CREATION"  # createPatch
+    MESH_IMPORT = "MESH_IMPORT"  # .msh conversion (M1-MSH)
 
 
 _STOPPING_SEVERITIES = frozenset({IssueSeverity.ERROR, IssueSeverity.BLOCKING})

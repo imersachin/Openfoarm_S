@@ -65,6 +65,7 @@ from machines.domains import (
     surface_grid,
 )
 from machines.joints import JointLimits, coincide, measure_joint
+from machines.msh_import.validation import check_imported_mesh
 from machines.presets import DOMAIN_CHOICES
 from machines.surface_sampling import surface_points
 from machines.vawt_migration import NotVawtConvertible, to_vawt
@@ -1423,7 +1424,11 @@ class CheckedConfig:
 
 def check_all(config: MachineProjectConfig,
               thresholds: MachineThresholds | None = None) -> CheckedConfig:
-    """Read the imported surfaces, load the bodies, and run every check."""
+    """Read the imported surfaces, load the bodies, and run every check. An
+    imported mesh (M1-MSH) has its own checks, on the .msh file."""
+    if config.imported_mesh is not None:
+        return CheckedConfig(_unique((*_name_issues(config), *check_imported_mesh(config))),
+                             {}, ())
     surfaces = read_imported(config)
     owners = surface_owners(surfaces)
     meshes, loaded = load_bodies(config)

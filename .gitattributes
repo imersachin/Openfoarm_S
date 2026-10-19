@@ -22,3 +22,7 @@ openforam_preprocessor/tests/fixtures/msh/e0/E1_gmsh/logs/heads/*_bin.head binar
 
 # Windows batch files run by cmd.exe.
 *.cmd text eol=crlf
+# .msh import (M1-MSH) test meshes: read as bytes (format detection, content
+# hashes), so never converted; the binary Gmsh mesh is bytes.
+openforam_preprocessor/tests/fixtures/msh/m1/*.msh text eol=lf
+openforam_preprocessor/tests/fixtures/msh/m1/*_bin.msh binary

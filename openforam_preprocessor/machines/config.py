@@ -20,7 +20,15 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializationInfo,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 from pydantic_core import PydanticCustomError
 
 from case_setup.physics import PhysicsConfig
@@ -39,11 +47,16 @@ from vawt.config import (
 )
 
 # 2 (G6): the optional `physics` section; a version 1 project loads unchanged.
+# M1-MSH adds the optional `imported_mesh` section without a version change: a
+# project without it is written exactly as before (see MachineProjectConfig).
 MACHINE_SCHEMA_VERSION = 2
 
 _STRICT = ConfigDict(frozen=True, allow_inf_nan=False, extra="forbid")
 # A name OpenFOAM accepts as a patch, zone or region name.
 Name = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$", max_length=64)]
+# A patch or cell zone name as an imported mesh has it (Fluent zone names hold
+# "-": "wall-shadow", "fluid-1"); an OpenFOAM word, without quotes or brackets.
+MeshName = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.:+-]*$", max_length=64)]
 
 
 class MachineType(StrEnum):
@@ -92,6 +105,7 @@ class SourceKind(StrEnum):
     BODY = "BODY"  # the surface of a body
     DOMAIN_FACE = "DOMAIN_FACE"  # a face of a generated box or cylinder domain
     REGION = "REGION"  # a region (or per-patch file) of an imported surface
+    MESH_PATCH = "MESH_PATCH"  # a patch of an imported .msh mesh (M1-MSH)
 
 
 BOX_FACES = ("x_min", "x_max", "y_min", "y_max", "z_min", "z_max")
@@ -320,6 +334,47 @@ class JointConfig(BaseModel):
     level: int = Field(default=1, ge=0, le=10)
 
 
+# --- imported mesh (M1-MSH) -----------------------------------------------------------------
+
+class MeshZone(BaseModel):
+    """The rotating cell zone of an imported mesh. Its radius is computed from
+    the zone's points, never entered."""
+
+    model_config = _STRICT
+
+    name: Name  # the zone's name in physics.rotation
+    cell_zone: MeshName  # the cell zone in the converted mesh
+    axis: Axis  # rotation axis (direction); required
+    origin: Vec3  # a point on the rotation axis
+
+
+class MeshAmiPair(BaseModel):
+    """Two patches of the imported mesh made one cyclicAMI pair (createPatch),
+    named <patch>_ami (machines.msh_import.ami_name). Confirmed by the user,
+    never made up."""
+
+    model_config = _STRICT
+
+    first: MeshName
+    second: MeshName
+
+
+class ImportedMesh(BaseModel):
+    """A Fluent or Gmsh .msh file meshed elsewhere (docs/msh_import_notes.md).
+
+    The format is detected from the content, never from the extension. The
+    file is read where it is; sha256 is its content when chosen, so a file
+    changed since is found before any conversion (MSH_SOURCE_CHANGED)."""
+
+    model_config = _STRICT
+
+    source_path: Path
+    source_units: LengthUnit  # required: confirmed against the bounding box, never assumed
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    zones: tuple[MeshZone, ...] = ()
+    ami_pairs: tuple[MeshAmiPair, ...] = ()
+
+
 class ExportConfig(BaseModel):
     model_config = _STRICT
 
@@ -356,6 +411,18 @@ class MachineProjectConfig(BaseModel):
     # Case setup (section 9; G6). Absent: mesh only. Never a meshing input
     # (invariant 14).
     physics: PhysicsConfig | None = None
+    # A mesh imported from a .msh file (M1-MSH) instead of STL bodies, zones and
+    # a domain (both at once is MSH_WITH_STL). Absent: left out when written, so
+    # an existing project's file and hash stay what they were.
+    imported_mesh: ImportedMesh | None = None
+
+    @model_serializer(mode="wrap")
+    def _leave_out_absent_mesh(self, handler: SerializerFunctionWrapHandler,
+                               info: SerializationInfo) -> Any:
+        data = handler(self)
+        if isinstance(data, dict) and data.get("imported_mesh", 0) is None:
+            del data["imported_mesh"]
+        return data
 
     @model_validator(mode="before")
     @classmethod
@@ -381,7 +448,8 @@ class MachineProjectConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_zones(self) -> MachineProjectConfig:
-        if not self.rotating_zones:
+        # An imported mesh has its rotating zones as cell zones (imported_mesh.zones).
+        if not self.rotating_zones and self.imported_mesh is None:
             raise ValueError("At least one rotating zone is needed.")
         return self
 
@@ -390,6 +458,12 @@ class MachineProjectConfig(BaseModel):
 
     def zone(self, name: str) -> RotatingZone | None:
         return next((z for z in self.rotating_zones if z.name == name), None)
+
+    def zone_names(self) -> tuple[str, ...]:
+        """Every rotating zone's name: the STL zones, or an imported mesh's cell zones."""
+        mesh = self.imported_mesh
+        imported = tuple(z.name for z in mesh.zones) if mesh else ()
+        return (*(z.name for z in self.rotating_zones), *imported)
 
     def patch_for(self, kind: SourceKind, ref: str) -> PatchConfig | None:
         return next((p for p in self.patches

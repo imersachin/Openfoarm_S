@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Milestone | M1-MSH E0, evidence before application code (owner, answer 6: stop after E0) |
+| Milestone | M1-MSH: E0, evidence before application code (owner, answer 6); E6 after the owner's review; M1b, the import in the application (section 8) |
 | Target | OpenFOAM v2512 (openfoam.com), build `_bd2b6720-20260127`, package `openfoam2512 2512.0-2`, Ubuntu 24.04 under WSL2 |
 | Gmsh | Python package `gmsh==4.15.2` in `/root/venvs/ofpp` (Python 3.12.3); apt packages `libglu1-mesa 9.0.2-1.1build1`, `libxft2 2.3.6-1build1`, `libopengl0 1.7.0-1build1` (owner, answer 1) |
 | Geometry | **Synthetic only.** No real Fluent or Gmsh files from users yet (owner, answer 2) |
@@ -256,3 +256,180 @@ Binary MSH is not read raw ("binary MSH").
 
 - "Make a cellZone from region N" (`topoSet` + `setsToZones`): future list,
   not this milestone (owner, answer 5).
+- A UI for the import (M1c): this milestone is the core (M1b).
+- Flow-rate inlets on an imported mesh: the inlet area is not measured from
+  the mesh yet, so a flow-rate inlet is BLOCKING `INLET_AREA_UNKNOWN` (use a
+  velocity inlet).
+- A Courant estimate for an imported mesh: it has no configured cell size, so
+  none is given (the solver's adjustable step still limits the Courant number).
+
+---
+
+## 8. M1b: the import in the application
+
+Package `machines/msh_import/`; the run is a branch of `MachinePipeline` (same
+run lock, status file, run record, artifact manifest, environment check and
+resource preflight). Evidence: `tests/unit/mesh_import/test_m1_*.py` (fake
+OpenFOAM, `tests/fakes_msh.py`) and `tests/integration/test_m1_msh_real.py`
+(OpenFOAM v2512). Test meshes: `tests/fixtures/msh/m1/` (coarse versions of the
+E0 geometry, 4–246 kB each; `make_fixtures.sh` rebuilds them byte-identically).
+
+| Module | Does |
+|---|---|
+| `detect.py` | Format from the content (never the extension), version, ASCII or binary, dimension, patch and cell zone names, Fluent zone types and declared cell count, the raw box (ASCII, streamed in batches of 200,000 rows). Every pre-conversion finding about the file |
+| `validation.py` | The project checks before any command (section 8.2); the file is read once per version (path, size, modification time) |
+| `cases.py` | `cases/imported/` (the converter's case), `cases/merged/` (createPatchDict, amiWeightsDict), the commands |
+| `resave.py` | Binary or unproven Gmsh versions to MSH 2.2 ASCII, run as its own process |
+| `checks.py` | What the converter wrote: cells against the declared count, `defaultFaces` with its count and box, patches lost, cell zones; baffles from checkMesh; the zone radius computed from the zone |
+| `pipeline.py` | The run (below) and the scratch conversion for a box |
+| `inspection.py` | What the UI shows before importing: the box and its source, suggested types and AMI pairs, patch areas and centroids as pair evidence |
+
+### 8.1 The run
+
+```text
+validate (no OpenFOAM command on any stopping finding)
+-> machine_import_mesh: re-save (binary Gmsh) -> fluent3DMeshToFoam | gmshToFoam
+   (scale 1) -> transformPoints -scale (f f f) (units other than m) -> checks
+   -> reports/mesh_import.json                                   cases/imported/
+-> machine_assemble: copy -> createPatch (AMI pairs <patch>_ami, renamed
+   patches) -> foamDictionary (every other patch's type)          cases/merged/
+-> machine_check_mesh: checkMesh -allTopology -meshQuality, postProcess AMIWeights
+-> machine_validate_mesh -> machine_case_setup (with physics)          case/
+```
+
+- Cached as every machine operation: the import on the file's content hash,
+  the converter, the re-save, the scale, the dictionaries and the tool
+  identity; the assembly on the imported mesh files and the patch settings;
+  the check on the merged mesh. A patch-type change re-runs the assembly,
+  the check and case setup, never the conversion; a physics change re-runs
+  case setup only. Case setup leaves both meshes byte-identical
+  (invariant 14; `test_case_setup_never_changes_the_imported_mesh`, and on
+  v2512 `test_a_rotating_mesh_is_imported_set_up_and_runs`).
+- The import is recorded only after its checks pass; a failed or cancelled
+  import leaves no record and the next run converts again.
+- `reports/mesh_import.json`: the file, its hash, format and version, the
+  converter, whether it was re-saved, the OpenFOAM project, version and
+  executables, units and scale, cells (and the declared count), patches,
+  cell zones, and the zone radius "computed from the zone" (owner answer 3).
+- checkMesh "Failed N mesh checks" fails the mesh (validity INVALID) whatever
+  the exit code; on v2512 a coarser rotating mesh does exactly that with exit
+  0 (`test_a_mesh_failing_checkmesh_with_exit_0_fails`).
+- **The bounding box (owner answer 4):** read from the file when it is ASCII;
+  otherwise `MachineService.convert_for_box` converts once at scale 1 into
+  `cases/imported_scratch/` (under the run lock) and the box is shown "from
+  the converted mesh". The import moves that polyMesh into `cases/imported/`
+  instead of converting again when the scratch record matches the file's
+  hash, the converter and the tool, then scales and checks it like any
+  conversion (`logs/imported/00_promote.log`). The scratch case is never
+  recorded as a verified artifact.
+- Resource preflight on the file's declared cells (Fluent), else nodes x 6
+  (Gmsh; a heuristic, labelled so), else not assessed (binary Gmsh; INFO).
+
+### 8.2 Checks before converting
+
+| Finding | Severity |
+|---|---|
+| Imported mesh with STL bodies, zones, domain, joints or wake (`MSH_WITH_STL`) | BLOCKING |
+| Missing, empty, unreadable, unknown or HDF5 file; Gmsh header incomplete; MSH 1; another Gmsh major version | BLOCKING |
+| Gmsh without physical groups, or without a Physical Volume | BLOCKING, with the fix |
+| Binary Gmsh without the gmsh package; ASCII Gmsh other than 2.2 or 4.1 without it | BLOCKING |
+| Fluent without its dimension or cell-count header; without zone names (a file cut short); 2D | BLOCKING |
+| Binary Fluent sections (`FLUENT_BINARY_UNTESTED`) | WARNING |
+| The file changed since it was chosen (`MSH_SOURCE_CHANGED`, from its hash) | BLOCKING |
+| No rotating cell zone, an unknown one, or the only one of the mesh (`MSH_NO_CELL_ZONE`) | BLOCKING, with the Gmsh or Fluent fix |
+| No AMI pair for the rotating zone (`MSH_NO_INTERFACE`); a pair naming an unknown patch, the same patch twice, a patch in two pairs, or a typed patch | BLOCKING |
+| A mesh patch with no type and in no pair; a patch from an unknown mesh patch or another source kind; two rows for one mesh patch; a name ending in `_ami`; no inlet or outlet; duplicate names | BLOCKING |
+| Patch or cell zone names OpenFOAM dictionaries cannot hold (`MSH_NAME_INVALID`) | BLOCKING |
+| Largest extent in the chosen units outside 0.01–10,000 m (`MSH_UNITS_SUSPECT`, configurable) | WARNING |
+| A VAWT or VAWT-with-pole project (`MSH_MACHINE_NOT_SUPPORTED`; use Custom) | BLOCKING |
+
+### 8.3 After converting
+
+| Finding | Severity |
+|---|---|
+| No readable mesh, or no cells (`MSH_CONVERT_FAILED`) | BLOCKING |
+| Cells other than the file declares (`MSH_CELL_COUNT_MISMATCH`) | BLOCKING |
+| `defaultFaces` with faces (`GMSH_UNGROUPED_FACES`): the count and the box of those faces | BLOCKING (owner decision 3) |
+| A patch named in the file missing from the mesh (`MSH_PATCH_LOST`) | ERROR |
+| A configured cell zone missing (`MSH_NO_CELL_ZONE`) | BLOCKING |
+| Baffle faces in checkMesh (`MSH_BAFFLE_PAIR`): kept as two walls unless paired | WARNING |
+| As every machine mesh: patch presence and types, AMI pairing and sum(weights), quality limits | as G7 |
+
+### 8.4 Findings during M1b (v2512)
+
+1. **createPatch with a patch's own name does nothing, with exit 0.** A
+   `createPatchDict` entry `name AMI1; ... patches (AMI1);` reported "Moving
+   faces from patch AMI1 to patch 7" and left AMI1 a `patch`, not
+   `cyclicAMI`. Each AMI patch is therefore made under a new name,
+   `<patch>_ami` (reserved); the emptied source patches are removed.
+2. **Fluent cell zone names contain "-"** ("fluid-1"), which
+   `machines.mesh_folder.cell_zone_names` does not read (word characters
+   only). The import reads zone names with its own pattern; the G7 helper is
+   unchanged.
+3. On the M1 rotating test mesh (3,383 cells), both routes (Gmsh 4.1, and
+   the two-zone Fluent file) import, pair, pass checkMesh (2 regions), set up
+   and run 10 pimpleFoam steps; AMI sum(weights) 1.00–1.09. The same mesh
+   written in mm and imported with units mm gives the metre mesh's points
+   (within 1e-9 m).
+4. Units matter to the quality limits too: the rotating test mesh read as mm
+   (4 mm across) fails the minimum cell volume (7.9e-14 against 1e-13 m³) and
+   warns `MSH_UNITS_SUSPECT`; read as cm it passes. Wrong units are caught
+   twice, never silently scaled.
+
+### 8.6 Fixes after the M1b testing review
+
+`tests/unit/mesh_import/test_m1_review_fixes.py`; the real converters in
+`test_m1_msh_real.py` (last two tests).
+
+- **HIGH:** a file cut short inside a node section raised an unhandled
+  RuntimeError (a StopIteration inside a generator). Now BLOCKING
+  `MSH_FILE_UNREADABLE` ("the file ends inside a node section").
+- **HIGH:** a Gmsh file without `$Nodes` passed detection, and gmshToFoam
+  aborted on it (exit 134, seen on v2512). A Gmsh file without `$Nodes` or
+  (ASCII) without the end of `$Elements` is now BLOCKING `MSH_FILE_TRUNCATED`.
+- **HIGH:** Fluent zone sections with a field after the name
+  (`(39 (12 wall walls 1)())`, which fluent3DMeshToFoam reads) or extra spaces
+  were not read, so a valid file was refused, or a zone was lost silently.
+  They are read now; a zone section that still cannot be read is BLOCKING
+  `FLUENT_ZONE_UNREADABLE`, never dropped.
+- **MEDIUM:** the fake converter read names with the detector under test, so
+  a detection miss could not show. It has its own parser now, and on v2512
+  every fixture's detected patches and cell zones equal what the converter
+  writes. The scratch promotion is tested through the service and on v2512;
+  the refused promotions are tested with the real tool identity (a changed
+  file; `force`).
+- **LOW:** the import report's zone radius is rewritten on every run (it
+  follows a changed origin while the import is reused); a stopped import
+  removes its mesh; AMI pair evidence (`mesh_patch_geometry`) comes only from
+  a mesh of the file with the given hash; the scratch conversion checks the
+  environment with the project's OpenFOAM profile; `force` never promotes.
+- Not changed: the units check is skipped for a binary file until it is
+  imported (its box is known only from the scratch conversion, which the UI
+  shows beside the units); the gmsh package version is not in the re-save's
+  cache key (the re-saved file is checked like any conversion); a UTF-8 BOM
+  before `$MeshFormat` is BLOCKING `MSH_FORMAT_UNKNOWN`.
+
+### 8.5 Configuration
+
+`imported_mesh` (optional): `source_path`, `source_units` (required, never
+assumed), `sha256` (the file when chosen), `zones` (`name` for the physics,
+`cell_zone` as in the mesh, `axis`, `origin`; the radius is computed from the
+zone, never entered), `ami_pairs` (`first`, `second`: confirmed by the user,
+never made up). Patches come from `MESH_PATCH` sources; a patch may be
+renamed (createPatch). An absent `imported_mesh` is left out of the saved
+file, so an existing project's file and hashes are what they were: on main
+(cb07c48) and on this branch, five STL fixture projects give the same saved
+file and the same meshing inputs (`tests/fixtures/msh/m1/stl_baseline.json`,
+`test_existing_projects_are_saved_and_meshed_byte_identically`).
+
+---
+
+## 9. For the owner
+
+- **Schema version: kept at 2, against owner answer 3 (a bump to 3).** The
+  existing test `test_g6_case_setup.py::test_physics_is_optional_and_versioned`
+  asserts `MACHINE_SCHEMA_VERSION == 2`, and existing tests stay unchanged.
+  With version 2, an older application opening a project with
+  `imported_mesh` reports an unknown field instead of "written by a newer
+  version". The bump is one line plus that assertion, if that test may
+  change.

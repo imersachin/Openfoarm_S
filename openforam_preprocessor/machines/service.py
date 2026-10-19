@@ -13,6 +13,7 @@ which configuration fields each owns; section status follows it.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import os
@@ -40,6 +41,7 @@ from core.artifacts.hashing import sha256_json
 from core.config.models import MeshQualityLimits, OpenFOAMProfile
 from core.config.validation import issues_from_validation_error
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage, has_stopping_issue
+from core.workflow.run_lock import RunLock
 from core.workflow.run_records import list_run_records
 from machines.config import (
     CylinderZone,
@@ -52,6 +54,20 @@ from machines.config import (
 )
 from machines.joints import propose_joints
 from machines.mesh_folder import MeshFolderReport, check_mesh_folder
+from machines.msh_import.cases import IMPORTED_CASE, SCRATCH_CASE, converter
+from machines.msh_import.checks import zone_radius as mesh_zone_radius
+from machines.msh_import.inspection import MeshInspection, PatchGeometry, patch_geometry
+from machines.msh_import.inspection import inspect as inspect_mesh_file_view
+from machines.msh_import.pipeline import (
+    IMPORT_REPORT,
+    SCRATCH_RECORD,
+    ScratchResult,
+    convert_scratch,
+    import_operations,
+    preflight_cells,
+    scratch_box,
+)
+from machines.msh_import.validation import read_mesh_file
 from machines.operations import MACHINE_EXECUTABLES, operations_for
 from machines.pipeline import (
     CASE_SETUP_REPORT,
@@ -90,8 +106,8 @@ from machines.project_store import (
     write_ui_settings,
 )
 from machines.validation import CheckedConfig, MachineThresholds, check_all, parse_config
-from mesh.estimator import ResourceAssessment, ResourceEstimator, SystemResources
-from openfoam.environment import validate_environment
+from mesh.estimator import CellEstimate, ResourceAssessment, ResourceEstimator, SystemResources
+from openfoam.environment import tool_identity, validate_environment
 from vawt.config import Axis, RotorGeometryConfig
 from vawt.presets import PresetKind as VawtPresetKind
 from vawt.rotor_metrics import RotorMetrics, compute_rotor_metrics
@@ -115,6 +131,8 @@ from vawt.validation import UNSET_ERROR_TYPES
 from vawt.workspace import Mount, is_wsl, location_issues
 
 INPUTS_DIR = "inputs"
+MESH_INPUTS = "mesh"  # inputs/mesh/: uploaded .msh files (M1-MSH)
+MAX_MESH_UPLOAD_BYTES = 200 * 2**20  # Streamlit's default upload limit
 PROJECTS_DIR_ENV = "MACHINES_PROJECTS_DIR"
 DEFAULT_PROJECTS_DIR = "~/machine_projects"
 CASE_DIR = "case"
@@ -229,7 +247,8 @@ class _CheckCache:
     def get(self, config: MachineProjectConfig,
             thresholds: MachineThresholds) -> CheckedConfig:
         stats = []
-        for path in stl_paths(config):
+        mesh = [config.imported_mesh.source_path] if config.imported_mesh else []
+        for path in (*stl_paths(config), *mesh):
             try:
                 info = path.stat()
                 stats.append([str(path), info.st_size, info.st_mtime_ns])
@@ -410,6 +429,84 @@ class MachineService(RunControl):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
         return target
+
+    # --- imported meshes (M1-MSH) ---------------------------------------------------------
+
+    def store_mesh_file(self, filename: str, data: bytes) -> Path:
+        """Copy an uploaded .msh into inputs/mesh/. Its format is read from the
+        content later, never from the name. ValueError above the upload limit
+        (a larger file is chosen by its path instead, and read where it is)."""
+        name = Path(filename).name
+        if not name or name in (".", ".."):
+            raise ValueError("The file has no name.")
+        if len(data) > MAX_MESH_UPLOAD_BYTES:
+            raise ValueError(f"The file is larger than {MAX_MESH_UPLOAD_BYTES // 2**20} MB; "
+                             "give its path on this machine instead.")
+        target = (self.root / INPUTS_DIR / MESH_INPUTS / name).resolve()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        return target
+
+    def inspect_mesh(self, path: Path) -> MeshInspection:
+        """Format, names, zones, box and suggestions of a .msh file. The box is the
+        file's own when it can be read cheaply, else the box of a scratch
+        conversion of this same file, if one was made (convert_for_box)."""
+        info, digest = read_mesh_file(Path(path))
+        scratch = None
+        if info.readable and info.box is None and digest is not None:
+            scratch = scratch_box(self.root, info, digest,
+                                  self._tool_identity((converter(info),)))
+        return inspect_mesh_file_view(Path(path), scratch)
+
+    def _profile(self) -> OpenFOAMProfile:
+        saved = self.saved_config()
+        return saved.openfoam_profile if saved is not None else OpenFOAMProfile.OPENCFD
+
+    def _tool_identity(self, names: Sequence[str]) -> str:
+        """As MachinePipeline._tool for the saved project's OpenFOAM profile."""
+        return sha256_json(tool_identity(self._profile(), names, self._env()))
+
+    def convert_for_box(self, path: Path) -> ScratchResult:
+        """Convert the file once at scale 1 into cases/imported_scratch/ to show its
+        box "from the converted mesh" (owner answer 4). Under the run lock; never a
+        verified mesh: an import moves it into place only after checking it."""
+        info, digest = read_mesh_file(Path(path))
+        if not info.readable or digest is None:
+            return ScratchResult(None, converter(info), None, info.issues)
+        lock = RunLock(self.root)
+        busy = lock.acquire()
+        if busy is not None:
+            return ScratchResult(None, converter(info), None, (busy,))
+        try:
+            names = (converter(info),)
+            found = validate_environment(self._profile(), names, self._env(),
+                                         verified_versions=VERIFIED_VERSIONS)
+            if has_stopping_issue(found):
+                return ScratchResult(None, converter(info), None, tuple(found))
+            tool = self._tool_identity(names)
+            return asyncio.run(convert_scratch(self.root, info, digest,
+                                               runner=self.pipeline.runner, env=self.env,
+                                               tool=tool))
+        finally:
+            lock.release()
+
+    def mesh_patch_geometry(self, names: Sequence[str],
+                            sha256: str) -> dict[str, PatchGeometry]:
+        """Area and centroid of patches of the converted mesh of the file with this
+        content hash (the imported one, else the scratch conversion): evidence for
+        a proposed AMI pair. Empty when neither is of this file."""
+        records = ((IMPORTED_CASE, self.root / IMPORT_REPORT),
+                   (SCRATCH_CASE, self.root / "cases" / SCRATCH_CASE / SCRATCH_RECORD))
+        for case, record in records:
+            folder = self.root / "cases" / case
+            try:
+                found = json.loads(record.read_text("utf-8"))
+            except (OSError, ValueError):
+                continue
+            if (isinstance(found, dict) and found.get("sha256") == sha256
+                    and (folder / "constant" / "polyMesh" / "boundary").is_file()):
+                return patch_geometry(folder, tuple(names))
+        return {}
 
     # --- sections ------------------------------------------------------------------------
 
@@ -634,6 +731,10 @@ class MachineService(RunControl):
                 IssueSeverity.INFO, "NO_SAVED_CONFIGURATION",
                 "There is no saved configuration to plan.", "Save the configuration."),))
         checked = self.checks.get(config, self.thresholds)
+        if config.imported_mesh is not None:
+            return MachinePlanView(import_operations(config.physics is not None),
+                                   read_last_meshed(self.root) is None,
+                                   config.physics is not None, issues)
         try:
             cases = self.pipeline.generator.render(config, checked.surfaces, checked.meshes,
                                                    typed=False)
@@ -651,6 +752,18 @@ class MachineService(RunControl):
                           else (self.saved_config(), ()))
         if config is None:
             return MachinePreflightView(None, None, issues)
+        if config.imported_mesh is not None:
+            cells, basis = preflight_cells(read_mesh_file(config.imported_mesh.source_path)[0])
+            if cells is None:
+                return MachinePreflightView(None, None, (*issues, _issue(
+                    IssueSeverity.INFO, "RESOURCE_NOT_ASSESSED", f"Not assessed: {basis}.",
+                    "Watch the conversion.", category=IssueCategory.RESOURCE_RISK,
+                    stage=IssueStage.RESOURCE_PREFLIGHT)))
+            assessment = self.estimator.assess_cells(
+                CellEstimate(background=cells, surface=0, feature=0, layers=0),
+                self.system_probe(self.root), config.max_global_cells, peak_cells=cells)
+            return MachinePreflightView(MachineCellEstimate(background={"imported": cells}),
+                                        assessment, (*issues, *assessment.issues))
         checked = self.checks.get(config, self.thresholds)
         estimate, assessment = assess(config, checked.meshes, checked.surfaces,
                                       self.system_probe(self.root), self.estimator)
@@ -932,9 +1045,26 @@ class MachineService(RunControl):
         config, _ = parse_config(dict(raw))
         if config is None:
             return None
+        if config.imported_mesh is not None:
+            return self._imported_zone_radius(config, zone)
         stored = setup_preview(self.root, config, self.preview_limits)
         frame = next((f for f in zone_frames_of(stored.scene, config) if f.name == zone), None)
         return frame.radius if frame is not None and frame.radius > 0 else None
+
+
+    def _imported_zone_radius(self, config: MachineProjectConfig, zone: str) -> float | None:
+        """An imported mesh's zone radius, computed from the zone in the imported
+        mesh of this same file (None before it is imported, or for another file)."""
+        mesh = config.imported_mesh
+        assert mesh is not None
+        own = next((z for z in mesh.zones if z.name == zone), None)
+        try:
+            report = json.loads((self.root / IMPORT_REPORT).read_text("utf-8"))
+        except (OSError, ValueError):
+            return None
+        if own is None or not isinstance(report, dict) or report.get("sha256") != mesh.sha256:
+            return None
+        return mesh_zone_radius(self.root / "cases" / IMPORTED_CASE, own)
 
 
 _CHECKS = _CheckCache()

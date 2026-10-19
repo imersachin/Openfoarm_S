@@ -102,6 +102,8 @@ _STAGES = {
     "mergeMeshes": IssueStage.MERGE_MESHES, "createPatch": IssueStage.PATCH_CREATION,
     "foamDictionary": IssueStage.PATCH_CREATION, "checkMesh": IssueStage.CHECK_MESH,
     "postProcess": IssueStage.MESH_VALIDATION,
+    "fluent3DMeshToFoam": IssueStage.MESH_IMPORT, "gmshToFoam": IssueStage.MESH_IMPORT,
+    "transformPoints": IssueStage.MESH_IMPORT,
 }
 
 
@@ -299,6 +301,9 @@ class MachinePipeline:
 
     async def _run(self, run: _Run, force: bool, allow_risk: bool) -> MachineRunResult:
         config = run.config
+        if config.imported_mesh is not None:  # a .msh mesh instead of STL (M1-MSH)
+            from machines.msh_import.pipeline import ImportRun  # it imports this module
+            return await ImportRun(self, run).run_all(force, allow_risk)
 
         # 1. Validation gate: ERROR or BLOCKING stops before any OpenFOAM command.
         run.status(VALIDATE)

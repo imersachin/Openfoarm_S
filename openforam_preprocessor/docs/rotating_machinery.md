@@ -1114,3 +1114,17 @@ and compare the 3D pane's arc with the rotor.
   Custom project had none to edit) and has the Save bar.
 - A saved project whose machine has no profile yet (VAWT_POLE until G8) is
   left as it is, never retyped by the machine choice.
+
+---
+
+## 28. Imported .msh meshes (M1-MSH, owner)
+
+A Fluent or Gmsh `.msh` mesh made elsewhere replaces the STL bodies, zones
+and domain of a project (`imported_mesh`; both at once is BLOCKING). It is
+converted (`fluent3DMeshToFoam`, `gmshToFoam`), scaled to metres
+(`transformPoints`), given its AMI pairs and patch types on a copy, checked as
+every machine mesh, and set up by the G6 case setup, which never changes it
+(invariant 14). The rotating zone is a cell zone of the mesh; its radius is
+computed from the zone. Evidence, decisions and the checks:
+`docs/msh_import_notes.md` (E0, E6, section 8). M1b is the core; the UI is
+M1c.

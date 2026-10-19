@@ -52,7 +52,7 @@ def _rotation_issues(config: MachineProjectConfig) -> list[Issue]:
     physics = config.physics
     assert physics is not None
     found: list[Issue] = []
-    zones = {z.name for z in config.rotating_zones}
+    zones = set(config.zone_names())
     if len(zones) != 1:
         found.append(_blocking(
             "CASE_SETUP_ONE_ZONE", "Case setup supports one rotating zone; this project has "

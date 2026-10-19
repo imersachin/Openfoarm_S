@@ -266,22 +266,36 @@ def angular_speed(physics: PhysicsConfig, zone: str) -> float:
 
 
 def resolve(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
-            boundary: Sequence[tuple[str, str]] | None = None) -> CaseSetup:
+            boundary: Sequence[tuple[str, str]] | None = None, *,
+            mesh_radius: float | None = None) -> CaseSetup:
     """Everything the case files need. `boundary`: the mesh's (name, type)
-    list; None uses the configured patches (for estimates before meshing)."""
+    list; None uses the configured patches (for estimates before meshing).
+    `mesh_radius`: an imported mesh's zone radius, computed from the zone
+    (M1-MSH); None before meshing."""
     physics = config.physics
     if physics is None:
         raise CaseSetupError("The project has no physics settings.")
-    if len(config.rotating_zones) != 1:
+    names = config.zone_names()
+    if len(names) != 1:
         raise CaseSetupError("Case setup supports one rotating zone (G6, P5).")
-    zone = config.rotating_zones[0]
-    if zone.name not in physics.rotation:
-        raise CaseSetupError(f"Zone {zone.name} has no rotation settings.")
-    omega = angular_speed(physics, zone.name)
+    name = names[0]
+    if name not in physics.rotation:
+        raise CaseSetupError(f"Zone {name} has no rotation settings.")
+    omega = angular_speed(physics, name)
     if omega == 0:
-        raise CaseSetupError(f"Zone {zone.name}: the rotation speed is zero.")
-    radius = zone_radius(config, surfaces, zone)
-    rotation = Rotation(zone.name, _zone_origin(zone), _unit(zone.axis), omega, radius)
+        raise CaseSetupError(f"Zone {name}: the rotation speed is zero.")
+    mesh = config.imported_mesh
+    cell: float | None = None
+    if mesh is not None:  # the cell zone of an imported mesh (M1-MSH)
+        imported = mesh.zones[0]
+        origin = (imported.origin.x, imported.origin.y, imported.origin.z)
+        rotation = Rotation(imported.cell_zone, origin, _unit(imported.axis), omega,
+                            mesh_radius)
+    else:
+        zone = config.rotating_zones[0]
+        radius = zone_radius(config, surfaces, zone)
+        rotation = Rotation(zone.name, _zone_origin(zone), _unit(zone.axis), omega, radius)
+        cell = smallest_zone_cell(config, surfaces, zone)
 
     if boundary is None:
         boundary = [(n, "patch") for n in configured_kinds(config)]
@@ -321,9 +335,11 @@ def resolve(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
 
     controls = physics.time
     angle_step = step_for_degrees(controls.degrees_per_step, omega)
-    cell = smallest_zone_cell(config, surfaces, zone)
-    reference = None if radius is None else abs(omega) * radius + fastest.speed
-    estimate = None if reference is None else courant(reference, angle_step, cell)
+    # An imported mesh has no configured cell size: no Courant estimate.
+    radius = rotation.radius
+    reference = None if radius is None or cell is None else abs(omega) * radius + fastest.speed
+    estimate = None if reference is None or cell is None else courant(reference, angle_step,
+                                                                      cell)
     initial = angle_step
     if estimate is not None and estimate > controls.max_courant:
         initial = angle_step * controls.max_courant / estimate
