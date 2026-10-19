@@ -424,12 +424,24 @@ file and the same meshing inputs (`tests/fixtures/msh/m1/stl_baseline.json`,
 
 ---
 
-## 9. For the owner
+## 9. Schema version 3 (owner decision after M1b)
 
-- **Schema version: kept at 2, against owner answer 3 (a bump to 3).** The
-  existing test `test_g6_case_setup.py::test_physics_is_optional_and_versioned`
-  asserts `MACHINE_SCHEMA_VERSION == 2`, and existing tests stay unchanged.
-  With version 2, an older application opening a project with
-  `imported_mesh` reports an unknown field instead of "written by a newer
-  version". The bump is one line plus that assertion, if that test may
-  change.
+The owner approved the bump and the change to the version assertion in
+`test_g6_case_setup.py::test_physics_is_optional_and_versioned` (2 -> 3, and
+the migrated version in the same test). `MACHINE_SCHEMA_VERSION = 3`.
+`tests/unit/mesh_import/test_m1_schema_version.py`:
+
+- A version 2 project (as main wrote it) loads as version 3 with no issue,
+  and its meshing inputs are main's (`stl_baseline.json`). The saved file
+  differs from main's in the version number only: the fingerprint compares it
+  with that line as main wrote it (`stl_baseline.py`).
+- A version 2 project meshed before the upgrade: no section stale, and a run
+  after the upgrade reuses every stage, as a rerun without it does (no
+  OpenFOAM command).
+- Older code: main (cb07c48, taken from git with `git archive`) opening a
+  version 3 project, with or without `imported_mesh`, gives
+  `SCHEMA_VERSION_NEWER` only ("written by a newer version of this
+  application"; "Open this configuration with the newer application version
+  that wrote it."), never an unknown field. The same code still opens a
+  version 2 project, so the test shows the version check and not old code
+  failing to load. Skipped without git or that commit.

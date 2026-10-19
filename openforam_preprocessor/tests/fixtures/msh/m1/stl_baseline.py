@@ -9,7 +9,10 @@ project: the saved file (model_dump_json, with the STL directory replaced by
 and surfaces, the patch types the assembly sets, the profile), as in
 test_machine_field_coverage.py. Equal fingerprints: an existing project is
 saved and meshed byte-identically after the imported_mesh section was added
-(owner answer 3).
+(owner answer 3). Schema version 3 (M1-MSH, owner approved) changes only the
+saved number: the saved file is compared with that one line as main wrote it.
+
+`schema_version` loads each project as written by that version (2: main).
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from machines.assembly import MachineCaseGenerator
-from machines.config import MachineProjectConfig
+from machines.config import MACHINE_SCHEMA_VERSION, MachineProjectConfig
 from machines.domains import read_imported
 from machines.validation import load_bodies
 from tests.fixtures.machines import configs
@@ -36,12 +39,21 @@ BUILDERS: dict[str, Callable[[Path], dict[str, Any]]] = {
 }
 
 
-def fingerprints(work: Path) -> dict[str, dict[str, str]]:
+MAIN_SCHEMA_VERSION = 2  # cb07c48
+
+
+def fingerprints(work: Path, schema_version: int | None = None) -> dict[str, dict[str, str]]:
     found = {}
     for name, build in BUILDERS.items():
         directory = work / name
-        config = MachineProjectConfig.model_validate(build(directory))
+        data = build(directory)
+        if schema_version is not None:
+            data["schema_version"] = schema_version
+        config = MachineProjectConfig.model_validate(data)
         saved = config.model_dump_json(indent=2).replace(str(directory), "<dir>")
+        version = f'"schema_version": {MACHINE_SCHEMA_VERSION},'
+        assert saved.count(version) == 1, saved[:80]
+        saved = saved.replace(version, f'"schema_version": {MAIN_SCHEMA_VERSION},')
         meshes, _ = load_bodies(config)
         cases = MachineCaseGenerator().render(config, read_imported(config), meshes,
                                               typed=False)

@@ -47,9 +47,11 @@ from vawt.config import (
 )
 
 # 2 (G6): the optional `physics` section; a version 1 project loads unchanged.
-# M1-MSH adds the optional `imported_mesh` section without a version change: a
-# project without it is written exactly as before (see MachineProjectConfig).
-MACHINE_SCHEMA_VERSION = 2
+# 3 (M1-MSH): the optional `imported_mesh` section, so that older code refuses
+# such a project as written by a newer version instead of naming an unknown
+# field. A version 1 or 2 project loads unchanged and meshes from the same
+# inputs; only the saved number changes (see MachineProjectConfig).
+MACHINE_SCHEMA_VERSION = 3
 
 _STRICT = ConfigDict(frozen=True, allow_inf_nan=False, extra="forbid")
 # A name OpenFOAM accepts as a patch, zone or region name.
