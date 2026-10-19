@@ -1,0 +1,3 @@
+two_zones_00_split                       exit=0     0s  py <repo>/tests/fixtures/msh/e0/common/split_fluent_cells.py <work>/E4/ami/fluentInterface/ami.msh <work>/E6/two_zones.msh 23408 stationary rotating
+two_zones_01_fluent3DMeshToFoam          exit=0     0s  fluent3DMeshToFoam <work>/E6/two_zones.msh -case <work>/E6/two_zones
+two_zones_02_checkMesh                   exit=0     0s  checkMesh -case <work>/E6/two_zones -allTopology -meshQuality

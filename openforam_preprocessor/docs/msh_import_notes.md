@@ -7,8 +7,8 @@
 | Gmsh | Python package `gmsh==4.15.2` in `/root/venvs/ofpp` (Python 3.12.3); apt packages `libglu1-mesa 9.0.2-1.1build1`, `libxft2 2.3.6-1build1`, `libopengl0 1.7.0-1build1` (owner, answer 1) |
 | Geometry | **Synthetic only.** No real Fluent or Gmsh files from users yet (owner, answer 2) |
 | Evidence | `tests/fixtures/msh/e0/`: the dictionaries that ran, every command log, exit codes, boundary files, zone names, file heads |
-| Reproduce | `PYTHON=<venv python with gmsh> bash tests/fixtures/msh/e0/run_all.sh` (about 32 s on this machine, 90 commands) |
-| Read back | `tests/unit/mesh_import/test_m1_e0_logs.py` (38 tests, no OpenFOAM needed) |
+| Reproduce | `PYTHON=<venv python with gmsh> bash tests/fixtures/msh/e0/run_all.sh` (about 33 s on this machine, 93 commands) |
+| Read back | `tests/unit/mesh_import/test_m1_e0_logs.py` (38 tests) and `test_m1_e6_logs.py` (E6, added after the owner review), no OpenFOAM needed |
 
 Every statement below is from a run on this installation unless it is marked
 **not tested**. Exit codes are in each experiment's `logs/exit_codes.txt`.
@@ -30,7 +30,9 @@ Every statement below is from a run on this installation unless it is marked
    (`patch`/`wall`) and cell counts are identical through `foamMeshToFluent` →
    `fluent3DMeshToFoam` and → `fluentMeshToFoam`. The source cell zone is lost
    (already known, V-notes Q7): `fluent3DMeshToFoam` writes one zone `fluid-1`
-   over all cells, `fluentMeshToFoam` none, even with `-writeZones`.
+   over all cells, `fluentMeshToFoam` none, even with `-writeZones`. **E6: the
+   loss is `foamMeshToFluent`'s**, which writes all cells as one fluid section;
+   `fluent3DMeshToFoam` keeps every fluid cell section as its own cell zone.
 4. **`fluentMeshToFoam` silently removes wall baffles** (E3): the `plate` and
    `plate-shadow` walls disappear and their faces become interior faces; exit 0,
    checkMesh OK. `fluent3DMeshToFoam` keeps both walls, and checkMesh reports
@@ -41,7 +43,7 @@ Every statement below is from a run on this installation unless it is marked
    setup writes the case, and `pimpleFoam` runs 10 steps (AMI sum(weights)
    1.00–1.03). Case setup leaves every mesh file byte-identical (invariant 14).
    The same mesh through Fluent has one cell zone (`fluid-1`) and two plain
-   patches: no rotating zone.
+   patches: no rotating zone, because the export wrote one cell section (E6).
 6. **A truncated Fluent file converts with exit 0 to a broken mesh** (E5):
    `fluent3DMeshToFoam` writes 538 of 2000 cells; checkMesh also exits 0 while
    reporting "Failed 9 mesh checks". Exit codes are not evidence of success.
@@ -135,7 +137,33 @@ The case setup configuration used a box domain and a cylinder zone matching
 the Gmsh geometry, because no imported-mesh configuration exists yet (M1b).
 
 A Fluent file with several cell zones (a rotating fluid zone) and interface
-zones: **not tested on real files**.
+zones: **not tested on real files**; a hand-edited two-zone file is E6.
+
+### 2.6 E6 Where the Fluent cell zone is lost (owner review)
+
+The E4 `foamMeshToFluent` export (`E4/ami/fluentInterface/ami.msh`) has one
+cell section and one fluid name, although the OpenFOAM mesh had two zones
+(stationary cells 0…23407, rotating 23408…24196):
+
+```
+(12 (0 1 5e85 0 0))
+(12 (1 1 5e85 1 0)
+(39 (1 fluid fluid-1)())
+```
+
+`common/split_fluent_cells.py` splits that section by hand at cell 23408
+(sections `(12 (1 1 5b70 1 0)` and `(12 (14 5b71 5e85 1 0)`, names
+`stationary` and `rotating`); nodes and faces are unchanged.
+
+| Step | Result |
+|---|---|
+| `fluent3DMeshToFoam` | exit 0; "CellGroup: 1 start: 0 end: 23407", "CellGroup: 20 start: 23408 end: 24196"; cell zones **stationary 23408, rotating 789** |
+| checkMesh | OK, 24197 cells, 2 regions |
+
+**`foamMeshToFluent` is responsible; `fluent3DMeshToFoam` keeps cell zones.**
+Per the owner's rule, the plan does not change: the region-to-cellZone helper
+stays on the later list. A real Fluent rotor/stator file: **not tested on real
+files**.
 
 ### 2.5 E5 Bad inputs (plan E0.7) and cost of the raw box
 
@@ -169,7 +197,7 @@ Binary MSH is not read raw ("binary MSH").
 | 6 | `fluentMeshToFoam` drops baffles silently | Use `fluent3DMeshToFoam` for 3D Fluent meshes. See section 5, question 2 |
 | 7 | Truncated file: exit 0, broken mesh | Compare the converted cell count with the header declaration (`(12 (0 1 <last> 0))`) and require checkMesh to pass; otherwise BLOCKING `MSH_CONVERT_FAILED` |
 | 8 | Baffles are visible in checkMesh | `MSH_BAFFLE_PAIR` from "identical duplicate faces (baffle faces)" plus the two patches that share them |
-| 9 | Fluent loses rotating zones written by OpenFOAM | Rely on the file's own cell zones; one zone over all cells for a rotating machine → BLOCKING `MSH_NO_CELL_ZONE` (answer 5) |
+| 9 | `foamMeshToFluent` writes one cell section; `fluent3DMeshToFoam` keeps every section (E6) | Rely on the file's own cell zones; one zone over all cells for a rotating machine → BLOCKING `MSH_NO_CELL_ZONE` (answer 5) |
 | 10 | All Gmsh patches are `patch` | Types come from the patch table and are set after conversion (`foamDictionary`), never by case setup |
 | 11 | ASCII raw box is cheap | Raw box for ASCII Fluent and Gmsh; binary → convert once at scale 1 (answer 4) |
 | 12 | Both scalings are identical | Convert at scale 1, `transformPoints` after the units are confirmed; the same conversion is promoted (answer 4) |
@@ -198,18 +226,20 @@ Binary MSH is not read raw ("binary MSH").
 
 ---
 
-## 5. Questions for the owner
+## 5. Owner decisions after the E0 review
 
-1. **ASCII MSH 4.1 converts directly.** Answer 1 says a 4.x file with gmsh
-   missing is BLOCKING. Keep that (re-save every 4.x file through gmsh, the
-   conservative choice), or allow ASCII 4.1 with physical groups to convert
-   directly when gmsh is missing, and keep BLOCKING for binary files and for
-   4.x without groups?
-2. **`fluentMeshToFoam`.** It drops wall baffles silently (finding 6), and 2D
-   meshes are out of scope. Use `fluent3DMeshToFoam` only, and make a 2D Fluent
-   file (`(2 2)`) BLOCKING?
-3. **Ungrouped faces (`defaultFaces`).** BLOCKING (proposed), or a WARNING that
-   lets the user type `defaultFaces` as a patch?
+1. ASCII MSH 2.2 and 4.1 convert directly, with or without gmsh. Only binary
+   files need gmsh (re-save as 2.2 ASCII); binary with gmsh missing is
+   BLOCKING. No physical groups is BLOCKING either way; MSH 1 is BLOCKING
+   (no patch names to recover).
+2. `fluent3DMeshToFoam` only; a 2D Fluent file is BLOCKING.
+3. `defaultFaces` is BLOCKING; the message gives the face count and the
+   bounding box of those faces, so they can be found in Gmsh.
+4. checkMesh "Failed N mesh checks" is a failure whatever the exit code.
+5. Files are checked before converting (not empty, valid header), so no
+   converter crash (exit 134) reaches the user.
+6. Where the Fluent cell zone is lost: E6 (section 2.6). `fluent3DMeshToFoam`
+   keeps zones, so no change.
 
 ---
 
@@ -217,7 +247,8 @@ Binary MSH is not read raw ("binary MSH").
 
 - Binary Fluent meshes (`(2010 …`/`(3010 …` sections).
 - Real Fluent wall / wall-shadow pairs.
-- Fluent interface zones (sliding mesh) and several fluid cell zones.
+- Fluent interface zones (sliding mesh). Several fluid cell zones: only a
+  hand-edited `foamMeshToFluent` file (E6).
 - Fluent zone types other than `wall` and `pressure-outlet`.
 - Very large real files (GB): only the 185 MB synthetic file was timed.
 
