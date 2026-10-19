@@ -15,5 +15,10 @@ openforam_preprocessor/tests/fixtures/vawt/v0/** text eol=lf
 # Rotating-machinery G0 evidence: same reasons.
 openforam_preprocessor/tests/fixtures/machines/g0/** text eol=lf
 
+# .msh import (M1-MSH) E0 evidence: same reasons. The heads of binary .msh
+# files are bytes, never converted.
+openforam_preprocessor/tests/fixtures/msh/e0/** text eol=lf
+openforam_preprocessor/tests/fixtures/msh/e0/E1_gmsh/logs/heads/*_bin.head binary
+
 # Windows batch files run by cmd.exe.
 *.cmd text eol=crlf
