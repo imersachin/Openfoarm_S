@@ -41,7 +41,8 @@ from vawt.status import RunState
 Data = dict[str, Any]
 TOOLS = (*IMPORT_EXECUTABLES, *ASSEMBLE_EXECUTABLES, *CHECK_EXECUTABLES)
 FULL = [VALIDATE, IMPORT, ASSEMBLE, CHECK_MESH, VALIDATE_MESH, CASE_SETUP]
-ORDER = ["gmshToFoam", "createPatch", *["foamDictionary"] * 7, "checkMesh", "postProcess"]
+# 7 patch types, then 4 entries for each side of the AMI pair (M1c: in place).
+ORDER = ["gmshToFoam", *["foamDictionary"] * (7 + 8), "checkMesh", "postProcess"]
 
 
 class Project:
@@ -97,10 +98,13 @@ def test_a_gmsh_mesh_is_imported_paired_typed_checked_and_set_up(
     assert runner.names() == ORDER
     assert runner.argv[0][:2] == ("gmshToFoam", gmsh["imported_mesh"]["source_path"])
     boundary = (project.root / "cases/merged/constant/polyMesh/boundary").read_text("utf-8")
-    assert "ami_stat_ami" in boundary and "ami_rot_ami" in boundary
-    assert "ami_stat\n" not in boundary  # the source patches are gone (createPatch)
-    patches = project.json(IMPORT_REPORT)["patches"]
-    assert set(patches) >= {"ami_stat", "ami_rot", "rotor"}  # the imported mesh as converted
+    assert "_ami" not in boundary  # the AMI pair keeps the patches' own names (M1c)
+    assert not (project.root / "cases/merged/system/createPatchDict").exists()
+    assert ("foamDictionary", "constant/polyMesh/boundary", "-entry",
+            "entry0/ami_stat/neighbourPatch", "-add", "ami_rot") in runner.argv
+    report = project.json(IMPORT_REPORT)
+    assert set(report["patches"]) >= {"ami_stat", "ami_rot", "rotor"}  # as converted
+    assert report["names_used"]["ami_stat"] == "ami_stat"
     assert (project.root / CASE_DIR / "constant/dynamicMeshDict").is_file()
     assert result.mesh is not None and result.mesh.status.value == "SUCCESS"
 
@@ -155,7 +159,7 @@ def test_a_patch_type_change_never_converts_again(project: Project, gmsh: Data) 
     result, runner = project.run(gmsh)
 
     assert result.succeeded and IMPORT in result.reused
-    assert runner.names()[0] == "createPatch" and "gmshToFoam" not in runner.names()
+    assert runner.names()[0] == "foamDictionary" and "gmshToFoam" not in runner.names()
     assert project.digest(IMPORTED_CASE) == imported
 
 
@@ -278,7 +282,7 @@ def test_low_ami_weights_are_a_warning(project: Project, gmsh: Data) -> None:
 
 
 def test_cancelling_stops_the_run(project: Project, gmsh: Data) -> None:
-    result, _ = project.run(gmsh, FakeMshRunner(outcome={"createPatch":
+    result, _ = project.run(gmsh, FakeMshRunner(outcome={"foamDictionary":
                                                          RunStatus.CANCELLED}))
     assert result.state is RunState.CANCELLED
 

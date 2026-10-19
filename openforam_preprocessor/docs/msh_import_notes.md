@@ -257,9 +257,9 @@ Binary MSH is not read raw ("binary MSH").
 - "Make a cellZone from region N" (`topoSet` + `setsToZones`): future list,
   not this milestone (owner, answer 5).
 - A UI for the import (M1c): this milestone is the core (M1b).
-- Flow-rate inlets on an imported mesh: the inlet area is not measured from
-  the mesh yet, so a flow-rate inlet is BLOCKING `INLET_AREA_UNKNOWN` (use a
-  velocity inlet).
+- ~~Flow-rate inlets on an imported mesh~~: done in M1c (section 10.1).
+- STL meshes' AMI range (owner, M1c): measure the sum(weights) STL meshes
+  actually produce, then tighten their 0.85-1.5 range with that evidence.
 - A Courant estimate for an imported mesh: it has no configured cell size, so
   none is given (the solver's adjustable step still limits the Courant number).
 
@@ -360,8 +360,9 @@ validate (no OpenFOAM command on any stopping finding)
 1. **createPatch with a patch's own name does nothing, with exit 0.** A
    `createPatchDict` entry `name AMI1; ... patches (AMI1);` reported "Moving
    faces from patch AMI1 to patch 7" and left AMI1 a `patch`, not
-   `cyclicAMI`. Each AMI patch is therefore made under a new name,
-   `<patch>_ami` (reserved); the emptied source patches are removed.
+   `cyclicAMI`. M1b therefore made each AMI patch under a new name,
+   `<patch>_ami`. Superseded in M1c (section 10.2): foamDictionary sets the
+   type in place, so the patches keep their own names.
 2. **Fluent cell zone names contain "-"** ("fluid-1"), which
    `machines.mesh_folder.cell_zone_names` does not read (word characters
    only). The import reads zone names with its own pattern; the G7 helper is
@@ -445,3 +446,77 @@ the migrated version in the same test). `MACHINE_SCHEMA_VERSION = 3`.
   that wrote it."), never an unknown field. The same code still opens a
   version 2 project, so the test shows the version check and not old code
   failing to load. Skipped without git or that commit.
+
+---
+
+## 10. M1c items 1-3 (owner, after the M1b review)
+
+`tests/unit/mesh_import/test_m1c_core.py` (fake OpenFOAM) and
+`tests/integration/test_m1_msh_real.py` (v2512).
+
+### 10.1 A flow-rate inlet's area, measured from the mesh
+
+- The area of a patch is the sum of its face areas, each the magnitude of its
+  area vector as OpenFOAM's `magSf` (triangles from each edge to the mean of
+  the face's points; `checks.patch_areas`). Labelled "measured from the mesh".
+- Before the import: INFO `INLET_AREA_AFTER_IMPORT` instead of BLOCKING. The
+  UI's validation uses the imported mesh of the same file, else its
+  bounding-box conversion (scaled to the configured units) when there is one.
+- In the run: case setup checks the physics again with the areas of the
+  assembled mesh (renamed patches under their new names). A flow-rate inlet
+  whose patch has no faces is BLOCKING `INLET_AREA_UNKNOWN` ("could not be
+  measured from the mesh"); case setup is skipped, the mesh is kept.
+- Reports: `mesh_import.json` `patch_area_m2` (every patch), and
+  `case_setup.json` `inlet_area_m2` with "measured from the mesh".
+- v2512: the two-zone Fluent rotating mesh with Q = 20 m³/s: inlet area 4.000
+  m² (the 2 m x 2 m face), inlet speed 5 m/s, `flowRateInletVelocity`, 10
+  pimpleFoam steps.
+
+### 10.2 AMI pairs keep their names
+
+- foamDictionary on `constant/polyMesh/boundary`, per side: `type` -set
+  `cyclicAMI`; `neighbourPatch`, `transform noOrdering`, `matchTolerance
+  0.0001` -add. createPatch remains for renamed patches only. No fallback to
+  `<patch>_ami` was needed: on v2512 checkMesh reports "Mesh OK" with
+  `ami_stat` and `ami_rot` "ok (closed singly connected)", AMIWeights
+  0.99999-1.0004, and both rotating routes run 10 pimpleFoam steps on the
+  original names.
+- `mesh_import.json` `names_used`: original name -> name used (an AMI patch,
+  and every patch not renamed, keeps its own). Renaming a patch onto another
+  patch of the mesh is BLOCKING `RESERVED_PATCH_NAME`.
+- Not tested on real files: a Fluent interface zone written as `wall` keeps
+  its `inGroups (wall)` entry when made cyclicAMI.
+
+### 10.3 AMI weights
+
+- Imported meshes: WARNING `AMI_WEIGHTS_OUT_OF_RANGE` outside 0.95-1.05
+  (`MachineThresholds.imported_ami_weights_range`), labelled "at rest (0
+  deg)". STL meshes keep 0.85-1.5 (owner; future list, section 7).
+- checkMesh prints no AMI weights on v2512; the weights come from postProcess
+  AMIWeights on the mesh as converted, as for STL meshes. The application
+  does not run solvers, so not from a first solver step.
+- **One revolution without solving the flow works on v2512**:
+  `moveDynamicMesh -checkAMI` with a solid-body rotation of the zone
+  (`revolution.py`: one revolution per second, 36 steps of 10 deg, nothing
+  written) rebuilds the AMI at each step and prints its sums. Plain
+  `moveDynamicMesh` prints none. -checkAMI also writes VTK files of the AMI
+  patches (596 KB on the fixture), so it runs on a copy of the assembled mesh
+  in `cases/ami_revolution/`, removed afterwards.
+- On the M1 rotating fixtures (Gmsh 4.1 and the Fluent file, the same mesh):
+  at rest 0.99999-1.0004; over one revolution **0.9946-1.104**, in 0.6-0.7 s.
+  So the at-rest check passes a mesh whose interface goes outside 0.95-1.05
+  as it turns.
+- The optional action ("check over one revolution",
+  `MachineService.check_ami_revolution`) runs under the run lock and writes
+  `reports/ami_revolution.json` with min/max per pair over all angles, the
+  steps done, failed mesh checks of the turned mesh, and the hash of the
+  assembled mesh it checked (`revolution.mesh_hash`), so a result for an
+  older mesh can be shown as such. Fewer steps than planned is ERROR
+  `AMI_REVOLUTION_FAILED`.
+- `parse_ami_weights(every=True)` takes the range over all reports of a
+  pair; the default (first report only, for solver logs) is unchanged.
+
+### 10.4 VAWT
+
+Still not offered for an imported mesh; `MSH_MACHINE_NOT_SUPPORTED` now says
+"To use an imported VAWT mesh, create a Custom project."

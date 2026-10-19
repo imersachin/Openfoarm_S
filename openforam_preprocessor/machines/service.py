@@ -14,6 +14,7 @@ which configuration fields each owns; section status follows it.
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import math
 import os
@@ -50,11 +51,13 @@ from machines.config import (
     MachineType,
     Motion,
     PatchType,
+    SourceKind,
     StlSource,
 )
 from machines.joints import propose_joints
 from machines.mesh_folder import MeshFolderReport, check_mesh_folder
 from machines.msh_import.cases import IMPORTED_CASE, SCRATCH_CASE, converter
+from machines.msh_import.checks import patch_areas
 from machines.msh_import.checks import zone_radius as mesh_zone_radius
 from machines.msh_import.inspection import MeshInspection, PatchGeometry, patch_geometry
 from machines.msh_import.inspection import inspect as inspect_mesh_file_view
@@ -67,6 +70,8 @@ from machines.msh_import.pipeline import (
     preflight_cells,
     scratch_box,
 )
+from machines.msh_import.revolution import EXECUTABLES as REVOLUTION_EXECUTABLES
+from machines.msh_import.revolution import RevolutionResult, check_revolution, mesh_hash
 from machines.msh_import.validation import read_mesh_file
 from machines.operations import MACHINE_EXECUTABLES, operations_for
 from machines.pipeline import (
@@ -401,7 +406,9 @@ class MachineService(RunControl):
             return MachineValidation(None, _unique((
                 *issues, *vawt_workflow_issues(rest), *checked.issues)))
         checked = self.checks.get(config, self.thresholds)
-        physics = check_physics(config, checked.surfaces, self.case_thresholds)
+        physics = check_physics(config, checked.surfaces, self.case_thresholds,
+                                mesh_areas=None if config.imported_mesh is None
+                                else self.imported_patch_areas(config))
         return MachineValidation(config, _unique((
             *vawt_workflow_issues(config), *checked.issues, *physics)))
 
@@ -490,6 +497,32 @@ class MachineService(RunControl):
         finally:
             lock.release()
 
+    def check_ami_revolution(self) -> RevolutionResult:
+        """The saved imported mesh's AMI weights over one revolution, the zone
+        turned without solving the flow (optional; machines.msh_import.revolution).
+        Under the run lock, on a copy of the assembled mesh."""
+        config = self.saved_config()
+        digest = mesh_hash(self.root)
+        if config is None or config.imported_mesh is None:
+            return RevolutionResult((), 0, 0, digest, (_issue(
+                IssueSeverity.BLOCKING, "AMI_REVOLUTION_UNAVAILABLE",
+                "The saved project has no imported mesh.",
+                "Save an imported-mesh project and run the import first."),))
+        lock = RunLock(self.root)
+        busy = lock.acquire()
+        if busy is not None:
+            return RevolutionResult((), 0, 0, digest, (busy,))
+        try:
+            found = validate_environment(config.openfoam_profile, REVOLUTION_EXECUTABLES,
+                                         self._env(), verified_versions=VERIFIED_VERSIONS)
+            if has_stopping_issue(found):
+                return RevolutionResult((), 0, 0, digest, tuple(found))
+            return asyncio.run(check_revolution(
+                self.root, config, runner=self.pipeline.runner, env=self.env,
+                ami_range=self.thresholds.imported_ami_weights_range))
+        finally:
+            lock.release()
+
     def mesh_patch_geometry(self, names: Sequence[str],
                             sha256: str) -> dict[str, PatchGeometry]:
         """Area and centroid of patches of the converted mesh of the file with this
@@ -507,6 +540,31 @@ class MachineService(RunControl):
                     and (folder / "constant" / "polyMesh" / "boundary").is_file()):
                 return patch_geometry(folder, tuple(names))
         return {}
+
+    def imported_patch_areas(self, config: MachineProjectConfig) -> dict[str, float] | None:
+        """Each configured patch's area in m^2, measured from the mesh: the
+        imported mesh of this same file, else its scratch conversion, scaled to the
+        configured units. None when neither is of this file (before conversion)."""
+        mesh = config.imported_mesh
+        assert mesh is not None
+        records = ((IMPORTED_CASE, self.root / IMPORT_REPORT, "scale_to_metres"),
+                   (SCRATCH_CASE, self.root / "cases" / SCRATCH_CASE / SCRATCH_RECORD, "scale"))
+        refs = {p.name: p.source.ref for p in config.patches
+                if p.source.kind is SourceKind.MESH_PATCH}
+        for case, record, key in records:
+            folder = self.root / "cases" / case
+            try:
+                found = json.loads(record.read_text("utf-8"))
+                done = float(found[key])
+            except (OSError, ValueError, TypeError, KeyError):
+                continue
+            if found.get("sha256") != mesh.sha256 or done <= 0 or not (
+                    folder / "constant" / "polyMesh" / "boundary").is_file():
+                continue
+            factor = (mesh.source_units.to_metres / done) ** 2
+            areas = _patch_areas(folder, tuple(sorted(set(refs.values()))))
+            return {name: areas[ref] * factor for name, ref in refs.items() if ref in areas}
+        return None
 
     # --- sections ------------------------------------------------------------------------
 
@@ -895,7 +953,8 @@ class MachineService(RunControl):
             else:
                 if surfaces is None:
                     surfaces = self.checks.get(config, self.thresholds).surfaces
-                area = inlet_area(config, surfaces, name)
+                area = inlet_area(config, surfaces, name, None if config.imported_mesh is None
+                                  else self.imported_patch_areas(config))
                 if not area:
                     continue
                 speed = inlet.volumetric_flow_rate / area
@@ -1065,6 +1124,23 @@ class MachineService(RunControl):
         if own is None or not isinstance(report, dict) or report.get("sha256") != mesh.sha256:
             return None
         return mesh_zone_radius(self.root / "cases" / IMPORTED_CASE, own)
+
+
+def _patch_areas(folder: Path, names: tuple[str, ...]) -> dict[str, float]:
+    """patch_areas, read once per version of the mesh's faces and points."""
+    poly = folder / "constant" / "polyMesh"
+    try:
+        stamp = tuple((s.st_size, s.st_mtime_ns) for s in (
+            (poly / n).stat() for n in ("boundary", "faces", "points")))
+    except OSError:
+        return {}
+    return dict(_areas_of(str(folder), names, stamp))
+
+
+@functools.lru_cache(maxsize=16)
+def _areas_of(folder: str, names: tuple[str, ...],
+              stamp: tuple[tuple[int, int], ...]) -> tuple[tuple[str, float], ...]:
+    return tuple(patch_areas(Path(folder), names).items())
 
 
 _CHECKS = _CheckCache()

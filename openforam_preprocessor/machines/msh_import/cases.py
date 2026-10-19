@@ -3,8 +3,8 @@
     cases/imported/   the converted mesh, scaled to metres: the verified
                       artifact. Nothing writes into it after the import
                       operation (invariant 14).
-    cases/merged/     a copy of it with the AMI pairs (createPatch), renamed
-                      patches and the patch types (foamDictionary); checked
+    cases/merged/     a copy of it with the renamed patches (createPatch), the
+                      AMI pairs and the patch types (foamDictionary); checked
                       by checkMesh. Case setup copies this mesh, as for an STL
                       project.
     cases/imported_scratch/  a conversion at scale 1 made only to show the
@@ -18,8 +18,11 @@ drops wall baffles silently), gmshToFoam for Gmsh. A binary Gmsh file, or a
 version gmshToFoam was not proven on, is first re-saved as MSH 2.2 ASCII with
 the gmsh package (resave.py). The units are applied after conversion with
 transformPoints, which gave the same points as the converters' own -scale
-(E0). createPatch with a patch's own name leaves its type unchanged (exit 0;
-seen on v2512 during M1b), so each AMI patch gets a new name, <patch>_ami.
+(E0). An AMI pair keeps the patches' own names: foamDictionary sets type
+cyclicAMI, neighbourPatch, transform and matchTolerance in the boundary file
+(v2512, M1c; checkMesh "Mesh OK", AMI weights and pimpleFoam as before).
+createPatch with a patch's own name would leave its type unchanged (exit 0;
+v2512, M1b), so it is used only for renamed patches.
 """
 
 from __future__ import annotations
@@ -40,12 +43,7 @@ IMPORTED_CASE = "imported"
 MERGED_CASE = "merged"
 SCRATCH_CASE = "imported_scratch"
 RESAVED = "resaved.msh"  # in cases/imported/: the MSH 2.2 copy gmshToFoam reads
-AMI_SUFFIX = "_ami"
-
-
-def ami_name(patch: str) -> str:
-    """The cyclicAMI patch made from an imported patch."""
-    return f"{patch}{AMI_SUFFIX}"
+AMI_MATCH_TOLERANCE = "0.0001"
 
 
 def converter(info: MeshFileInfo) -> str:
@@ -85,25 +83,27 @@ def _mesh_types(config: MachineProjectConfig) -> dict[str, tuple[str, PatchType]
             if p.source.kind is SourceKind.MESH_PATCH}
 
 
-def create_patch_dict(config: MachineProjectConfig) -> str | None:
-    """The AMI pairs and the renamed patches, or None when there is neither."""
+def ami_sides(config: MachineProjectConfig) -> tuple[tuple[str, str], ...]:
+    """(patch, neighbourPatch) of each side of each AMI pair, original names."""
     mesh = config.imported_mesh
     assert mesh is not None
+    return tuple(side for p in mesh.ami_pairs
+                 for side in ((p.first, p.second), (p.second, p.first)))
+
+
+def used_names(config: MachineProjectConfig) -> dict[str, str]:
+    """Patch of the file -> its name in the mesh: a renamed patch's new name,
+    every other patch (an AMI patch too) its own."""
+    mesh = config.imported_mesh
+    assert mesh is not None
+    names = {ref: name for ref, (name, _) in _mesh_types(config).items()}
+    names.update({n: n for p in mesh.ami_pairs for n in (p.first, p.second)})
+    return dict(sorted(names.items()))
+
+
+def create_patch_dict(config: MachineProjectConfig) -> str | None:
+    """The renamed patches, or None when there is none."""
     entries: list[str] = []
-    for pair in mesh.ami_pairs:
-        for patch, neighbour in ((pair.first, pair.second), (pair.second, pair.first)):
-            entries.append(f"""    {{
-        name {ami_name(patch)};
-        patchInfo
-        {{
-            type            {CYCLIC_AMI};
-            matchTolerance  0.0001;
-            neighbourPatch  {ami_name(neighbour)};
-            transform       noOrdering;
-        }}
-        constructFrom patches;
-        patches ({patch});
-    }}""")
     for ref, (name, kind) in sorted(_mesh_types(config).items()):
         if name != ref:
             entries.append(f"""    {{
@@ -139,11 +139,8 @@ def retype(config: MachineProjectConfig) -> dict[str, str]:
 def expected_patches(config: MachineProjectConfig) -> dict[str, str]:
     """The merged mesh's patches and their OpenFOAM types."""
     expected = {name: openfoam_type(kind) for name, kind in _mesh_types(config).values()}
-    mesh = config.imported_mesh
-    assert mesh is not None
-    for pair in mesh.ami_pairs:
-        expected[ami_name(pair.first)] = CYCLIC_AMI
-        expected[ami_name(pair.second)] = CYCLIC_AMI
+    for patch, _ in ami_sides(config):
+        expected[patch] = CYCLIC_AMI
     return expected
 
 
@@ -156,6 +153,7 @@ class ImportCases:
     merged: dict[str, str]
     retype: dict[str, str]
     expected: dict[str, str]
+    ami: tuple[tuple[str, str], ...] = ()  # ami_sides
 
     def merged_steps(self) -> tuple[Step, ...]:
         root = f"cases/{MERGED_CASE}"
@@ -164,9 +162,12 @@ class ImportCases:
             steps.append(Step("merged_createPatch", "run", root,
                               ("createPatch", "-overwrite", "-case", ".")))
         for patch, kind in self.retype.items():
-            steps.append(Step(f"merged_type_{patch}", "run", root, (
-                "foamDictionary", "constant/polyMesh/boundary", "-entry",
-                f"entry0/{patch}/type", "-set", kind)))
+            steps.append(_set(root, f"merged_type_{patch}", patch, "type", kind))
+        for patch, neighbour in self.ami:
+            for key, value in (("type", CYCLIC_AMI), ("neighbourPatch", neighbour),
+                               ("transform", "noOrdering"),
+                               ("matchTolerance", AMI_MATCH_TOLERANCE)):
+                steps.append(_set(root, f"merged_ami_{patch}_{key}", patch, key, value))
         return tuple(steps)
 
     def check_steps(self, ami: bool) -> tuple[Step, ...]:
@@ -179,6 +180,14 @@ class ImportCases:
         return tuple(steps)
 
 
+def _set(root: str, name: str, patch: str, key: str, value: str) -> Step:
+    """foamDictionary setting one entry of a patch in the boundary file: -set
+    for the type every patch has, -add for an entry a converter does not write."""
+    action = "-set" if key == "type" else "-add"
+    return Step(name, "run", root, ("foamDictionary", "constant/polyMesh/boundary",
+                                    "-entry", f"entry0/{patch}/{key}", action, value))
+
+
 def import_cases(config: MachineProjectConfig) -> ImportCases:
     common = _common(config)
     merged = dict(common)
@@ -189,4 +198,5 @@ def import_cases(config: MachineProjectConfig) -> ImportCases:
     assert mesh is not None
     if mesh.ami_pairs:
         merged[AMI_WEIGHTS_DICT] = _ami_weights_dict()
-    return ImportCases(dict(common), merged, retype(config), expected_patches(config))
+    return ImportCases(dict(common), merged, retype(config), expected_patches(config),
+                       ami_sides(config))

@@ -12,7 +12,7 @@ so every patch the solver will see gets a condition, and none is invented.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -206,11 +206,15 @@ def smallest_zone_cell(config: MachineProjectConfig, surfaces: Sequence[SurfaceI
 
 
 def inlet_area(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
-               patch: str) -> float | None:
-    """Area of an inlet patch, from its imported region or generated face."""
+               patch: str, mesh_areas: Mapping[str, float] | None = None) -> float | None:
+    """Area of an inlet patch, from its imported region or generated face, or,
+    for a patch of an imported mesh, `mesh_areas` (patch -> m^2, measured from
+    the mesh: machines.msh_import.checks.patch_areas; None before the import)."""
     source = next((p.source for p in config.patches if p.name == patch), None)
     if source is None:
         return None
+    if source.kind is SourceKind.MESH_PATCH:
+        return (mesh_areas or {}).get(patch)
     if source.kind is SourceKind.REGION:
         return next((r.area for s in surfaces if s.readable for r in s.regions
                      if r.name == source.ref), None)
@@ -267,11 +271,13 @@ def angular_speed(physics: PhysicsConfig, zone: str) -> float:
 
 def resolve(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
             boundary: Sequence[tuple[str, str]] | None = None, *,
-            mesh_radius: float | None = None) -> CaseSetup:
+            mesh_radius: float | None = None,
+            mesh_areas: Mapping[str, float] | None = None) -> CaseSetup:
     """Everything the case files need. `boundary`: the mesh's (name, type)
     list; None uses the configured patches (for estimates before meshing).
     `mesh_radius`: an imported mesh's zone radius, computed from the zone
-    (M1-MSH); None before meshing."""
+    (M1-MSH); None before meshing. `mesh_areas`: an imported mesh's patch
+    areas, measured from the mesh (inlet_area)."""
     physics = config.physics
     if physics is None:
         raise CaseSetupError("The project has no physics settings.")
@@ -312,7 +318,7 @@ def resolve(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
         condition = physics.inlets.get(name)
         if condition is None:
             raise CaseSetupError(f"Inlet {name} has no inlet value.")
-        speed = _speed(condition, inlet_area(config, surfaces, name))
+        speed = _speed(condition, inlet_area(config, surfaces, name, mesh_areas))
         if speed == 0:
             raise CaseSetupError(f"Inlet {name} has no inflow (zero velocity or flow rate).")
         k =turbulence_k(speed, turbulence.intensity_percent) if sst else 0.0

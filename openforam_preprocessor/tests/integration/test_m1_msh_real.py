@@ -16,10 +16,12 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -133,9 +135,12 @@ def test_a_rotating_mesh_is_imported_set_up_and_runs(tmp_path: Path, name: str) 
     assert mesh_digest(root / "cases" / IMPORTED_CASE / "constant/polyMesh") == imported
     assert mesh_digest(root / "cases/merged/constant/polyMesh") == merged
     case = root / CASE_DIR
-    patches = {p.name: p.patch_type for p in read_boundary(case / "constant/polyMesh/boundary")}
-    assert patches["ami_stat_ami"] == patches["ami_rot_ami"] == "cyclicAMI"
-    assert patches["rotor"] == "wall" and "ami_stat" not in patches
+    boundary = case / "constant/polyMesh/boundary"
+    patches = {p.name: p.patch_type for p in read_boundary(boundary)}
+    # M1c: the pair keeps its own names (foamDictionary), and pimpleFoam runs on it.
+    assert patches["ami_stat"] == patches["ami_rot"] == "cyclicAMI"
+    assert patches["rotor"] == "wall" and not any(n.endswith("_ami") for n in patches)
+    assert re.search(r"ami_stat\s*\{[^}]*neighbourPatch\s+ami_rot;", boundary.read_text())
     dynamic = (case / "constant/dynamicMeshDict").read_text("utf-8")
     assert "cellZone        rotating;" in dynamic
 
@@ -239,3 +244,47 @@ def test_the_scratch_conversion_is_promoted_on_real_openfoam(tmp_path: Path) -> 
     points = read_points(service.root / "cases/merged/constant/polyMesh/points")
     assert np.allclose(points.min(axis=0), (-0.01, -0.01, -0.01))
     assert np.allclose(points.max(axis=0), (0.03, 0.01, 0.01))
+
+
+# --- M1c: the inlet area measured from the mesh, the weights over one revolution -------------
+
+def test_a_flow_rate_inlet_gets_its_area_from_the_mesh_and_runs(tmp_path: Path) -> None:
+    """The rotating box's inlet is its x = -1 face, 2 m x 2 m."""
+    root = tmp_path / "project"
+    data = configs.rotating(mesh_file("fluent_rotating.msh", tmp_path / "inputs"))
+    data["physics"]["inlets"] = {"inlet": {"kind": "FLOW_RATE", "volumetric_flow_rate": 20.0}}
+    result = import_run(root, data)
+
+    assert result.succeeded, (result.message, [i.message for i in result.issues])
+    report = json.loads((root / "reports/case_setup.json").read_text("utf-8"))
+    assert report["inlet_area_m2"]["inlet"] == pytest.approx(4.0)
+    assert report["inlets"]["inlet"]["speed"] == pytest.approx(5.0)
+    assert "flowRateInletVelocity" in (root / CASE_DIR / "0/U").read_text("utf-8")
+    imported = json.loads((root / IMPORT_REPORT).read_text("utf-8"))
+    assert imported["patch_area_m2"]["inlet"] == pytest.approx(4.0)
+    log = solve(root / CASE_DIR)
+    assert len(re.findall(r"^Time = ", log, re.M)) == 10 and log.rstrip().endswith("End")
+
+
+@pytest.mark.skipif(shutil.which("moveDynamicMesh") is None, reason="moveDynamicMesh")
+@pytest.mark.parametrize("name", ["rotating_41.msh", "fluent_rotating.msh"])
+def test_the_weights_over_one_revolution(tmp_path: Path, name: str) -> None:
+    service = MachineService(tmp_path / "project")
+    path = service.store_mesh_file(name, (M1 / name).read_bytes())
+    service.save({k: v for k, v in configs.rotating(path).items() if k != "physics"})
+    config = service.saved_config()
+    assert config is not None
+    assert service.pipeline.run_sync(service.root, config).succeeded
+    at_rest = json.loads((service.root / "reports/mesh_quality_report.json").read_text("utf-8"))
+    started = time.monotonic()
+    result = service.check_ami_revolution()
+    took = time.monotonic() - started
+
+    assert result.done and result.steps == 36 and result.failed_steps == 0, result.issues
+    (pair,) = result.weights
+    print(f"\n{name}: at rest {at_rest['ami_weights']}, over one revolution "
+          f"{pair.minimum:.6g}-{pair.maximum:.6g}, {took:.1f} s")
+    out = pair.minimum < 0.95 or pair.maximum > 1.05
+    assert ("AMI_WEIGHTS_OUT_OF_RANGE" in {i.code for i in result.issues}) == out
+    assert not (service.root / "cases/ami_revolution").exists()  # its VTK files too
+    assert took < 60

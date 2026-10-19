@@ -98,6 +98,34 @@ def _faces_box(folder: Path, patch: Patch) -> tuple[Point, Point] | None:
     return (low[0], low[1], low[2]), (high[0], high[1], high[2])
 
 
+def face_area(points: np.ndarray, face: np.ndarray) -> float:
+    """The magnitude of a face's area vector, as OpenFOAM's magSf: triangles
+    from each edge to the mean of the face's points, their area vectors summed."""
+    corners = points[face]
+    centre = corners.mean(axis=0)
+    following = np.roll(corners, -1, axis=0)
+    return float(np.linalg.norm(np.cross(corners - centre, following - centre).sum(axis=0)) / 2)
+
+
+def patch_areas(folder: Path, names: Sequence[str]) -> dict[str, float]:
+    """The area of each named patch in the mesh's units (m^2 for a converted and
+    scaled mesh): the sum of its face areas, "measured from the mesh". A patch
+    the mesh lacks, or one with no faces, is left out."""
+    poly = poly_mesh_dir(folder)
+    try:
+        patches = {p.name: p for p in read_boundary(poly / "boundary")}
+        wanted = [patches[n] for n in names if n in patches and patches[n].n_faces]
+        if not wanted:
+            return {}
+        points = read_points(poly / "points")
+        faces = read_faces(poly / "faces")
+    except (FoamReadError, OSError):
+        return {}
+    return {p.name: sum(face_area(points, f)
+                        for f in faces[p.start_face:p.start_face + p.n_faces])
+            for p in wanted}
+
+
 def _rounded(point: Point) -> str:
     return "(" + " ".join(f"{v:.6g}" for v in point) + ")"
 

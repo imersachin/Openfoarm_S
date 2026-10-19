@@ -3,8 +3,8 @@
     validate (the file and the configuration, before any OpenFOAM command)
     -> import: re-save (binary Gmsh), convert at scale 1, transformPoints to
        metres, the checks on what the converter wrote (cases/imported/)
-    -> assemble: copy, createPatch (AMI pairs, renamed patches), foamDictionary
-       (patch types) (cases/merged/)
+    -> assemble: copy, createPatch (renamed patches), foamDictionary (AMI
+       pairs under their own names, patch types) (cases/merged/)
     -> checkMesh, AMI weights -> mesh validation -> case setup (with physics)
 
 The same run lock, status file, run record, artifact manifest, environment
@@ -46,12 +46,12 @@ from machines.msh_import.cases import (
     MERGED_CASE,
     SCRATCH_CASE,
     ImportCases,
-    ami_name,
     convert_steps,
     converter,
     import_cases,
     needs_resave,
     scale_step,
+    used_names,
 )
 from machines.msh_import.checks import (
     check_baffles,
@@ -59,6 +59,7 @@ from machines.msh_import.checks import (
     check_zones,
     mesh_cells,
     mesh_zone_names,
+    patch_areas,
     zone_radius,
 )
 from machines.msh_import.detect import MeshFileInfo
@@ -98,6 +99,8 @@ from visualization.foam_reader import FoamReadError, read_points
 
 IMPORT = "machine_import_mesh"
 IMPORT_REPORT = "reports/mesh_import.json"
+# postProcess AMIWeights reads the mesh as converted: the rotor not turned.
+AT_REST = "at rest (0 deg)"
 SCRATCH_RECORD = "scratch.json"  # in cases/imported_scratch/
 PROMOTE_LOG = "00_promote.log"
 CONVERTERS = ("fluent3DMeshToFoam", "gmshToFoam")
@@ -182,6 +185,7 @@ class ImportRun:
             files = [*_mesh_files(root, IMPORTED_CASE),
                      *(merged / r for r in sorted(plan.cases.merged))]
             return {**hash_files(root, files), "retype": sha256_json(plan.cases.retype),
+                    "ami": sha256_json(plan.cases.ami),
                     "tool": self._tool(ASSEMBLE_EXECUTABLES)}
         merged = root / "cases" / MERGED_CASE
         files = [*_mesh_files(root, MERGED_CASE), merged / "system/meshQualityDict",
@@ -256,6 +260,11 @@ class ImportRun:
             run.case_setup = _MESH_NOT_READY
         else:
             run.status(CASE_SETUP)
+            # Again with the areas measured from the mesh (a flow-rate inlet).
+            known = {(i.code, i.message) for i in physics}
+            physics = check_physics(config, (), pipe.case_thresholds,
+                                    mesh_areas=self.areas())
+            run.issues.extend(i for i in physics if (i.code, i.message) not in known)
             stopping = sorted({i.code for i in physics if i.is_stopping})
             if stopping:
                 run.case_setup = StageResult(
@@ -269,6 +278,11 @@ class ImportRun:
         return pipe._result(run, succeeded, message,
                             RunState.SUCCEEDED if succeeded else RunState.FAILED,
                             report=report_path)
+
+    def areas(self) -> dict[str, float]:
+        """Every configured patch's area in m^2, measured from the assembled mesh."""
+        return patch_areas(self.run.root / "cases" / MERGED_CASE,
+                           [p.name for p in self.run.config.patches])
 
     # --- preflight -----------------------------------------------------------------------
 
@@ -402,9 +416,13 @@ class ImportRun:
             "units": self.mesh.source_units.value, "scale_to_metres": plan.factor,
             "cells": mesh_cells(case), "declared_cells": plan.info.declared_cells,
             "patches": {p.name: {"type": p.patch_type, "faces": p.n_faces} for p in patches},
+            # Original name -> name used in the mesh (an AMI patch keeps its own).
+            "names_used": used_names(run.config),
             "cell_zones": sorted(mesh_zone_names(case)),
             "zone_radius_m": radii, "zone_radius_note": "computed from the zone: the largest "
             "distance of its points from the rotation axis",
+            "patch_area_m2": self.areas(), "patch_area_note": "measured from the mesh: the "
+            "sum of the patch's face areas, after renaming and scaling",
             "logs": f"logs/{IMPORTED_CASE}/",
         }
         path = run.root / IMPORT_REPORT
@@ -417,8 +435,7 @@ class ImportRun:
         return MeshExpectation(
             name="imported", patches=plan.cases.expected,
             cell_zones=tuple(z.cell_zone for z in self.mesh.zones),
-            ami_pairs=tuple((ami_name(p.first), ami_name(p.second))
-                            for p in self.mesh.ami_pairs))
+            ami_pairs=tuple((p.first, p.second) for p in self.mesh.ami_pairs))
 
     def _validate_mesh(self, plan: _Plan) -> tuple[Path, bool, str]:
         run = self.run
@@ -436,7 +453,8 @@ class ImportRun:
         extra += check_ami_pairing(merged)
         if expected.ami_pairs:
             extra += check_ami_weights(ami_text, expected.ami_pairs,
-                                       self.pipe.thresholds.ami_weights_range)
+                                       self.pipe.thresholds.imported_ami_weights_range,
+                                       when=AT_REST)
         extra += check_baffles(check_text)
         if metrics.failed_checks and report.validity is not ValidityStatus.INVALID:
             # Never reached with the current validator; kept explicit (owner review).
@@ -451,6 +469,8 @@ class ImportRun:
         payload["config_sha256"] = sha256_json(run.config.model_dump(mode="json"))
         payload["regions"] = {"expected": None, "found": region_count(check_text)}
         payload["ami_weights"] = [asdict(w) for w in parse_ami_weights(ami_text)]
+        payload["ami_weights_when"] = AT_REST
+        payload["ami_weights_range"] = list(self.pipe.thresholds.imported_ami_weights_range)
         payload["imported"] = {"report": IMPORT_REPORT, "converter": converter(plan.info)}
         path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         run.issues.extend(report.issues)

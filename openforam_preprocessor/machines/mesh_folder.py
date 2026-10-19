@@ -181,8 +181,9 @@ class AmiWeights:
     maximum: float
 
 
-def parse_ami_weights(text: str) -> tuple[AmiWeights, ...]:
-    """The first sum(weights) report of every AMI pair in a log."""
+def parse_ami_weights(text: str, every: bool = False) -> tuple[AmiWeights, ...]:
+    """The first sum(weights) report of every AMI pair in a log; with `every`,
+    the range over all its reports (each step of a turning mesh)."""
     found: dict[tuple[str, str], list[float]] = {}
     current: tuple[str, str] | None = None
     for line in text.splitlines():
@@ -190,7 +191,8 @@ def parse_ami_weights(text: str) -> tuple[AmiWeights, ...]:
         if pair:
             current = (pair[1], pair[2])
             if current in found:
-                current = None  # a later rebuild of a pair already read
+                if not every:
+                    current = None  # a later rebuild of a pair already read
             else:
                 found[current] = []
             continue
@@ -201,8 +203,13 @@ def parse_ami_weights(text: str) -> tuple[AmiWeights, ...]:
 
 
 def check_ami_weights(ami_log: str, pairs: Sequence[tuple[str, str]],
-                      ami_range: tuple[float, float] = AMI_WEIGHTS_RANGE) -> tuple[Issue, ...]:
-    weights = {(w.source, w.target): w for w in parse_ami_weights(ami_log)}
+                      ami_range: tuple[float, float] = AMI_WEIGHTS_RANGE,
+                      when: str | None = None, every: bool = False) -> tuple[Issue, ...]:
+    """`when`: the rotor position the weights are for (shown with them), e.g.
+    "at rest (0 deg)". `every`: as parse_ami_weights."""
+    weights = {(w.source, w.target): w for w in parse_ami_weights(ami_log, every)}
+    at = f" {when}" if when else ""
+    where = {"when": when} if when else {}
     low, high = ami_range
     issues: list[Issue] = []
     for first, second in pairs:
@@ -210,16 +217,16 @@ def check_ami_weights(ami_log: str, pairs: Sequence[tuple[str, str]],
         if w is None:
             issues.append(_issue(
                 IssueSeverity.WARNING, "AMI_WEIGHTS_UNKNOWN",
-                f"No AMI weights were reported for {first} / {second}.",
-                "Inspect the postProcess log.", pair=[first, second]))
+                f"No AMI weights were reported for {first} / {second}{at}.",
+                "Inspect the postProcess log.", pair=[first, second], **where))
         elif w.minimum < low or w.maximum > high:
             issues.append(_issue(
                 IssueSeverity.WARNING, "AMI_WEIGHTS_OUT_OF_RANGE",
-                f"AMI sum(weights) of {first} / {second} spans "
+                f"AMI sum(weights) of {first} / {second}{at} spans "
                 f"{w.minimum:.3g}-{w.maximum:.3g}, outside {low:g}-{high:g}.",
                 "Make the two sides of the interface similarly fine, and check no body "
                 "crosses it.", pair=[first, second],
-                minimum=w.minimum, maximum=w.maximum, range=[low, high]))
+                minimum=w.minimum, maximum=w.maximum, range=[low, high], **where))
     return tuple(issues)
 
 

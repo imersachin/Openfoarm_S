@@ -6,9 +6,11 @@ the converters write a polyMesh with the file's patches (Fluent walls as
 wall, everything else patch) and cell zones, an owner header with nCells,
 points spanning the file's box; transformPoints scales the points;
 createPatch moves a patch's faces to a new patch (and, like v2512, leaves a
-patch alone when the new name is its own); foamDictionary sets a type;
-checkMesh reports "Mesh OK" or failed checks (with exit 0, as the real one);
-postProcess reports AMI weights. The re-save script copies the file.
+patch alone when the new name is its own); foamDictionary sets a type or adds
+a neighbourPatch (other entries it adds are not kept); checkMesh reports
+"Mesh OK" or failed checks (with exit 0, as the real one); postProcess reports
+AMI weights at rest and moveDynamicMesh over the steps of its controlDict, for
+the cyclicAMI pairs of the boundary file. The re-save script copies the file.
 Switches simulate failures.
 """
 
@@ -109,7 +111,10 @@ class FakeMshRunner(OpenFOAMRunner):
     zones: override the converter's cell zones {name: cells}.
     failed_checks: checkMesh reports this many failed checks (exit 0).
     baffles: checkMesh reports this many baffle faces.
-    weights: (min, max) AMI sum(weights)."""
+    weights: (min, max) AMI sum(weights) at rest.
+    turning: (min, max) AMI sum(weights) moveDynamicMesh reports half way round
+        (`weights` at the other steps).
+    turned_steps: steps moveDynamicMesh does (default: its controlDict's)."""
 
     def __init__(self, *, fail: str | None = None,
                  outcome: Mapping[str, RunStatus] | None = None,
@@ -117,6 +122,8 @@ class FakeMshRunner(OpenFOAMRunner):
                  drop_patches: Sequence[str] = (), zones: Mapping[str, int] | None = None,
                  failed_checks: int = 0, baffles: int = 0,
                  weights: tuple[float, float] = (0.98, 1.03),
+                 turning: tuple[float, float] = (0.97, 1.04),
+                 turned_steps: int | None = None,
                  cancel_after: tuple[str, asyncio.Event] | None = None) -> None:
         super().__init__()
         self.calls: list[tuple[str, str]] = []
@@ -125,6 +132,7 @@ class FakeMshRunner(OpenFOAMRunner):
         self.cells, self.faces, self.default_faces = cells, faces, default_faces
         self.drop, self.zones = set(drop_patches), zones
         self.failed_checks, self.baffles, self.weights = failed_checks, baffles, weights
+        self.turning, self.turned_steps = turning, turned_steps
         self.cancel_after = cancel_after
 
     def names(self) -> list[str]:
@@ -219,10 +227,15 @@ class FakeMshRunner(OpenFOAMRunner):
 
     def _foamDictionary(self, argv: Sequence[str], case: Path) -> str:  # noqa: N802
         poly = self._poly(case)
-        entry, value = argv[argv.index("-entry") + 1], argv[argv.index("-set") + 1]
-        patch = entry.split("/")[1]
-        write_boundary(poly, [(n, value if n == patch else t, f)
-                              for n, t, f in read_boundary(poly)], read_neighbours(poly))
+        entry = argv[argv.index("-entry") + 1]
+        action = "-set" if "-set" in argv else "-add"
+        value = argv[argv.index(action) + 1]
+        _, patch, key = entry.split("/")
+        neighbours = read_neighbours(poly)
+        if key == "neighbourPatch":
+            neighbours[patch] = value
+        write_boundary(poly, [(n, value if n == patch and key == "type" else t, f)
+                              for n, t, f in read_boundary(poly)], neighbours)
         return ""
 
     def _checkMesh(self, argv: Sequence[str], case: Path) -> str:  # noqa: N802
@@ -236,12 +249,31 @@ class FakeMshRunner(OpenFOAMRunner):
                 + "Checking geometry...\n    Mesh non-orthogonality Max: 40.0 average: 5.0\n"
                 + end)
 
+    def _pairs(self, case: Path) -> list[tuple[str, str]]:
+        poly = self._poly(case)
+        kinds = {n: t for n, t, _ in read_boundary(poly)}
+        listed = [(s, t) for s, t in read_neighbours(poly).items()
+                  if kinds.get(s) == "cyclicAMI"]
+        return [(s, t) for k, (s, t) in enumerate(listed) if (t, s) not in listed[:k]]
+
     def _postProcess(self, argv: Sequence[str], case: Path) -> str:  # noqa: N802
-        low, high = self.weights
-        listed = re.findall(r"name (\S+);\s*patchInfo\s*\{\s*type\s+cyclicAMI;.*?"
-                            r"neighbourPatch\s+(\S+);",
-                            (case / "system/createPatchDict").read_text("utf-8"), re.S)
-        pairs = [(s, t) for k, (s, t) in enumerate(listed) if (t, s) not in listed[:k]]
+        return self._weights(self._pairs(case), *self.weights)
+
+    def _moveDynamicMesh(self, argv: Sequence[str], case: Path) -> str:  # noqa: N802
+        control = (case / "system/controlDict").read_text("utf-8")
+        found = re.search(r"deltaT\s+(\S+);", control)
+        delta = float(found[1]) if found else 1.0
+        steps = self.turned_steps if self.turned_steps is not None else round(1 / delta)
+        (case / "postProcessing" / "checkAMI").mkdir(parents=True, exist_ok=True)
+        pairs = self._pairs(case)
+        # As the real log: the pair rebuilt at each step; the `turning` sums only
+        # half way round, so a reader of the first step alone misses them.
+        return "".join(f"Time = {(i + 1) * delta:g}\nMesh OK.\n" + self._weights(
+            pairs, *(self.turning if i == steps // 2 else self.weights))
+            for i in range(steps)) + "End\n"
+
+    @staticmethod
+    def _weights(pairs: list[tuple[str, str]], low: float, high: float) -> str:
         return "".join(
             f"AMI: Creating AMI for source:{s} and target:{t}\n"
             f"AMI: Patch source sum(weights) min:{low} max:{high} average:1\n"

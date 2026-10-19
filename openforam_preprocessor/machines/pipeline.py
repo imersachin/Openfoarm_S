@@ -696,6 +696,11 @@ def _write_case_report(run: _Run, setup: CaseSetup) -> None:
         "time": {**asdict(time), "estimates": "courant_estimate, smallest_cell and "
                  "reference_speed are heuristic, not the solver's values"},
     }
+    if run.config.imported_mesh is not None:  # M1-MSH: a flow-rate inlet's area
+        payload["inlet_area_m2"] = {name: inlet.flow_rate / inlet.speed
+                                    for name, inlet in setup.inlets.items()
+                                    if inlet.flow_rate is not None and inlet.speed}
+        payload["inlet_area_note"] = "measured from the mesh: the sum of the face areas"
     path = run.root / CASE_SETUP_REPORT
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

@@ -189,9 +189,9 @@ def test_every_mesh_patch_needs_a_type(rotating: Data) -> None:
      "PATCH_SOURCE_UNKNOWN"),
     (lambda d: d["patches"].append(stl_configs.patch("again", "WALL", "MESH_PATCH", "rotor")),
      "PATCH_SOURCE_DUPLICATE"),
-    (lambda d: d["patches"].__setitem__(0, stl_configs.patch("inlet_ami", "INLET",
+    (lambda d: d["patches"].__setitem__(0, stl_configs.patch("ami_stat", "INLET",
                                                              "MESH_PATCH", "inlet")),
-     "RESERVED_PATCH_NAME"),
+     "RESERVED_PATCH_NAME"),  # a rename onto another patch of the mesh
     (lambda d: d["patches"].__setitem__(1, stl_configs.patch("outlet", "WALL",
                                                              "MESH_PATCH", "outlet")),
      "NO_OUTLET"),

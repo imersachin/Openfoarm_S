@@ -110,6 +110,9 @@ class MachineThresholds:
     # AMI sum(weights) outside this range is a WARNING after meshing (section 18,
     # decision 4): mesh-consistency flags from G0, not accuracy limits.
     ami_weights_range: tuple[float, float] = (0.85, 1.5)
+    # An imported mesh's pairs (owner, M1c): the range a matched interface
+    # gives; STL meshes keep the range above until their sums are measured.
+    imported_ami_weights_range: tuple[float, float] = (0.95, 1.05)
     # Joint regions must coincide (K2; provisional, unverified on real CAD).
     joints: JointLimits = field(default_factory=JointLimits)
     # The VAWT checks run for a VAWT project that converts to the VAWT model.

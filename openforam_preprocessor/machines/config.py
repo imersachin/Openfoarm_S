@@ -351,8 +351,8 @@ class MeshZone(BaseModel):
 
 
 class MeshAmiPair(BaseModel):
-    """Two patches of the imported mesh made one cyclicAMI pair (createPatch),
-    named <patch>_ami (machines.msh_import.ami_name). Confirmed by the user,
+    """Two patches of the imported mesh made one cyclicAMI pair under their own
+    names (foamDictionary; machines.msh_import.cases). Confirmed by the user,
     never made up."""
 
     model_config = _STRICT

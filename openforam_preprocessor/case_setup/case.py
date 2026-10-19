@@ -27,7 +27,7 @@ from case_setup.fields import fields
 from case_setup.setup import CaseSetup, resolve
 from machines.config import MachineProjectConfig
 from machines.domains import SurfaceInfo
-from machines.msh_import.checks import zone_radius
+from machines.msh_import.checks import patch_areas, zone_radius
 from openfoam.dictionary import OpenFOAMFileWriter
 from visualization.foam_reader import read_boundary
 
@@ -47,10 +47,13 @@ def mesh_boundary(poly_mesh: Path) -> tuple[tuple[str, str], ...]:
 def render(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
            poly_mesh: Path) -> tuple[CaseSetup, dict[str, str]]:
     """The resolved setup and every generated file (relative path -> text).
-    An imported mesh's zone radius is computed from the zone in this mesh."""
+    An imported mesh's zone radius is computed from the zone in this mesh, and
+    its patch areas measured from it."""
     mesh = config.imported_mesh
     radius = zone_radius(poly_mesh, mesh.zones[0]) if mesh is not None and mesh.zones else None
-    setup = resolve(config, surfaces, mesh_boundary(poly_mesh), mesh_radius=radius)
+    areas = patch_areas(poly_mesh, [p.name for p in config.patches]) if mesh else None
+    setup = resolve(config, surfaces, mesh_boundary(poly_mesh), mesh_radius=radius,
+                    mesh_areas=areas)
     return setup, {**fields(setup), **dictionaries(setup)}
 
 

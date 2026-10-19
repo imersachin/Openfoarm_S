@@ -7,7 +7,7 @@ configuration, never constants.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -26,7 +26,7 @@ from case_setup.setup import (
     resolve,
 )
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage, has_stopping_issue
-from machines.config import MachineProjectConfig
+from machines.config import MachineProjectConfig, SourceKind
 from machines.domains import SurfaceInfo
 
 
@@ -89,8 +89,17 @@ def _rotation_issues(config: MachineProjectConfig) -> list[Issue]:
     return found
 
 
-def _boundary_issues(config: MachineProjectConfig,
-                     surfaces: Sequence[SurfaceInfo]) -> list[Issue]:
+def area_after_import(config: MachineProjectConfig, patch: str,
+                      mesh_areas: Mapping[str, float] | None) -> bool:
+    """A patch of an imported mesh whose area is measured once it is imported
+    (mesh_areas None: not imported yet)."""
+    source = next((p.source for p in config.patches if p.name == patch), None)
+    return (mesh_areas is None and source is not None
+            and source.kind is SourceKind.MESH_PATCH)
+
+
+def _boundary_issues(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
+                     mesh_areas: Mapping[str, float] | None) -> list[Issue]:
     physics = config.physics
     assert physics is not None
     kinds = configured_kinds(config)
@@ -120,8 +129,22 @@ def _boundary_issues(config: MachineProjectConfig,
             found.append(_blocking("INLET_VALUE_ZERO", f"Inlet {name} has no inflow (zero "
                                    "velocity or flow rate).", "Give a non-zero inflow, or "
                                    "make the patch a WALL.", field=f"physics.inlets.{name}"))
-        if name in inlets and isinstance(inlet, FlowRateInlet) and not inlet_area(
-                config, surfaces, name):
+        if name not in inlets or not isinstance(inlet, FlowRateInlet) or inlet_area(
+                config, surfaces, name, mesh_areas):
+            continue
+        if area_after_import(config, name, mesh_areas):
+            found.append(_issue(
+                IssueSeverity.INFO, "INLET_AREA_AFTER_IMPORT", f"Inlet {name}: the flow rate "
+                "needs the inlet's area, which is measured from the mesh when it is imported.",
+                "Nothing to do: the measured area is in the import report and the case "
+                "setup report.", field=f"physics.inlets.{name}"))
+        elif config.imported_mesh is not None:
+            found.append(_blocking("INLET_AREA_UNKNOWN", f"Inlet {name}: the flow rate needs "
+                                   "the inlet's area, which could not be measured from the "
+                                   "mesh (the patch has no faces in it).",
+                                   "Check the patch in the mesh file, or use a velocity "
+                                   "inlet.", field=f"physics.inlets.{name}"))
+        else:
             found.append(_blocking("INLET_AREA_UNKNOWN", f"Inlet {name}: the flow rate needs "
                                    "the inlet's area, which could not be measured.",
                                    "Use a velocity inlet, or check the inlet's surface.",
@@ -135,13 +158,16 @@ def _boundary_issues(config: MachineProjectConfig,
 
 
 def check_physics(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
-                  thresholds: CaseSetupThresholds | None = None) -> tuple[Issue, ...]:
-    """Every finding about the physics section. Empty when it is absent."""
+                  thresholds: CaseSetupThresholds | None = None, *,
+                  mesh_areas: Mapping[str, float] | None = None) -> tuple[Issue, ...]:
+    """Every finding about the physics section. Empty when it is absent.
+    `mesh_areas`: an imported mesh's patch areas, measured from the mesh; None
+    before the import, when a flow-rate inlet's area is not known yet (INFO)."""
     if config.physics is None:
         return ()
     thresholds = thresholds or CaseSetupThresholds()
     controls = config.physics.time
-    found = [*_rotation_issues(config), *_boundary_issues(config, surfaces)]
+    found = [*_rotation_issues(config), *_boundary_issues(config, surfaces, mesh_areas)]
     if controls.degrees_per_step > thresholds.max_degrees_per_step:
         found.append(_issue(
             IssueSeverity.WARNING, "ROTATION_STEP_LARGE",
@@ -151,8 +177,16 @@ def check_physics(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
             field="physics.time.degrees_per_step"))
     if has_stopping_issue(found):
         return tuple(found)
+    # An area measured only after the import gets a placeholder here: the setup
+    # is resolved to check the other settings, and an imported mesh has no
+    # Courant estimate, so nothing depends on the value.
     try:
-        setup = resolve(config, surfaces)
+        if config.imported_mesh is None:
+            setup = resolve(config, surfaces)
+        else:
+            setup = resolve(config, surfaces, mesh_areas={
+                **{n: 1.0 for n in config.physics.inlets
+                   if area_after_import(config, n, mesh_areas)}, **(mesh_areas or {})})
     except CaseSetupError as error:
         return (*found, _blocking("CASE_SETUP_UNRESOLVED", str(error),
                                   "Complete the physics settings; see the message."))

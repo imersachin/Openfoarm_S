@@ -19,7 +19,6 @@ from typing import Any
 
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage
 from machines.config import MachineProjectConfig, MachineType, PatchType, SourceKind
-from machines.msh_import.cases import AMI_SUFFIX, ami_name
 from machines.msh_import.checks import no_cell_zone
 from machines.msh_import.detect import MeshFileInfo, file_sha256, inspect_mesh_file
 
@@ -143,7 +142,6 @@ def _patch_issues(config: MachineProjectConfig, info: MeshFileInfo) -> list[Issu
     found: list[Issue] = []
     known = set(info.patches)
     interfaces = {n for p in mesh.ami_pairs for n in (p.first, p.second)}
-    generated = {ami_name(n) for n in interfaces}
     for i, patch in enumerate(config.patches):
         field = f"patches.{i}"
         if patch.source.kind is not SourceKind.MESH_PATCH:
@@ -158,10 +156,11 @@ def _patch_issues(config: MachineProjectConfig, info: MeshFileInfo) -> list[Issu
                 f"'{patch.source.ref}', which the file does not have.",
                 "Choose one of: " + (", ".join(info.patches) or "(none)") + ".",
                 field=f"{field}.source", patch=patch.name))
-        if patch.name in generated or patch.name.endswith(AMI_SUFFIX):
+        if patch.name in known and patch.name != patch.source.ref:
+            # A rename onto another patch of the mesh (an AMI patch keeps its name).
             found.append(_blocking(
-                "RESERVED_PATCH_NAME", f"'{patch.name}' ({field}.name) ends in '{AMI_SUFFIX}', "
-                "which the AMI pairs' patches use.", "Choose another name.",
+                "RESERVED_PATCH_NAME", f"'{patch.name}' ({field}.name) is the name of another "
+                "patch of the mesh.", "Choose another name.",
                 field=f"{field}.name", name=patch.name))
     sources = Counter(p.source.ref for p in config.patches
                       if p.source.kind is SourceKind.MESH_PATCH)
@@ -224,7 +223,8 @@ def check_imported_mesh(config: MachineProjectConfig,
     if config.machine in NOT_FOR_IMPORT:
         found.append(_blocking(
             "MSH_MACHINE_NOT_SUPPORTED", f"A {config.machine.value} project cannot use an "
-            "imported mesh.", "Use the Custom machine for an imported mesh.", field="machine"))
+            "imported mesh.", "To use an imported VAWT mesh, create a Custom project.",
+            field="machine"))
     info, digest = read_mesh_file(mesh.source_path)
     found.extend(info.issues)
     if info.format is None or any(i.is_stopping for i in info.issues):
