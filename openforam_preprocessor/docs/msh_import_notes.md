@@ -502,6 +502,8 @@ the migrated version in the same test). `MACHINE_SCHEMA_VERSION = 3`.
   `moveDynamicMesh` prints none. -checkAMI also writes VTK files of the AMI
   patches (596 KB on the fixture), so it runs on a copy of the assembled mesh
   in `cases/ami_revolution/`, removed afterwards.
+- Labelled "over one revolution (36 x 10 deg)", with the same 0.95-1.05
+  WARNING (owner, M1c).
 - On the M1 rotating fixtures (Gmsh 4.1 and the Fluent file, the same mesh):
   at rest 0.99999-1.0004; over one revolution **0.9946-1.104**, in 0.6-0.7 s.
   So the at-rest check passes a mesh whose interface goes outside 0.95-1.05
@@ -520,3 +522,138 @@ the migrated version in the same test). `MACHINE_SCHEMA_VERSION = 3`.
 
 Still not offered for an imported mesh; `MSH_MACHINE_NOT_SUPPORTED` now says
 "To use an imported VAWT mesh, create a Custom project."
+
+---
+
+## 11. M1c: the UI
+
+`tests/unit/ui_machines/test_m1c_app.py` (headless, fake OpenFOAM),
+`tests/integration/test_m1c_ui_real.py` (v2512).
+
+- **Mesh source** (Project): HAWT, Francis and Custom offer "Build from STL /
+  Import .msh". The choice is the draft's `imported_mesh`; no new field. An
+  imported mesh shows Project, **Imported mesh**, then the profile's other
+  sections without Rotor / Water passage / Rotating zone / Domain /
+  Refinement / Boundary layers (`MachineProfile.for_mesh`). Switching a
+  filled draft asks first (it removes the other source's settings and the
+  patch table; Revert brings them back until Save). VAWT: "To use an imported
+  VAWT mesh, create a Custom project."
+- **Imported mesh**: upload (up to 200 MB) or a path inside WSL; the detected
+  format, version, ASCII or binary, converter (and the gmsh re-save), the
+  OpenFOAM version, patches with their Fluent types, cell zones, declared
+  cells; the file's own findings, also while the draft is incomplete; the
+  bounding box (read from the file, or "Convert to show the box" -> "from the
+  converted mesh") with its size in metres for every unit, and the units
+  chosen against it; a changed file is found ("Use the file as it is now");
+  the rotating zone (name, the cell zone from the file, axis, a point on the
+  axis; radius "computed from the zone" after the import); the AMI pair
+  (suggestions with each side's faces, area and centre, used only by their
+  button, or chosen by hand); and the names in the mesh (original name ->
+  name used).
+- **Patches**: "Add missing patches" lists the mesh's patches except the AMI
+  pair, with types suggested from the name or the Fluent zone type, applied
+  only by "Use the suggested types".
+- **Operating point (Francis), Rotor speed**: the imported zone. A flow-rate
+  inlet before the import is INFO "measured from the mesh when it is
+  imported".
+- **Mesh** results: the import (converter, OpenFOAM version, units and
+  scale, cells, cell zones, zone radius, names used with each patch's area
+  "measured from the mesh"), the quality report, the AMI weights "at rest (0
+  deg)" with the 0.95-1.05 WARNING, and **Check over one revolution (36 x 10
+  deg)** (min/max per pair, steps, failed mesh checks; "an earlier mesh" when
+  the mesh has changed since). **Case setup** results apart: the inlet area
+  "measured from the mesh" and, for a tip-speed ratio, the tip radius used.
+- **Tip radius** (Rotor speed, tip-speed ratio; owner after items 1-3):
+  beside "Tip radius R (m)": "Measured: X m from rotor body <name>" (STL: the
+  zone's rotating bodies) or "from rotor patch <name>" (imported: the
+  rotating-wall patches, once converted), set only by "Use measured R". The
+  derived rpm shows "with tip radius R = X m". INFO `TIP_RADIUS_DIFFERS` when
+  the typed R is more than 5 % from the measured one.
+- The 3D setup view has nothing to draw for an imported mesh (INFO); the
+  Mesh view shows the imported mesh after a run.
+- Found while testing: viewing the zone form added an empty zone to the
+  draft (a section must never edit the draft by being shown). The zone is
+  now added when a file is chosen, and a test visits every screen and checks
+  that the draft is unchanged.
+
+### 11.1 Fixes after the M1c testing review (PASS WITH FINDINGS; no HIGH)
+
+- **MEDIUM: a check over one revolution showed as current after the zone's
+  axis, origin or cell zone changed** (the mesh, and so its hash, stays the
+  same). The check is now keyed on the mesh and the files that turn it
+  (`revolution.check_key`); the Mesh view says "an earlier mesh or rotating
+  zone" otherwise.
+- **LOW: an AMI patch kept its converter's group.** fluent3DMeshToFoam writes
+  a Fluent wall zone with `inGroups 1(wall)`; made cyclicAMI in place it stayed
+  in the wall group (v2512, reproduced). Each side's `inGroups` is removed
+  (`foamDictionary -remove`, exit 0 also without one). Real test with the
+  Fluent rotating file's interface zones relabelled wall.
+- **LOW: the measured tip radius took every rotating wall of the project**;
+  now only the rotating-wall faces on the zone's cells (a rotor of another
+  zone is left out). Read once per version of the mesh files.
+- **LOW: the run kept the INFO "measured when it is imported"** after the area
+  was measured; removed once answered.
+- **Test gaps**: the STL measured radius is checked against the rotor STL's
+  points computed in the test, and "Use measured R" sets it; a HAWT project
+  runs on an imported mesh through the UI.
+
+## 12. Browser checklist (owner, before the merge)
+
+Start the app (`scripts\run_machines_app.cmd`, or inside WSL `bash
+scripts/run_machines_app.sh`) with OpenFOAM v2512. Files:
+`tests/fixtures/msh/m1/` (upload them, or give their path inside WSL).
+Write the result in the last column.
+
+**A. Gmsh 4.1 rotating mesh (`rotating_41.msh`), Custom project**
+
+| # | Do | Expect | Result |
+|---|---|---|---|
+| A1 | New project, Custom. Project: "Use: Import .msh (Fluent or Gmsh)" | Navigation: Project, Imported mesh, Patches, the physics sections, Review, Run, Mesh, Case setup, ...; no Rotating zones, Domain, Refinement or Boundary layers | |
+| A2 | Imported mesh: upload `rotating_41.msh` | GMSH 4.1 (ASCII), gmshToFoam, OpenFOAM v2512; patches ami_rot, ami_stat, inlet, outlet, rotor, y_min, y_max, z_min, z_max; cell zones rotating, stationary | |
+| A3 | The box | "read from the file": min (-1, -1, -1), max (3, 1, 1); the metres row 4 x 2 x 2 | |
+| A4 | Units: metres, Apply | The units finding goes | |
+| A5 | Rotating zone: name rotor, cell zone rotating, axis +x, point (0, 0, 0), Apply | "Zone radius: computed from the zone once the mesh is imported." | |
+| A6 | AMI: "Use ami_stat / ami_rot" | The pair is listed; names table: ami_stat -> ami_stat (AMI) | |
+| A7 | Patches: Add missing patches, Use the suggested types; y/z min/max SLIP, rotor ROTATING_WALL; Apply patches | No AMI patch in the table; inlet INLET, outlet OUTLET | |
+| A8 | Fluid (air); Rotation: tip-speed ratio 5, R 2, U 5, direction Positive; Apply | "Measured: not available yet"; "ω = ... rpm, with tip radius R = 2 m" | |
+| A9 | Save; Run: Start run | The run SUCCEEDED | |
+| A10 | Mesh | "with gmshToFoam on OpenFOAM v2512"; "AMI ami_stat / ami_rot at rest (0 deg): sum(weights) 1-1 (WARNING outside 0.95-1.05)"; names used with patch areas (inlet 4) | |
+| A11 | Mesh: **Check over one revolution (36 x 10 deg)** | **WARNING** "AMI sum(weights) of ami_stat / ami_rot over one revolution (36 x 10 deg) spans 0.995-1.1, outside 0.95-1.05"; the line 0.9946-1.104; 36 of 36 steps, 0 failed; about a second | |
+| A12 | Case setup | SUCCESS; rotation of `rotating` "from the tip-speed ratio with tip radius R = 2 m" | |
+| A13 | Rotation again | "Measured: 0.4031 m from rotor patch rotor" (the fixture's rotor block, y +-0.4, z +-0.05); INFO TIP_RADIUS_DIFFERS for R = 2 m; "Use measured R for rotor (0.4031 m)" sets it and the INFO goes | |
+| A14 | 3D pane | Setup view: "An imported mesh has no setup view"; Mesh view: the imported mesh | |
+
+**B. Two-zone Fluent mesh (`fluent_rotating.msh`), Francis project**
+
+| # | Do | Expect | Result |
+|---|---|---|---|
+| B1 | New project, Francis turbine; Project: Use: Import .msh | No Water passage or Wall cells (y+); Operating point kept | |
+| B2 | Upload `fluent_rotating.msh` | FLUENT (ASCII), fluent3DMeshToFoam, cells declared 3,383; every patch pressure-outlet (as foamMeshToFluent writes them, so no type is suggested from it); cell zones rotating, stationary | |
+| B3 | Units m; zone runner = cell zone rotating, +x, (0, 0, 0); AMI ami_stat / ami_rot; patches as A7 | | |
+| B4 | Fluid (water); Operating point: Q 20 m³/s at inlet, N 100 rpm, direction | Before the run: INFO "measured from the mesh when it is imported", not BLOCKING | |
+| B5 | Save, run | SUCCEEDED; Case setup: "Inlet inlet: area 4 m² (measured from the mesh: the sum of the face areas)"; 0/U has flowRateInletVelocity (case file viewer) | |
+| B6 | Mesh: Check over one revolution | The same WARNING as A11 (the same mesh) | |
+
+**C. One bad file per BLOCKING rule** (Custom project, Import .msh; the
+message shows in Imported mesh as soon as the file is chosen)
+
+| # | File | Expect (BLOCKING) | Result |
+|---|---|---|---|
+| C1 | `bad/empty.msh` | MSH_FILE_EMPTY | |
+| C2 | `bad/not_a_mesh.msh` | MSH_FORMAT_UNKNOWN | |
+| C3 | `box_v1.msh` | MSH_FORMAT_UNSUPPORTED: Gmsh MSH 1 | |
+| C4 | `bad/gmsh_bad_header.msh` | MSH_HEADER_INVALID: "the Gmsh $MeshFormat header is incomplete" | |
+| C5 | `box_22_nogroups.msh` | GMSH_NO_PHYSICAL_GROUPS | |
+| C6 | `bad/gmsh_no_volume.msh` | GMSH_NO_PHYSICAL_VOLUME | |
+| C7 | `bad/gmsh_no_nodes.msh` | MSH_FILE_TRUNCATED: no $Nodes | |
+| C8 | `bad/gmsh_cut_short.msh` | MSH_FILE_UNREADABLE: the file ends early | |
+| C9 | `bad/fluent_2d.msh` | FLUENT_2D | |
+| C10 | `bad/fluent_no_zones.msh` | FLUENT_NO_ZONES | |
+| C11 | `bad/fluent_bad_header.msh` | MSH_HEADER_INVALID: no Fluent dimension or cell count header | |
+| C12 | `rotating_41_noymin.msh` (y_min in no physical group): set up as A3-A7 (no y_min row), save, run | The run stops: GMSH_UNGROUPED_FACES, with the face count and their box (y = -1); no mesh is kept | |
+| C13 | `fluent_box.msh`, zone cell zone fluid-1 | MSH_NO_CELL_ZONE: "the only cell zone of the mesh" | |
+| C14 | After A1-A7: append a line to the file outside the app, reopen Imported mesh | "The file has changed since it was chosen"; MSH_SOURCE_CHANGED in Review; "Use the file as it is now" clears it | |
+| C15 | VAWT project, Project section | "To use an imported VAWT mesh, create a Custom project."; no mesh source choice | |
+
+Not in the browser list: a binary Gmsh file without the gmsh package
+(GMSH_BINARY_NEEDS_GMSH; gmsh is installed here; covered by unit tests).

@@ -228,6 +228,8 @@ class FakeMshRunner(OpenFOAMRunner):
     def _foamDictionary(self, argv: Sequence[str], case: Path) -> str:  # noqa: N802
         poly = self._poly(case)
         entry = argv[argv.index("-entry") + 1]
+        if "-remove" in argv:
+            return ""  # the fake's boundary has no inGroups
         action = "-set" if "-set" in argv else "-add"
         value = argv[argv.index(action) + 1]
         _, patch, key = entry.split("/")

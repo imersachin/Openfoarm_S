@@ -9,7 +9,8 @@ degrees and gave 0.9946-1.104, against 1.000 at rest (docs/msh_import_notes.md).
 
 It runs on a copy of the assembled mesh in cases/ami_revolution/, removed
 afterwards (-checkAMI writes VTK files of the AMI patches there), and reports
-in reports/ami_revolution.json with the hash of the mesh it checked.
+in reports/ami_revolution.json with the hash of what it checked: the mesh and
+the motion (the zone's cell zone, axis and origin; check_key).
 """
 
 from __future__ import annotations
@@ -46,7 +47,7 @@ _FAILED = re.compile(r"^\s*Failed (\d+) mesh checks", re.MULTILINE)
 
 
 def over_revolution(steps: int = STEPS) -> str:
-    return f"over one revolution ({steps} steps of {360 / steps:g} deg)"
+    return f"over one revolution ({steps} x {360 / steps:g} deg)"
 
 
 def mesh_hash(root: Path) -> str:
@@ -54,6 +55,12 @@ def mesh_hash(root: Path) -> str:
     folder = root / "cases" / MERGED_CASE / POLY_MESH
     files = files_under(folder, exclude_dirs=_EXCLUDED) if folder.is_dir() else []
     return sha256_json(hash_files(root, files))
+
+
+def check_key(root: Path, config: MachineProjectConfig, steps: int = STEPS) -> str:
+    """What a check over one revolution is of: the assembled mesh and the files
+    that turn it (a changed axis, origin or cell zone is another check)."""
+    return sha256_json([mesh_hash(root), revolution_files(config, steps)])
 
 
 def revolution_files(config: MachineProjectConfig, steps: int = STEPS) -> dict[str, str]:
@@ -98,6 +105,7 @@ class RevolutionResult:
     mesh_sha256: str
     issues: tuple[Issue, ...] = ()
     log: str | None = None
+    check_sha256: str = ""  # check_key: the mesh and the motion
 
     @property
     def done(self) -> bool:
@@ -168,8 +176,7 @@ async def check_revolution(root: Path, config: MachineProjectConfig, *,
             f"of {steps} steps.", f"Read logs/{REVOLUTION_CASE}/{REVOLUTION_LOG}.",
             failed_steps=failed))
     found = RevolutionResult(parse_ami_weights(text, every=True), done, failed, digest,
-                             tuple(issues),
-                             str(log))
+                             tuple(issues), str(log), check_key(root, config, steps))
     _write_report(root, found, steps, ami_range)
     return found
 
@@ -182,6 +189,7 @@ def _write_report(root: Path, result: RevolutionResult, steps: int,
         "finished_at": datetime.now(UTC).isoformat(),
         "when": over_revolution(steps), "steps": result.steps, "planned_steps": steps,
         "failed_steps": result.failed_steps, "mesh_sha256": result.mesh_sha256,
+        "check_sha256": result.check_sha256,
         "range": list(ami_range), "weights": [asdict(w) for w in result.weights],
         "issues": [i.as_dict() for i in result.issues], "log": result.log,
         "note": "The zone is turned by solid-body rotation without solving the flow "

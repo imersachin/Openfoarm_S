@@ -17,6 +17,8 @@ from typing import Any
 import streamlit as st
 
 from app.components.widgets import GENERATION
+from machines.msh_import.cases import SCRATCH_CASE
+from machines.msh_import.pipeline import SCRATCH_RECORD
 from machines.profiles import MachineProfile, ProfileRegistry, default_registry
 from machines.project_store import LAST_MESHED_PATH, MachineUiSettings
 from machines.service import MachineAnalysis, MachineService
@@ -169,11 +171,15 @@ def analysis(current: MachineProfile) -> MachineAnalysis:
     saved revision, the last mesh or the profile changed (so switching section
     reads no geometry or mesh file)."""
     root = Path(st.session_state[ROOT])
-    try:
-        meshed = (root / LAST_MESHED_PATH).stat().st_mtime_ns
-    except OSError:
-        meshed = 0
-    key = (json.dumps(draft(), sort_keys=True, default=str), revision(), meshed, current.id)
+    stamps = []
+    # The last mesh, and an imported mesh's box conversion (its areas, M1c).
+    for path in (root / LAST_MESHED_PATH, root / "cases" / SCRATCH_CASE / SCRATCH_RECORD):
+        try:
+            stamps.append(path.stat().st_mtime_ns)
+        except OSError:
+            stamps.append(0)
+    key = (json.dumps(draft(), sort_keys=True, default=str), revision(), tuple(stamps),
+           current.id)
     cached = st.session_state.get(ANALYSIS)
     if cached is not None and cached[0] == key:
         result: MachineAnalysis = cached[1]

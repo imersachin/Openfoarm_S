@@ -26,3 +26,4 @@ openforam_preprocessor/tests/fixtures/msh/e0/E1_gmsh/logs/heads/*_bin.head binar
 # hashes), so never converted; the binary Gmsh mesh is bytes.
 openforam_preprocessor/tests/fixtures/msh/m1/*.msh text eol=lf
 openforam_preprocessor/tests/fixtures/msh/m1/*_bin.msh binary
+openforam_preprocessor/tests/fixtures/msh/m1/bad/*.msh text eol=lf

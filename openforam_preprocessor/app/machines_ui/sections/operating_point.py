@@ -9,7 +9,12 @@ import streamlit as st
 from app.components.widgets import get_path
 from app.machines_ui import state
 from app.machines_ui.sections.boundary import default_outlets, patches_of
-from app.machines_ui.sections.common import apply_form, section_header, section_issues
+from app.machines_ui.sections.common import (
+    apply_form,
+    rotating_zones,
+    section_header,
+    section_issues,
+)
 from app.machines_ui.sections.fields import float_field
 from app.machines_ui.sections.rotation import complete_kind, direction_field, omega_text
 from machines.presets.francis import SPECIFIC_SPEED_SOURCE
@@ -30,10 +35,10 @@ def render(ctx: state.Context) -> None:
         st.info("Set the fluid first (Fluid and turbulence; Water for a turbine).")
         return
     inlets, outlets = patches_of(ctx, "INLET"), patches_of(ctx, "OUTLET")
-    zones = [z for z in ctx.draft.get("rotating_zones") or [] if z.get("name")]
+    zones = rotating_zones(ctx.draft)
     if not inlets or not outlets or not zones:
         st.info("Type the inlet and outlet patches (Patch types) and build the water "
-                "passage first.")
+                "passage (or choose the imported mesh's rotating zone) first.")
         return
     runner = zones[0]
     with apply_form("operating_point", on_apply=lambda: default_outlets(ctx, outlets)):

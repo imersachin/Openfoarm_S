@@ -27,12 +27,17 @@ def values_view(report: dict[str, Any]) -> None:
                     f"{rotation.get('axis')} through {rotation.get('origin')}: "
                     f"ω = {rotation.get('omega_rad_s', 0):.6g} rad/s = "
                     f"{rotation.get('rpm', 0):.6g} rpm (signed: positive is right-handed "
-                    "about +axis)")
+                    "about +axis)"
+                    + (f", from the tip-speed ratio with tip radius R = "
+                       f"{rotation['tip_radius_m']:g} m" if "tip_radius_m" in rotation else ""))
     st.markdown(f"**Fluid:** {report.get('fluid')} · **turbulence:** "
                 f"{report.get('turbulence')} · **solver:** {report.get('solver')}")
     inlets = report.get("inlets") or {}
     if inlets:
         st.markdown("**Inlets**")
+        for name, area in (report.get("inlet_area_m2") or {}).items():
+            st.caption(f"Inlet {name}: area {area:.6g} m² "
+                       f"({report.get('inlet_area_note', 'measured from the mesh')})")
         st.json(inlets)
     outlets = report.get("outlets") or {}
     if outlets:

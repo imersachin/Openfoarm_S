@@ -168,6 +168,11 @@ class ImportCases:
                                ("transform", "noOrdering"),
                                ("matchTolerance", AMI_MATCH_TOLERANCE)):
                 steps.append(_set(root, f"merged_ami_{patch}_{key}", patch, key, value))
+            # A converter's group (Fluent "wall": inGroups 1(wall)) would put the
+            # interface in that group; -remove exits 0 without one (v2512, M1c).
+            steps.append(Step(f"merged_ami_{patch}_inGroups", "run", root, (
+                "foamDictionary", "constant/polyMesh/boundary", "-entry",
+                f"entry0/{patch}/inGroups", "-remove")))
         return tuple(steps)
 
     def check_steps(self, ami: bool) -> tuple[Step, ...]:

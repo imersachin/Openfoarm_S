@@ -11,6 +11,11 @@ The configuration model is unchanged. A profile names the MachineType its
 projects are saved as; a profile for a machine the model does not name (a
 Kaplan turbine, say) uses CUSTOM.
 
+Mesh source (M1c): a profile whose machine may use an imported mesh offers
+"build from STL / import .msh". A draft with `imported_mesh` shows the profile
+for_mesh(imported=True): the Imported mesh section after Project, without the
+sections that build a mesh from STL.
+
 Each section owns configuration fields (dotted prefixes, `*` for any one
 segment). A validation finding goes to the present section owning the
 longest prefix of its field; a field no present section owns is shown in
@@ -58,6 +63,7 @@ SECTION_CATALOGUE: dict[str, SectionDefaults] = {
                              ("domain", "rotating_zones", "joints")),
     "domain": SectionDefaults(SectionGroup.SETUP, "Domain", ("domain", "joints", "wake")),
     "zones": SectionDefaults(SectionGroup.SETUP, "Rotating zones", ("rotating_zones",)),
+    "imported_mesh": SectionDefaults(SectionGroup.SETUP, "Imported mesh", ("imported_mesh",)),
     "patches": SectionDefaults(SectionGroup.SETUP, "Patches", ("patches",)),
     "refinement": SectionDefaults(SectionGroup.SETUP, "Refinement", (
         "bodies.*.refinement", "domain.parts.*.refinement",
@@ -82,6 +88,13 @@ SECTION_CATALOGUE: dict[str, SectionDefaults] = {
     "logs": SectionDefaults(SectionGroup.TOOLS, "Logs"),
 }
 GROUP_ORDER = tuple(SectionGroup)
+# The sections that build a mesh from STL, left out for an imported mesh.
+STL_SECTIONS = frozenset({"bodies", "parts", "zones", "domain", "refinement", "layers"})
+# Machines whose workflow needs its own geometry (as MSH_MACHINE_NOT_SUPPORTED).
+NO_IMPORT = frozenset({MachineType.VAWT, MachineType.VAWT_POLE})
+IMPORTED_MESH_HELP = ("A Fluent or Gmsh .msh file meshed elsewhere: the file, its units, "
+                      "the rotating cell zone and the AMI pair. Patch types are set in the "
+                      "patch table.")
 
 
 class PresetKind(StrEnum):
@@ -173,6 +186,21 @@ class MachineProfile(BaseModel):
 
     def term(self, key: str, default: str) -> str:
         return self.terms.get(key, default)
+
+    @property
+    def offers_import(self) -> bool:
+        """Whether its projects may use an imported .msh mesh."""
+        return self.machine not in NO_IMPORT
+
+    def for_mesh(self, imported: bool) -> MachineProfile:
+        """The sections for the draft's mesh source: itself for STL; for an
+        imported mesh, Imported mesh after Project and no STL sections."""
+        if not imported or not self.offers_import:
+            return self
+        kept = [s for s in self.sections if s.key not in STL_SECTIONS]
+        at = next(i for i, s in enumerate(kept) if s.key == "project") + 1
+        mesh = SectionSpec(key="imported_mesh", help=IMPORTED_MESH_HELP)
+        return self.model_copy(update={"sections": (*kept[:at], mesh, *kept[at:])})
 
     def section(self, key: str) -> SectionSpec | None:
         return next((s for s in self.sections if s.key == key), None)

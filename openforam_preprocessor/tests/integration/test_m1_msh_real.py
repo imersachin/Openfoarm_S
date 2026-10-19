@@ -288,3 +288,35 @@ def test_the_weights_over_one_revolution(tmp_path: Path, name: str) -> None:
     assert ("AMI_WEIGHTS_OUT_OF_RANGE" in {i.code for i in result.issues}) == out
     assert not (service.root / "cases/ami_revolution").exists()  # its VTK files too
     assert took < 60
+
+
+def test_a_rotating_mesh_with_an_ungrouped_face_stops_with_its_box(tmp_path: Path) -> None:
+    """The M1c browser checklist's file: y_min in no physical group."""
+    data = configs.rotating(mesh_file("rotating_41_noymin.msh", tmp_path / "inputs"))
+    data["patches"] = [p for p in data["patches"] if p["name"] != "y_min"]
+    result = import_run(tmp_path / "project", data)
+    issue = next(i for i in result.issues if i.code == "GMSH_UNGROUPED_FACES")
+
+    assert not result.succeeded and issue.severity.value == "BLOCKING"
+    assert issue.details["faces"] > 0
+    low, high = issue.details["box"]
+    assert low[1] == pytest.approx(-1) and high[1] == pytest.approx(-1)  # the y = -1 face
+
+
+def test_fluent_wall_zones_paired_as_ami_lose_their_wall_group(tmp_path: Path) -> None:
+    """M1c review: fluent3DMeshToFoam writes wall zones with inGroups 1(wall)."""
+    text = (M1 / "fluent_rotating.msh").read_text("latin-1")
+    for name in ("ami_stat", "ami_rot"):
+        text = re.sub(rf"\(39 \((\d+) pressure-outlet {name}\)", rf"(39 (\1 wall {name})", text)
+    path = tmp_path / "inputs" / "fluent_walls.msh"
+    path.parent.mkdir()
+    path.write_text(text, encoding="latin-1")
+    result = import_run(tmp_path / "project", {
+        k: v for k, v in configs.rotating(path).items() if k != "physics"})
+
+    assert result.succeeded, (result.message, [i.message for i in result.issues])
+    imported = (tmp_path / "project/cases/imported/constant/polyMesh/boundary").read_text()
+    assert re.search(r"ami_stat\s*\{[^}]*inGroups", imported)  # as the converter wrote it
+    merged = (tmp_path / "project/cases/merged/constant/polyMesh/boundary").read_text()
+    side = re.search(r"ami_stat\s*\{([^}]*)\}", merged)
+    assert side is not None and "cyclicAMI" in side[1] and "inGroups" not in side[1]

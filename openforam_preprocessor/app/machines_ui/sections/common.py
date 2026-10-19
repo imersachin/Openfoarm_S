@@ -115,6 +115,14 @@ def store_upload(ctx: state.Context, upload: Any, uploaded_key: str,
     return str(stored)
 
 
+def rotating_zones(draft: dict[str, Any]) -> list[dict[str, Any]]:
+    """The named rotating zones (name, axis): the STL zones, or an imported
+    mesh's cell zones (M1c)."""
+    mesh = draft.get("imported_mesh")
+    zones = (mesh.get("zones") if isinstance(mesh, dict) else draft.get("rotating_zones"))
+    return [z for z in zones or [] if isinstance(z, dict) and z.get("name")]
+
+
 def list_at(draft: dict[str, Any], key: str) -> list[Any]:
     """The list under a top-level key of the draft, created when missing."""
     value = draft.get(key)

@@ -1,10 +1,13 @@
 """Patches: one row per patch, name, type and source (a body, a generated domain
 face or an imported region). Inlet and outlet are chosen here. Missing rows
 can be added with a suggested type; a suggestion is applied only by the
-button (decision E5: imported regions are never typed automatically)."""
+button (decision E5: imported regions are never typed automatically). For an
+imported mesh (M1c) the rows are the mesh's own patches, except the AMI pair,
+with types suggested from their names and Fluent zone types."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import streamlit as st
@@ -19,11 +22,29 @@ SUGGESTED = "machines_patch_suggestions"  # {name: type}, kept until applied
 SOURCE_KINDS = [k.value for k in SourceKind]
 
 
+def mesh_candidates(ctx: state.Context, mesh: dict[str, Any],
+                    listed: set[Any]) -> list[dict[str, Any]]:
+    """An imported mesh's patches not listed yet and not in an AMI pair."""
+    path = mesh.get("source_path")
+    if not path:
+        return []
+    inspection = ctx.service.inspect_mesh(Path(str(path)))
+    paired = {n for p in mesh.get("ami_pairs") or [] for n in (p.get("first"), p.get("second"))}
+    return [{"name": n, "kind": "MESH_PATCH", "ref": n,
+             "suggested": inspection.suggested_types[n].value
+             if n in inspection.suggested_types else None}
+            for n in inspection.info.patches if n not in listed and n not in paired]
+
+
 def candidates(ctx: state.Context) -> list[dict[str, Any]]:
     """Patches the draft does not list yet: every body, generated domain face and
-    imported region (joint regions excluded), with a suggested type."""
+    imported region (joint regions excluded), with a suggested type; for an
+    imported mesh, its patches."""
     draft = ctx.draft
     listed = {(p.get("source") or {}).get("ref") for p in draft.get("patches") or []}
+    mesh = draft.get("imported_mesh")
+    if isinstance(mesh, dict):
+        return mesh_candidates(ctx, mesh, listed)
     joined = {n for j in draft.get("joints") or [] for n in (j.get("first"), j.get("second"))}
     found: list[dict[str, Any]] = []
     for body in draft.get("bodies") or []:
@@ -97,6 +118,9 @@ def render(ctx: state.Context) -> None:
                 patch["type"] = suggested[str(patch["name"])]
         state.bump_generation()
         st.rerun()
-    st.caption("Suggested types come from the body motion, the domain face or the region "
+    st.caption("Suggested types come from the mesh patch's name or Fluent zone type only. "
+               "Check each before you use them." if isinstance(ctx.draft.get("imported_mesh"),
+                                                              dict) else
+               "Suggested types come from the body motion, the domain face or the region "
                "name only. Check each before you use them.")
     section_issues(ctx, "patches")

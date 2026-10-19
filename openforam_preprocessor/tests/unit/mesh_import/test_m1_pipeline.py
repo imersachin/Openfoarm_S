@@ -41,8 +41,9 @@ from vawt.status import RunState
 Data = dict[str, Any]
 TOOLS = (*IMPORT_EXECUTABLES, *ASSEMBLE_EXECUTABLES, *CHECK_EXECUTABLES)
 FULL = [VALIDATE, IMPORT, ASSEMBLE, CHECK_MESH, VALIDATE_MESH, CASE_SETUP]
-# 7 patch types, then 4 entries for each side of the AMI pair (M1c: in place).
-ORDER = ["gmshToFoam", *["foamDictionary"] * (7 + 8), "checkMesh", "postProcess"]
+# 7 patch types, then 4 entries and the inGroups removal for each side of the
+# AMI pair (M1c: in place).
+ORDER = ["gmshToFoam", *["foamDictionary"] * (7 + 10), "checkMesh", "postProcess"]
 
 
 class Project:

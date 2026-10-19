@@ -188,6 +188,12 @@ def _rename(issue: Issue) -> Issue:
         )
     if kind not in UNSET_ERROR_TYPES:
         return issue
+    if field == "imported_mesh.source_units":  # M1c: the .msh file's units
+        return _blocking(
+            "UNITS_NOT_CHOSEN", "The units of the mesh file have not been chosen.",
+            "Choose them against the bounding box; they are never assumed.",
+            category=IssueCategory.UNITS, field=field,
+        )
     if field.endswith("source_units"):
         return _blocking(
             "UNITS_NOT_CHOSEN", "The units of an STL file have not been chosen.",

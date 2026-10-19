@@ -235,7 +235,7 @@ def test_the_revolution_turns_the_zone_once_in_36_steps(tmp_path: Path) -> None:
     assert f"omega           {2 * math.pi!r};" in dynamic  # one revolution per second
     assert "endTime         1;" in files["system/controlDict"]
     assert "deltaT          0.02777777" in files["system/controlDict"]
-    assert over_revolution() == "over one revolution (36 steps of 10 deg)"
+    assert over_revolution() == "over one revolution (36 x 10 deg)"
 
 
 def test_the_revolution_reports_every_step(tmp_path: Path) -> None:
@@ -303,3 +303,51 @@ def test_a_vawt_project_is_told_to_use_a_custom_project(tmp_path: Path) -> None:
     found = next(i for i in check_all(model(data)).issues
                  if i.code == "MSH_MACHINE_NOT_SUPPORTED")
     assert found.suggested_action == "To use an imported VAWT mesh, create a Custom project."
+
+
+# --- fixes after the M1c testing review -------------------------------------------------------
+
+def test_a_revolution_check_is_of_the_mesh_and_the_motion(tmp_path: Path) -> None:
+    """MEDIUM: a changed axis, origin or cell zone leaves the mesh as it was."""
+    setup = Setup(tmp_path)
+    data = configs.rotating(setup.upload())
+    assert setup.run(data).succeeded
+    assert setup.service.check_ami_revolution().done
+    report = setup.json(REVOLUTION_REPORT)
+    assert setup.service.revolution_is_current(report)
+    data["imported_mesh"]["zones"][0]["axis"] = "z"
+    setup.service.save(copy.deepcopy(data))  # saved, the mesh unchanged
+    assert not setup.service.revolution_is_current(report)
+    data["imported_mesh"]["zones"][0]["axis"] = "x"
+    data["imported_mesh"]["zones"][0]["origin"] = {"x": 0.0, "y": 0.1, "z": 0.0}
+    setup.service.save(copy.deepcopy(data))
+    assert not setup.service.revolution_is_current(report)
+    assert setup.service.check_ami_revolution().done
+    assert setup.service.revolution_is_current(setup.json(REVOLUTION_REPORT))
+
+
+def test_an_ami_patch_loses_its_converter_group(tmp_path: Path) -> None:
+    """LOW: Fluent wall zones get inGroups 1(wall); an interface must not."""
+    config = model(configs.rotating(mesh_file("rotating_41.msh", tmp_path)))
+    steps = [s.argv for s in import_cases(config).merged_steps() if s.kind == "run"]
+    for side in ("ami_stat", "ami_rot"):
+        assert ("foamDictionary", "constant/polyMesh/boundary", "-entry",
+                f"entry0/{side}/inGroups", "-remove") in steps
+
+
+def test_only_the_rotor_walls_of_the_zone_are_measured(tmp_path: Path) -> None:
+    """LOW: two zones, each with its own rotor wall."""
+    from machines.tip_radius import zone_patch_points
+    write_mesh(tmp_path / "constant/polyMesh", [("rotor_a", "wall", 2), ("rotor_b", "wall", 2)],
+               {"a": 2, "b": 2}, 4, ((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+    # Face i is owned by cell i: rotor_a's faces by zone a's cells 0 and 1.
+    found = zone_patch_points(tmp_path, ["rotor_a", "rotor_b"], np.array([0, 1]))
+    assert found is not None and found[0] == ("rotor_a",)
+    assert zone_patch_points(tmp_path, ["rotor_b"], np.array([0, 1])) is None
+
+
+def test_the_answered_area_info_is_not_left_in_the_run(setup: Setup) -> None:
+    """LOW: INLET_AREA_AFTER_IMPORT before the import, gone once measured."""
+    result = setup.run(flow_rate(configs.rotating(setup.upload())))
+    assert result.succeeded
+    assert "INLET_AREA_AFTER_IMPORT" not in {i.code for i in result.issues}

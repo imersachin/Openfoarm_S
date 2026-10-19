@@ -1127,4 +1127,6 @@ every machine mesh, and set up by the G6 case setup, which never changes it
 (invariant 14). The rotating zone is a cell zone of the mesh; its radius is
 computed from the zone. Evidence, decisions and the checks:
 `docs/msh_import_notes.md` (E0, E6, section 8). M1b is the core; the UI is
-M1c.
+M1c (sections 10-12 there): each profile except VAWT offers "Mesh source:
+build from STL / import .msh"; an imported mesh shows an Imported mesh section
+instead of the STL sections, and its patch table lists the mesh's patches.

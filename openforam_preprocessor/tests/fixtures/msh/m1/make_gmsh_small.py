@@ -3,7 +3,8 @@
     python make_gmsh_small.py <out_dir>
 
 Writes box_22.msh, box_41.msh, box_22_bin.msh, box_22_nogroups.msh,
-box_22_nowalls.msh and rotating_41.msh. Needs the gmsh package; the files
+box_22_nowalls.msh, rotating_41.msh and rotating_41_noymin.msh (y_min in
+no physical group: defaultFaces after gmshToFoam). Needs the gmsh package; the files
 are committed, so the tests do not.
 """
 
@@ -39,6 +40,7 @@ def main(out: Path) -> None:
             make_gmsh.box(out / "box_22_nowalls.msh", "2.2", False, True, walls=False)
         else:
             make_gmsh.rotating(out / "rotating_41.msh", "4.1", False)
+            make_gmsh.rotating(out / "rotating_41_noymin.msh", "4.1", False, "y_min")
 
 
 if __name__ == "__main__":

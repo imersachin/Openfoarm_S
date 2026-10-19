@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from pydantic import ValidationError
 
 from case_setup.physics import (
@@ -35,6 +36,8 @@ from case_setup.physics import (
     VelocityInlet,
     rpm_to_rad_s,
 )
+from case_setup.setup import _unit as axis_unit
+from case_setup.setup import _zone_origin as zone_origin
 from case_setup.setup import inlet_area
 from case_setup.validation import CaseSetupThresholds, check_physics
 from case_setup.wall_cells import WallEstimate, first_layer_for, y_plus_of
@@ -47,6 +50,7 @@ from core.workflow.run_records import list_run_records
 from machines.config import (
     CylinderZone,
     ImportedDomain,
+    ImportedMesh,
     MachineProjectConfig,
     MachineType,
     Motion,
@@ -57,7 +61,7 @@ from machines.config import (
 from machines.joints import propose_joints
 from machines.mesh_folder import MeshFolderReport, check_mesh_folder
 from machines.msh_import.cases import IMPORTED_CASE, SCRATCH_CASE, converter
-from machines.msh_import.checks import patch_areas
+from machines.msh_import.checks import patch_areas, zone_cells
 from machines.msh_import.checks import zone_radius as mesh_zone_radius
 from machines.msh_import.inspection import MeshInspection, PatchGeometry, patch_geometry
 from machines.msh_import.inspection import inspect as inspect_mesh_file_view
@@ -71,7 +75,14 @@ from machines.msh_import.pipeline import (
     scratch_box,
 )
 from machines.msh_import.revolution import EXECUTABLES as REVOLUTION_EXECUTABLES
-from machines.msh_import.revolution import RevolutionResult, check_revolution, mesh_hash
+from machines.msh_import.revolution import (
+    REVOLUTION_REPORT,
+    RevolutionResult,
+    check_key,
+    check_revolution,
+    mesh_hash,
+    unavailable,
+)
 from machines.msh_import.validation import read_mesh_file
 from machines.operations import MACHINE_EXECUTABLES, operations_for
 from machines.pipeline import (
@@ -110,6 +121,7 @@ from machines.project_store import (
     read_ui_settings,
     write_ui_settings,
 )
+from machines.tip_radius import MeasuredRadius, differs, radial_max, zone_patch_points
 from machines.validation import CheckedConfig, MachineThresholds, check_all, parse_config
 from mesh.estimator import CellEstimate, ResourceAssessment, ResourceEstimator, SystemResources
 from openfoam.environment import tool_identity, validate_environment
@@ -137,6 +149,8 @@ from vawt.workspace import Mount, is_wsl, location_issues
 
 INPUTS_DIR = "inputs"
 MESH_INPUTS = "mesh"  # inputs/mesh/: uploaded .msh files (M1-MSH)
+# Findings about the .msh file itself, shown in the Imported mesh section.
+MESH_FILE_CODES = ("MSH_", "GMSH_", "FLUENT_")
 MAX_MESH_UPLOAD_BYTES = 200 * 2**20  # Streamlit's default upload limit
 PROJECTS_DIR_ENV = "MACHINES_PROJECTS_DIR"
 DEFAULT_PROJECTS_DIR = "~/machine_projects"
@@ -523,6 +537,14 @@ class MachineService(RunControl):
         finally:
             lock.release()
 
+    def revolution_is_current(self, report: Mapping[str, Any]) -> bool:
+        """Whether a check over one revolution is of the assembled mesh as it is,
+        turned as the saved project turns it (its zone's cell zone, axis, origin)."""
+        config = self.saved_config()
+        if config is None or unavailable(config, self.root) is not None:
+            return False
+        return report.get("check_sha256") == check_key(self.root, config)
+
     def mesh_patch_geometry(self, names: Sequence[str],
                             sha256: str) -> dict[str, PatchGeometry]:
         """Area and centroid of patches of the converted mesh of the file with this
@@ -547,10 +569,21 @@ class MachineService(RunControl):
         configured units. None when neither is of this file (before conversion)."""
         mesh = config.imported_mesh
         assert mesh is not None
-        records = ((IMPORTED_CASE, self.root / IMPORT_REPORT, "scale_to_metres"),
-                   (SCRATCH_CASE, self.root / "cases" / SCRATCH_CASE / SCRATCH_RECORD, "scale"))
+        converted = self._converted_mesh(mesh)
+        if converted is None:
+            return None
+        folder, factor = converted
         refs = {p.name: p.source.ref for p in config.patches
                 if p.source.kind is SourceKind.MESH_PATCH}
+        areas = _patch_areas(folder, tuple(sorted(set(refs.values()))))
+        return {name: areas[ref] * factor**2 for name, ref in refs.items() if ref in areas}
+
+    def _converted_mesh(self, mesh: ImportedMesh) -> tuple[Path, float] | None:
+        """A converted mesh of this same file, with original patch names: the
+        imported one, else the scratch conversion; and the length factor from
+        its points to metres in the configured units. None before conversion."""
+        records = ((IMPORTED_CASE, self.root / IMPORT_REPORT, "scale_to_metres"),
+                   (SCRATCH_CASE, self.root / "cases" / SCRATCH_CASE / SCRATCH_RECORD, "scale"))
         for case, record, key in records:
             folder = self.root / "cases" / case
             try:
@@ -558,13 +591,68 @@ class MachineService(RunControl):
                 done = float(found[key])
             except (OSError, ValueError, TypeError, KeyError):
                 continue
-            if found.get("sha256") != mesh.sha256 or done <= 0 or not (
+            if found.get("sha256") == mesh.sha256 and done > 0 and (
                     folder / "constant" / "polyMesh" / "boundary").is_file():
-                continue
-            factor = (mesh.source_units.to_metres / done) ** 2
-            areas = _patch_areas(folder, tuple(sorted(set(refs.values()))))
-            return {name: areas[ref] * factor for name, ref in refs.items() if ref in areas}
+                return folder, mesh.source_units.to_metres / done
         return None
+
+    def measured_tip_radius(self, raw: Mapping[str, Any], zone: str) -> MeasuredRadius | None:
+        """The rotor tip radius measured about the zone's axis (machines.tip_radius):
+        the zone's rotating bodies (STL), or its rotating-wall patches (imported
+        mesh, once converted). None when there is nothing to measure."""
+        config, _ = parse_config(dict(raw))
+        if config is None:
+            return None
+        mesh = config.imported_mesh
+        if mesh is not None:
+            own = next((z for z in mesh.zones if z.name == zone), None)
+            converted = self._converted_mesh(mesh)
+            walls = sorted(p.source.ref for p in config.patches
+                           if p.type is PatchType.ROTATING_WALL
+                           and p.source.kind is SourceKind.MESH_PATCH)
+            if own is None or converted is None or not walls:
+                return None
+            found = _rotor_points(converted[0], tuple(walls), own.cell_zone)
+            if found is None:
+                return None
+            names, points = found
+            axis = tuple(float(own.axis.value == a) for a in "xyz")
+            origin = (own.origin.x, own.origin.y, own.origin.z)
+            radius = radial_max(points * converted[1], origin, axis)  # type: ignore[arg-type]
+            return MeasuredRadius(radius, "from rotor patch " + ", ".join(names))
+        stl_zone = config.zone(zone)
+        bodies = [b for b in config.bodies
+                  if b.zone == zone and b.motion is not Motion.STATIONARY]
+        if stl_zone is None or not bodies:
+            return None
+        radii = []
+        for body in bodies:
+            body_mesh, _ = self.geometry.get(_rotor_geometry(body.source))
+            if body_mesh is not None:
+                radii.append(radial_max(np.asarray(body_mesh.vertices), zone_origin(stl_zone),
+                                        axis_unit(stl_zone.axis)))
+        if not radii:
+            return None
+        return MeasuredRadius(max(radii), "from rotor body " + ", ".join(b.name for b in bodies))
+
+    def tip_radius_issues(self, raw: Mapping[str, Any]) -> tuple[Issue, ...]:
+        """INFO for each tip-speed-ratio radius more than 5 % off the measured one."""
+        physics = raw.get("physics")
+        rotations = physics.get("rotation") if isinstance(physics, Mapping) else None
+        found = []
+        for zone, rotation in sorted((rotations or {}).items()):
+            speed = rotation.get("speed") if isinstance(rotation, Mapping) else None
+            if not isinstance(speed, Mapping) or speed.get("kind") != "TIP_SPEED_RATIO":
+                continue
+            typed = speed.get("radius")
+            if not isinstance(typed, int | float):
+                continue
+            measured = self.measured_tip_radius(raw, zone)
+            issue = None if measured is None else differs(
+                zone, float(typed), measured, f"physics.rotation.{zone}.speed.radius")
+            if issue is not None:
+                found.append(issue)
+        return tuple(found)
 
     # --- sections ------------------------------------------------------------------------
 
@@ -589,6 +677,8 @@ class MachineService(RunControl):
             candidates.append("rotating_zones")
         if details.get("patch") or details.get("region"):
             candidates.append("patches")
+        if issue.code.startswith(MESH_FILE_CODES):  # the .msh file itself (M1-MSH)
+            candidates.append("imported_mesh")
         for path in candidates:
             if isinstance(path, str) and path:
                 section = profile.section_of_field(path)
@@ -612,6 +702,7 @@ class MachineService(RunControl):
             "domain": not raw.get("domain"),
             "zones": not raw.get("rotating_zones"),
             "patches": not raw.get("patches"),
+            "imported_mesh": not (raw.get("imported_mesh") or {}).get("source_path"),
             **dict.fromkeys(PHYSICS_SECTIONS, physics is None),
         }
         if physics is not None:
@@ -875,10 +966,12 @@ class MachineService(RunControl):
 
     def reports(self) -> dict[str, dict[str, Any] | None]:
         """The preflight, mesh and case-setup reports of the last run (each may
-        be absent). Mesh and case setup are separate results."""
+        be absent). Mesh and case setup are separate results. An imported mesh
+        adds its import report and the last check over one revolution."""
         result: dict[str, dict[str, Any] | None] = {}
         for name, relative in (("preflight", PREFLIGHT_REPORT), ("mesh", MESH_REPORT),
-                               ("case_setup", CASE_SETUP_REPORT)):
+                               ("case_setup", CASE_SETUP_REPORT), ("import", IMPORT_REPORT),
+                               ("ami_revolution", REVOLUTION_REPORT)):
             try:
                 data = json.loads((self.root / relative).read_text(encoding="utf-8"))
                 result[name] = data if isinstance(data, dict) else None
@@ -1042,6 +1135,11 @@ class MachineService(RunControl):
         saved = self._saved_raw()
         if view is PreviewView.SETUP:
             source = raw if raw is not None else saved
+            if isinstance(source, Mapping) and source.get("imported_mesh") is not None:
+                return None, None, (_preview_issue(
+                    "VIEW_SETUP_IMPORTED", "An imported mesh has no setup view: there are "
+                    "no STL inputs to draw.",
+                    "Run the import; the Mesh view shows the imported mesh."),), ()
             config, display_notes = displayable(source) if source is not None else (None, ())
             if config is None:
                 return None, None, (_preview_issue(
@@ -1135,6 +1233,28 @@ def _patch_areas(folder: Path, names: tuple[str, ...]) -> dict[str, float]:
     except OSError:
         return {}
     return dict(_areas_of(str(folder), names, stamp))
+
+
+def _rotor_points(folder: Path, walls: tuple[str, ...], cell_zone: str,
+                  ) -> tuple[tuple[str, ...], np.ndarray] | None:
+    """zone_patch_points of the zone's cells, read once per version of the mesh."""
+    poly = folder / "constant" / "polyMesh"
+    try:
+        stamp = tuple((s.st_size, s.st_mtime_ns) for s in (
+            (poly / n).stat() for n in ("boundary", "faces", "points", "owner", "cellZones")))
+    except OSError:
+        return None
+    return _rotor_points_of(str(folder), walls, cell_zone, stamp)
+
+
+@functools.lru_cache(maxsize=8)
+def _rotor_points_of(folder: str, walls: tuple[str, ...], cell_zone: str,
+                     stamp: tuple[tuple[int, int], ...],
+                     ) -> tuple[tuple[str, ...], np.ndarray] | None:
+    cells = zone_cells(Path(folder), cell_zone)
+    if cells is None or not len(cells):
+        return None
+    return zone_patch_points(Path(folder), walls, cells)
 
 
 @functools.lru_cache(maxsize=16)

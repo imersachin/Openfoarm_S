@@ -99,6 +99,7 @@ from visualization.foam_reader import FoamReadError, read_points
 
 IMPORT = "machine_import_mesh"
 IMPORT_REPORT = "reports/mesh_import.json"
+AREA_AFTER_IMPORT = "INLET_AREA_AFTER_IMPORT"  # case_setup.validation
 # postProcess AMIWeights reads the mesh as converted: the rotor not turned.
 AT_REST = "at rest (0 deg)"
 SCRATCH_RECORD = "scratch.json"  # in cases/imported_scratch/
@@ -264,6 +265,10 @@ class ImportRun:
             known = {(i.code, i.message) for i in physics}
             physics = check_physics(config, (), pipe.case_thresholds,
                                     mesh_areas=self.areas())
+            now = {(i.code, i.message) for i in physics}
+            # The INFO "measured when it is imported" is answered now.
+            run.issues[:] = [i for i in run.issues if i.code != AREA_AFTER_IMPORT
+                             or (i.code, i.message) in now]
             run.issues.extend(i for i in physics if (i.code, i.message) not in known)
             stopping = sorted({i.code for i in physics if i.is_stopping})
             if stopping:

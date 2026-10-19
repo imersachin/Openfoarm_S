@@ -45,6 +45,7 @@ from case_setup.case import (
     render,
     write_case,
 )
+from case_setup.physics import TipSpeedRatio
 from case_setup.setup import CaseSetup, CaseSetupError
 from case_setup.validation import CaseSetupThresholds, check_physics
 from core.artifacts import ArtifactStore
@@ -696,6 +697,13 @@ def _write_case_report(run: _Run, setup: CaseSetup) -> None:
         "time": {**asdict(time), "estimates": "courant_estimate, smallest_cell and "
                  "reference_speed are heuristic, not the solver's values"},
     }
+    speeds = [physics.rotation[n].speed for n in run.config.zone_names()
+              if n in physics.rotation]
+    radii = [s.radius for s in speeds if isinstance(s, TipSpeedRatio)]
+    if radii:  # the radius the tip-speed ratio gave the rpm from (M1c)
+        rotation_report = payload["rotation"]
+        assert isinstance(rotation_report, dict)
+        rotation_report["tip_radius_m"] = radii[0]
     if run.config.imported_mesh is not None:  # M1-MSH: a flow-rate inlet's area
         payload["inlet_area_m2"] = {name: inlet.flow_rate / inlet.speed
                                     for name, inlet in setup.inlets.items()

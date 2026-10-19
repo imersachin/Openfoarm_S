@@ -75,7 +75,8 @@ def box(path: Path, version: str, binary: bool, groups: bool, walls: bool = True
         gmsh.finalize()
 
 
-def rotating(path: Path, version: str, binary: bool) -> None:
+def rotating(path: Path, version: str, binary: bool, ungrouped: str | None = None) -> None:
+    """`ungrouped`: a box face left without a physical group (M1c checklist)."""
     gmsh.initialize(readConfigFiles=False)
     gmsh.option.setNumber("General.Terminal", 0)
     try:
@@ -111,6 +112,8 @@ def rotating(path: Path, version: str, binary: bool) -> None:
         groups["rotor"] = in_rotor
         for name, tags in groups.items():
             assert tags, name
+            if name == ungrouped:
+                continue
             gmsh.model.setPhysicalName(2, gmsh.model.addPhysicalGroup(2, tags), name)
         for name, volume in (("stationary", stationary[1]), ("rotating", rotating_volume[1])):
             gmsh.model.setPhysicalName(3, gmsh.model.addPhysicalGroup(3, [volume]), name)

@@ -14,6 +14,7 @@ from app.machines_ui.sections import (
     export,
     fluid,
     history,
+    imported_mesh,
     layers,
     logs,
     mesh,
@@ -31,7 +32,8 @@ from app.machines_ui.sections import (
 
 RENDERERS: dict[str, ModuleType] = {
     "project": project, "bodies": bodies, "parts": parts, "domain": domain, "zones": zones,
-    "patches": patches, "refinement": refinement, "layers": layers, "fluid": fluid,
+    "imported_mesh": imported_mesh, "patches": patches, "refinement": refinement,
+    "layers": layers, "fluid": fluid,
     "boundary": boundary, "rotation": rotation, "operating_point": operating_point,
     "time": time_controls, "review": review, "run": run, "mesh": mesh, "case": case,
     "export": export, "history": history, "logs": logs,

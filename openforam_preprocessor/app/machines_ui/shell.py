@@ -223,10 +223,12 @@ def main() -> None:
         landing()
         return
     service = state.service()
-    profile = service.profile()
-    if profile is None:
+    chosen = service.profile()
+    if chosen is None:
         choose_machine()
         return
+    # The sections follow the draft's mesh source (M1c: an imported mesh).
+    profile = chosen.for_mesh(state.draft().get("imported_mesh") is not None)
     analysis = state.analysis(profile)
     run_view = service.run_status()
     header(service, profile, run_view)
