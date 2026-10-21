@@ -599,8 +599,10 @@ Still not offered for an imported mesh; `MSH_MACHINE_NOT_SUPPORTED` now says
 
 ## 12. Browser checklist (owner, before the merge)
 
-Start the app (`scripts\run_machines_app.cmd`, or inside WSL `bash
-scripts/run_machines_app.sh`) with OpenFOAM v2512. Files:
+Start the Machines app (`scripts\run_machines_app.cmd`, or inside WSL `bash
+scripts/run_machines_app.sh`) with OpenFOAM v2512 and open
+http://localhost:8502. Not the VAWT app (`run_vawt_app.cmd`, port 8501): it
+takes a VAWT rotor STL only and has no .msh import. Files:
 `tests/fixtures/msh/m1/` (upload them, or give their path inside WSL).
 Write the result in the last column.
 

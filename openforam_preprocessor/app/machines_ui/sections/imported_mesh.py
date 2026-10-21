@@ -14,6 +14,7 @@ from typing import Any
 
 import streamlit as st
 
+from app.components.upload_notes import MSH_UPLOAD_NOTE
 from app.components.widgets import render_issues
 from app.machines_ui import state
 from app.machines_ui.sections.common import apply_form, list_at, section_header, section_issues
@@ -56,6 +57,7 @@ def choose(ctx: state.Context, path: str, sha256: str | None) -> None:
 def file_choice(ctx: state.Context) -> None:
     upload = st.file_uploader("Upload a .msh file (Fluent or Gmsh; the format is read from "
                               "the content, not the name)", key="machines_mesh_upload")
+    st.caption(MSH_UPLOAD_NOTE)
     if upload is not None and st.session_state.get(UPLOADED) != upload.file_id:
         try:
             stored = ctx.service.store_mesh_file(upload.name, upload.getvalue())

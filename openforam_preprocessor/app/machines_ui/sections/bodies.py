@@ -8,6 +8,7 @@ from typing import Any
 
 import streamlit as st
 
+from app.components.upload_notes import STL_UPLOAD_NOTE
 from app.components.widgets import get_path, render_issues
 from app.machines_ui import state
 from app.machines_ui.sections.common import (
@@ -52,6 +53,7 @@ def preset_box(ctx: state.Context) -> None:
     inputs = _rotor_inputs(ctx)
     upload = st.file_uploader(f"{rotor.capitalize()} STL (copied into the project's inputs/)",
                               type=["stl"], key="machines_rotor_upload")
+    st.caption(STL_UPLOAD_NOTE)
     stored = store_upload(ctx, upload, "machines_rotor_uploaded")
     if stored is not None:
         inputs["source"] = {**new_stl(stored), **{k: v for k, v in (inputs.get("source") or {})
@@ -115,6 +117,7 @@ def body_editor(ctx: state.Context, index: int, *, fixed: bool) -> None:
     path = f"bodies.{index}"
     zones = [z.get("name") for z in ctx.draft.get("rotating_zones") or [] if z.get("name")]
     upload = st.file_uploader("Replace the STL", type=["stl"], key=f"machines_body_up_{index}")
+    st.caption(STL_UPLOAD_NOTE)
     stored = store_upload(ctx, upload, f"machines_body_uploaded_{index}")
     if stored is not None:
         ctx.draft["bodies"][index]["source"]["source_path"] = stored
@@ -139,6 +142,7 @@ def body_editor(ctx: state.Context, index: int, *, fixed: bool) -> None:
 def add_body(ctx: state.Context) -> None:
     with st.expander("Add a body"):
         upload = st.file_uploader("Body STL", type=["stl"], key="machines_new_body_up")
+        st.caption(STL_UPLOAD_NOTE)
         name = st.text_input("Name", key="machines_new_body_name")
         stored = st.session_state.get("machines_new_body_path")
         path = store_upload(ctx, upload, "machines_new_body_uploaded")

@@ -10,6 +10,7 @@ from typing import Any
 
 import streamlit as st
 
+from app.components.upload_notes import STL_UPLOAD_NOTE
 from app.components.widgets import get_path
 from app.machines_ui import state
 from app.machines_ui.sections.common import apply_form, section_header, section_issues, store_upload
@@ -58,6 +59,7 @@ def slot_uploads(ctx: state.Context, inputs: dict[str, Any]) -> None:
                 st.caption(slot.help)
             upload = st.file_uploader(f"{slot.label} STL (its patches as named regions)",
                                       type=["stl"], key=f"machines_slot_up_{slot.key}")
+            st.caption(STL_UPLOAD_NOTE)
             stored = store_upload(ctx, upload, f"machines_slot_uploaded_{slot.key}", slot.key)
             if stored is not None:
                 inputs["slots"][slot.key] = {**new_stl(stored),

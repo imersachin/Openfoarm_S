@@ -8,6 +8,7 @@ from typing import Any
 
 import streamlit as st
 
+from app.components.upload_notes import STL_UPLOAD_NOTE
 from app.components.widgets import get_path
 from app.machines_ui import state
 from app.machines_ui.sections.common import (
@@ -39,6 +40,7 @@ def zone_editor(ctx: state.Context, index: int) -> None:
     if kind == "IMPORTED":
         upload = st.file_uploader("Replace the zone surface STL", type=["stl"],
                                   key=f"machines_zone_up_{index}")
+        st.caption(STL_UPLOAD_NOTE)
         stored = store_upload(ctx, upload, f"machines_zone_uploaded_{index}", "zones")
         if stored is not None:
             ctx.draft["rotating_zones"][index]["shape"]["files"] = [new_stl(stored)]
@@ -83,6 +85,7 @@ def add_zone(ctx: state.Context) -> None:
             st.rerun()
         upload = imported.file_uploader("…or an imported zone surface (STL)", type=["stl"],
                                         key="machines_new_zone_up")
+        imported.caption(STL_UPLOAD_NOTE)
         stored = store_upload(ctx, upload, "machines_new_zone_uploaded", "zones")
         if stored is not None and name:
             zones.append({"name": name, "shape": {"kind": "IMPORTED", "format": "NAMED_REGIONS",

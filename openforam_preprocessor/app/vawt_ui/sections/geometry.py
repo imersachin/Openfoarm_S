@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from app.components.upload_notes import VAWT_UPLOAD_NOTE
 from app.components.widgets import (
     float_field,
     get_path,
@@ -27,6 +28,7 @@ UPLOADED = "vawt_uploaded_id"
 def render(ctx: state.Context) -> None:
     section_header(ctx, "geometry", "Geometry")
     upload = st.file_uploader("Rotor STL (copied into the project's inputs/)", type=["stl"])
+    st.caption(VAWT_UPLOAD_NOTE)
     if upload is not None and st.session_state.get(UPLOADED) != upload.file_id:
         try:
             stored = ctx.service.store_source_file(upload.name, upload.getvalue())

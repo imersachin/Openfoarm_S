@@ -8,6 +8,7 @@ from typing import Any
 
 import streamlit as st
 
+from app.components.upload_notes import STL_UPLOAD_NOTE
 from app.components.widgets import get_path
 from app.machines_ui import state
 from app.machines_ui.sections.common import (
@@ -67,6 +68,7 @@ def part_editor(ctx: state.Context, index: int) -> None:
     many = get_path(ctx.draft, f"{path}.format") == "ONE_FILE_PER_PATCH"
     upload = st.file_uploader("Replace the file(s)", type=["stl"], accept_multiple_files=many,
                               key=f"machines_part_up_{index}")
+    st.caption(STL_UPLOAD_NOTE)
     uploads = upload if isinstance(upload, list) else [upload] if upload else []
     stored = [p for i, u in enumerate(uploads)
               if (p := store_upload(ctx, u, f"machines_part_uploaded_{index}_{i}",
@@ -98,6 +100,7 @@ def imported_fields(ctx: state.Context) -> None:
         name = st.text_input("Part name", key="machines_new_part_name")
         upload = st.file_uploader("Part STL (patches as named regions)", type=["stl"],
                                   key="machines_new_part_up")
+        st.caption(STL_UPLOAD_NOTE)
         stored = store_upload(ctx, upload, "machines_new_part_uploaded", f"part_{name}")
         if stored is not None and name:
             parts.append({"name": name, "format": "NAMED_REGIONS", "files": [new_stl(stored)]})
