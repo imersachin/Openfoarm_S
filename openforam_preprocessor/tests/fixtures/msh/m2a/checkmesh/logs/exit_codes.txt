@@ -1,0 +1,8 @@
+base_blockMesh                           exit=0     0s  blockMesh -case <work>/M2a_checkmesh/base
+ok_checkMesh                             exit=0     0s  checkMesh -case <work>/M2a_checkmesh/ok -allTopology -meshQuality -writeSets vtk -writeFields (nonOrthoAngle skewness faceWeight aspectRatio)
+negvol_checkMesh                         exit=0     0s  checkMesh -case <work>/M2a_checkmesh/negvol -allTopology -meshQuality -writeSets vtk -writeFields (nonOrthoAngle skewness faceWeight aspectRatio)
+pushpoint_checkMesh                      exit=0     0s  checkMesh -case <work>/M2a_checkmesh/pushpoint -allTopology -meshQuality -writeSets vtk -writeFields (nonOrthoAngle skewness faceWeight aspectRatio)
+flipface_checkMesh                       exit=0     0s  checkMesh -case <work>/M2a_checkmesh/flipface -allTopology -meshQuality -writeSets vtk -writeFields (nonOrthoAngle skewness faceWeight aspectRatio)
+openboundary_checkMesh                   exit=0     0s  checkMesh -case <work>/M2a_checkmesh/openboundary -allTopology -meshQuality -writeSets vtk -writeFields (nonOrthoAngle skewness faceWeight aspectRatio)
+nonortho_checkMesh                       exit=0     0s  checkMesh -case <work>/M2a_checkmesh/nonortho -allTopology -meshQuality -writeSets vtk -writeFields (nonOrthoAngle skewness faceWeight aspectRatio)
+aspect_checkMesh                         exit=0     0s  checkMesh -case <work>/M2a_checkmesh/aspect -allTopology -meshQuality -writeSets vtk -writeFields (nonOrthoAngle skewness faceWeight aspectRatio)

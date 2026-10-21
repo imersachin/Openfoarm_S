@@ -17,7 +17,9 @@ Run explicitly with:
 from __future__ import annotations
 
 import os
+import re
 import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -114,3 +116,53 @@ def test_a_large_real_mesh_is_converted_binary_and_measured_from_its_surface(
         assert radius(scratch, patch) == pytest.approx(expected, abs=5e-4), patch
     print(f"\n{name}: inspect {inspected:.1f} s, convert + surface {converted:.1f} s, "
           f"{len(found.offsets) - 1} surface faces, zones {list(found.zones)}")
+
+
+# file: the classes checkMesh's failures fall in (E0 evidence 1; all WARNING)
+CLASSES = {
+    "GV-03-91-AG5-HighRe.msh": {"skewness", "non-orthogonality", "tet quality"},
+    "RU-AG5-HighRe.msh": set(),
+    "DT-HighRe-uns.msh": set(),
+    "SC-SV-HH-HighRe.msh": {"skewness", "non-orthogonality", "tet quality",
+                            "interpolation weight", "cell determinant"},
+}
+
+
+@pytest.mark.skipif(not E0_DIR, reason="MACHINES_E0_DIR is not set (large real meshes)")
+@pytest.mark.parametrize("name", sorted(CLASSES))
+def test_a_large_real_mesh_has_only_quality_warnings_and_their_cells_per_zone(
+        tmp_path: Path, name: str) -> None:
+    """The import's own checkMesh command on the converted file, classified in
+    two levels; the per-zone cells from the fields it writes."""
+    from machines.msh_import import quality
+    from machines.msh_import.cases import MERGED_CASE
+
+    path = Path(str(E0_DIR)) / name
+    if not path.is_file():
+        pytest.skip(f"{name} is not in MACHINES_E0_DIR")
+    service = MachineService(tmp_path / "project")
+    assert service.convert_for_box(path).issues == ()
+    scratch = service.root / "cases" / SCRATCH_CASE
+    shutil.copy(Path(__file__).parents[1] / "fixtures/msh/e0/common/system/meshQualityDict",
+                scratch / "system")
+    data = configs.rotating(path)
+    service.save(data)
+    config = service.saved_config()
+    assert config is not None
+    from machines.msh_import.cases import import_cases
+
+    argv = import_cases(config).check_steps(False)[0].argv
+    assert MERGED_CASE not in argv
+    start = time.perf_counter()
+    run = subprocess.run(list(argv), cwd=scratch, capture_output=True, text=True, check=False)
+    spent = time.perf_counter() - start
+    findings = quality.classify(run.stdout)
+
+    assert {f.level for f in findings} <= {quality.WARNING}
+    assert {f.kind for f in findings} == CLASSES[name]
+    values = dict(re.findall(r"^\s*(\w+)\s+([^;\s]+);", (scratch / "system/meshQualityDict")
+                             .read_text("utf-8"), re.MULTILINE))
+    zones = quality.zone_quality(scratch, set(quality.FIELDS), quality.limits_of(values))
+    print(f"\n{name}: checkMesh {spent:.1f} s; " + "; ".join(
+        f"{kind}: " + ", ".join(f"{r.zone} {r.bad}/{r.cells} worst {r.worst:.3g}"
+                                for r in rows if r.bad) for kind, rows in zones.items()))

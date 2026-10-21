@@ -1028,7 +1028,16 @@ def _problem_markers(poly: Path, points: np.ndarray, faces: _Faces, owner: np.nd
 # vertex clustering on a grid sized to the patch; the cuts are the cell outlines a
 # cuttingPlane wrote when the mesh was checked, through the first mesh zone (the
 # plane through its axis normal to the first other axis, and across the axis at its
-# mid-span); checkMesh's problem locations come with the quality pass.
+# mid-span); checkMesh's problem locations are the faces and points of the sets it
+# wrote as VTK (-writeSets vtk; a cell set as its faces).
+
+SETS_DIR = "postProcessing/constant"  # in cases/merged/
+
+
+def vtk_sets(folder: Path) -> list[Path]:
+    """checkMesh's sets written as VTK in `folder` (cases/merged/), by name."""
+    base = folder / SETS_DIR
+    return sorted([*base.glob("*/*.vtp"), *base.glob("*.vtp")], key=lambda p: p.stem)
 
 ALONG, ACROSS = "along", "across"  # the cut files' names
 
@@ -1101,7 +1110,8 @@ def imported_view_files(folder: Path) -> list[Path]:
     target = surface.surface_dir(folder)
     return [folder / "constant" / "polyMesh" / "boundary", target / surface.SURFACE_FILE,
             target / surface.REGIONS_FILE, target / surface.CUTS_RECORD,
-            surface.cut_file(folder, ALONG), surface.cut_file(folder, ACROSS)]
+            surface.cut_file(folder, ALONG), surface.cut_file(folder, ACROSS),
+            *vtk_sets(folder)]
 
 
 def _imported_inputs(kinds: Mapping[str, str], limits: PreviewLimits) -> dict[str, Any]:
@@ -1181,9 +1191,45 @@ def build_imported_mesh_scene(folder: Path, kinds: Mapping[str, str],
         flat = np.full((len(segments) * 3, 3), np.nan)
         flat[0::3], flat[1::3] = segments[:, 0], segments[:, 1]
         lines.append(Lines(plane.name, CUT, flat[:-1].astype(np.float32), len(segments), n))
-    notes.append("checkMesh problem locations of an imported mesh are not drawn yet.")
-    return Scene("mesh", key, tuple(surfaces), tuple(lines), (), (),
+    markers = _vtk_markers(folder, limits, notes)
+    return Scene("mesh", key, tuple(surfaces), tuple(lines), tuple(markers), (),
                  _bounds([s.vertices for s in surfaces]), tuple(notes))
+
+
+def _vtk_markers(folder: Path, limits: PreviewLimits, notes: list[str]) -> list[Markers]:
+    """One marker per face (its centre) or point of each set checkMesh wrote as VTK."""
+    from machines.msh_import import surface as extracted
+
+    found: list[tuple[str, np.ndarray]] = []
+    for path in vtk_sets(folder):
+        try:
+            arrays = extracted.read_vtp(path)
+        except extracted.SurfaceError:
+            continue
+        points = np.asarray(arrays.get("Points", np.zeros((0, 3))), dtype=float).reshape(-1, 3)
+        ends = np.asarray(arrays.get("offsets", np.zeros(0)), dtype=np.int64)
+        if len(ends):
+            flat = np.asarray(arrays["connectivity"], dtype=np.int64)
+            starts = np.concatenate([[0], ends[:-1]])
+            sizes = np.maximum(ends - starts, 1)
+            sums = np.add.reduceat(points[flat], starts, axis=0) if len(flat) else points[:0]
+            found.append((path.stem, sums / sizes[:, None]))
+        else:
+            found.append((path.stem, points))
+    keep = allocate([len(c) for _, c in found], limits.max_markers,
+                    min(MIN_MARKERS_PER_SET, limits.max_markers))
+    markers = []
+    for (name, centres), count in zip(found, keep, strict=True):
+        if not len(centres):
+            continue
+        chosen = centres[sample_indices(len(centres), count)]
+        markers.append(Markers(f"checkMesh: {name}", PROBLEM, chosen.astype(np.float32),
+                               (), len(chosen), len(centres)))
+    shown, total = sum(m.shown for m in markers), sum(len(c) for _, c in found)
+    if shown < total:
+        notes.append(_thin_note("checkMesh problem locations", shown, total,
+                                limits.max_markers))
+    return markers
 
 
 # --- storage --------------------------------------------------------------------------------

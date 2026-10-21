@@ -85,8 +85,26 @@ def report_view(report: dict[str, Any], ctx: state.Context) -> None:
     st.dataframe(rows, hide_index=True, width="stretch")
     for issue in report.get("issues") or []:
         st.markdown(f"- **{issue.get('severity')}** {issue.get('message')}")
+    zone_quality_view(report)
     with st.expander("All checkMesh values"):
         st.json(metrics)
+
+
+def zone_quality_view(report: dict[str, Any]) -> None:
+    """An imported mesh (M2a): per cell zone, the cells past each quality limit
+    (checkMesh's cell fields), and where checkMesh wrote the sets for ParaView."""
+    by_zone = report.get("quality_by_zone") or {}
+    rows = [{"check": kind, "cell zone": row["zone"], "cells": f"{row['cells']:,}",
+             "past the limit": f"{row['cells_past_limit']:,}", "%": f"{row['percent']:.3g}",
+             "worst": f"{row['worst']:.4g}"}
+            for kind, found in sorted(by_zone.items()) for row in found]
+    if not rows:
+        return
+    st.markdown("**Quality by cell zone** (cells whose checkMesh field is past the "
+                "meshQualityDict limit; a cell takes the worst of its faces)")
+    st.dataframe(rows, hide_index=True, width="stretch")
+    if report.get("quality_sets"):
+        st.caption(f"The bad faces and cells for ParaView: `{report['quality_sets']}`")
 
 
 def import_view(report: dict[str, Any]) -> None:

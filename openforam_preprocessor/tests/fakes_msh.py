@@ -12,8 +12,12 @@ a type or adds a neighbourPatch (other entries it adds are not kept); topoSet
 does nothing the fake needs; surfaceMeshExtract writes the boundary as a VTK
 PolyData file, one region per patch and per zone surface, and lists them in
 its log ("surfZone N : name"); checkMesh reports "Mesh OK" or failed checks
-(with exit 0, as the real one); postProcess reports AMI weights at rest, or
-writes one polygon per cutting plane of a cuts dictionary; moveDynamicMesh
+(with exit 0, as the real one), with `check_text` (real wording, M2a) before
+the verdict; with -writeFields it writes the cell fields (binary, as v2512),
+with -writeSets a skewFaces set as VTK when it fails; postProcess reports AMI
+weights at rest (and, with writeFields true, each side's per-face weightsSum
+as VTK: the first face at the low sum, the second at the high one, the rest
+1), or writes one polygon per cutting plane of a cuts dictionary; moveDynamicMesh
 reports the weights over the steps of its controlDict, for the cyclicAMI
 pairs of the boundary file. The re-save script copies the file. Switches
 simulate failures.
@@ -110,16 +114,20 @@ def fake_surface(folder: Path) -> None:
     assert surface.index(folder, log)
 
 
+def _array(kind: str, name: str, values: np.ndarray, components: int = 1) -> str:
+    """One VTK DataArray: base64 of its UInt64 byte count and its bytes."""
+    raw = np.ascontiguousarray(values).tobytes()
+    data = base64.b64encode(np.uint64(len(raw)).tobytes() + raw).decode()
+    extra = f" NumberOfComponents='{components}'" if components > 1 else ""
+    return (f"        <DataArray type='{kind}' Name='{name}'{extra} format='binary'>\n"
+            f"{data}\n        </DataArray>\n")
+
+
 def vtp(points: np.ndarray, connectivity: np.ndarray, offsets: np.ndarray,
         region: np.ndarray | None = None) -> str:
     """VTK XML PolyData as OpenFOAM's vtk writer makes it: base64 binary
     arrays, each after its UInt64 byte count."""
-    def array(kind: str, name: str, values: np.ndarray, components: int = 1) -> str:
-        raw = np.ascontiguousarray(values).tobytes()
-        data = base64.b64encode(np.uint64(len(raw)).tobytes() + raw).decode()
-        extra = f" NumberOfComponents='{components}'" if components > 1 else ""
-        return (f"        <DataArray type='{kind}' Name='{name}'{extra} format='binary'>\n"
-                f"{data}\n        </DataArray>\n")
+    array = _array
     cells = ("      <CellData>\n" + array("Int32", "region", region.astype("<i4"))
              + "      </CellData>\n") if region is not None else ""
     return ("<?xml version='1.0'?>\n<VTKFile type='PolyData' version='0.1' "
@@ -182,6 +190,10 @@ class FakeMshRunner(OpenFOAMRunner):
     drop_patches: patches the converter leaves out.
     zones: override the converter's cell zones {name: cells}.
     failed_checks: checkMesh reports this many failed checks (exit 0).
+    check_text: lines checkMesh prints before its verdict (real wording: `***`
+        lines, the -meshQuality table), e.g. from tests/fixtures/msh/m2a.
+    fields: cell field values checkMesh -writeFields writes, {field: value or
+        per-cell values}; the rest at good values.
     baffles: checkMesh reports this many baffle faces.
     weights: (min, max) AMI sum(weights) at rest.
     turning: (min, max) AMI sum(weights) moveDynamicMesh reports half way round
@@ -192,7 +204,8 @@ class FakeMshRunner(OpenFOAMRunner):
                  outcome: Mapping[str, RunStatus] | None = None,
                  cells: int | None = None, faces: int = 10, default_faces: int = 0,
                  drop_patches: Sequence[str] = (), zones: Mapping[str, int] | None = None,
-                 failed_checks: int = 0, baffles: int = 0,
+                 failed_checks: int = 0, baffles: int = 0, check_text: str = "",
+                 fields: Mapping[str, float | Sequence[float]] | None = None,
                  weights: tuple[float, float] = (0.98, 1.03),
                  turning: tuple[float, float] = (0.97, 1.04),
                  turned_steps: int | None = None,
@@ -204,6 +217,7 @@ class FakeMshRunner(OpenFOAMRunner):
         self.cells, self.faces, self.default_faces = cells, faces, default_faces
         self.drop, self.zones = set(drop_patches), zones
         self.failed_checks, self.baffles, self.weights = failed_checks, baffles, weights
+        self.check_text, self.fields = check_text, dict(fields or {})
         self.turning, self.turned_steps = turning, turned_steps
         self.cancel_after = cancel_after
 
@@ -353,11 +367,33 @@ class FakeMshRunner(OpenFOAMRunner):
                    if self.baffles else "")
         end = (f"\nFailed {self.failed_checks} mesh checks.\n" if self.failed_checks
                else "\nMesh OK.\n")
+        if "-writeFields" in argv:
+            self._fields(case, argv[argv.index("-writeFields") + 1].strip("()").split())
+        if "-writeSets" in argv and self.failed_checks:
+            out = case / "postProcessing/constant/skewFaces"
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "skewFaces.vtp").write_text(vtp(np.eye(3), np.arange(3), np.array([3])),
+                                               encoding="utf-8")
         return ("Mesh stats\n    points:           8\n    faces:            100\n"
                 "    cells:            100\nChecking topology...\n"
                 "   *Number of regions: 2\n" + baffles
                 + "Checking geometry...\n    Mesh non-orthogonality Max: 40.0 average: 5.0\n"
-                + end)
+                + self.check_text + end)
+
+    GOOD = {"nonOrthoAngle": 30.0, "skewness": 0.5, "faceWeight": 0.5, "aspectRatio": 2.0}
+
+    def _fields(self, case: Path, names: Sequence[str]) -> None:
+        """Binary volScalarFields in constant/, one value per cell, as v2512."""
+        cells = int(geometry(self._poly(case))["cells"])
+        for name in names:
+            given = self.fields.get(name, self.GOOD.get(name, 1.0))
+            values = (np.full(cells, float(given)) if isinstance(given, int | float)
+                      else np.asarray(given, dtype=float))
+            body = (b"dimensions      [0 0 0 0 0 0 0];\n\ninternalField   nonuniform "
+                    b"List<scalar> " + foam_binary.binary_list(values.astype("<f8")).rstrip()
+                    + b";\n\nboundaryField\n{\n}\n")
+            (case / "constant" / name).write_bytes(
+                foam_binary.header("volScalarField", name).encode() + body)
 
     def _pairs(self, case: Path) -> list[tuple[str, str]]:
         poly = self._poly(case)
@@ -369,7 +405,37 @@ class FakeMshRunner(OpenFOAMRunner):
     def _postProcess(self, argv: Sequence[str], case: Path) -> str:  # noqa: N802
         if "-dict" in argv and argv[argv.index("-dict") + 1].endswith("cutsDict"):
             return self._cuts(case)
+        dictionary = case / argv[argv.index("-dict") + 1] if "-dict" in argv else None
+        if dictionary is not None and re.search(
+                r"writeFields\s+true", dictionary.read_text("utf-8")):
+            self._weight_fields(case)
         return self._weights(self._pairs(case), *self.weights)
+
+    def _weight_fields(self, case: Path) -> None:
+        """Each AMI side's faces with a per-face weightsSum, as AMIWeights with
+        writeFields true: <source>_src.vtp and <target>_tgt.vtp."""
+        poly = self._poly(case)
+        found = geometry(poly)
+        corners = np.array(found["corners"], dtype=float)
+        start, spans = 0, {}
+        for name, _, count in read_boundary(poly):
+            spans[name] = (start, count)
+            start += count
+        out = case / "postProcessing/AMIWeights1/constant"
+        out.mkdir(parents=True, exist_ok=True)
+        low, high = self.weights
+        for source, target in self._pairs(case):
+            for patch, side in ((source, "src"), (target, "tgt")):
+                first, count = spans[patch]
+                points = np.array([corners[TRIANGLES[(first + i) % 2][k]]
+                                   for i in range(count) for k in range(3)]).reshape(-1, 3)
+                sums = np.ones(count)
+                sums[:1], sums[1:2] = low, high
+                text = vtp(points, np.arange(3 * count), 3 * np.arange(1, count + 1))
+                text = text.replace("    </Piece>", "      <CellData>\n" + _array(
+                    "Float32", "weightsSum", sums.astype("<f4")) + "      </CellData>\n"
+                    "    </Piece>")
+                (out / f"{patch}_{side}.vtp").write_text(text, encoding="utf-8")
 
     @staticmethod
     def _cuts(case: Path) -> str:

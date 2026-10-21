@@ -390,11 +390,14 @@ def zone_radius(folder: Path, cell_zone: str, origin: Point, axis: Point) -> flo
     return None if points is None else radial_max(points, origin, axis)
 
 
+def axis_vector(axis: Axis) -> Point:
+    return (float(axis is Axis.X), float(axis is Axis.Y), float(axis is Axis.Z))
+
+
 def config_zone_radius(folder: Path, zone: MeshZone) -> float | None:
     """zone_radius of a configured mesh zone, about its axis through its origin."""
     return zone_radius(folder, zone.cell_zone, (zone.origin.x, zone.origin.y, zone.origin.z),
-                       (float(zone.axis is Axis.X), float(zone.axis is Axis.Y),
-                        float(zone.axis is Axis.Z)))
+                       axis_vector(zone.axis))
 
 
 def config_areas(folder: Path, config: MachineProjectConfig) -> dict[str, float]:

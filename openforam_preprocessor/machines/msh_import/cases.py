@@ -40,6 +40,7 @@ from machines.case_generator import _common, _control_dict
 from machines.config import MachineProjectConfig, PatchType, SourceKind
 from machines.msh_import import resave
 from machines.msh_import.detect import DIRECT_GMSH_VERSIONS, MeshFileInfo, MeshFormat
+from machines.msh_import.quality import WRITE_FIELDS
 from machines.patches import openfoam_type
 from openfoam.dictionary import foam_header
 
@@ -62,6 +63,16 @@ def binary_control_dict() -> str:
 
 def binary_common(config: MachineProjectConfig) -> dict[str, str]:
     return {**_common(config), "system/controlDict": binary_control_dict()}
+
+
+def imported_ami_weights_dict() -> str:
+    """The AMIWeights function object with writeFields true: each side's
+    per-face sum(weights), for where a pair falls short (M2a evidence 3).
+    STL projects keep writeFields false."""
+    text = _ami_weights_dict()
+    off = "writeFields     false;"
+    assert off in text
+    return text.replace(off, "writeFields     true;")
 
 
 def converter(info: MeshFileInfo) -> str:
@@ -195,8 +206,11 @@ class ImportCases:
 
     def check_steps(self, ami: bool) -> tuple[Step, ...]:
         root = f"cases/{MERGED_CASE}"
+        # One pass (M2a evidence 5): the checks, the bad faces and cells as VTK
+        # for ParaView, and the cell fields for the per-zone counts (quality.py).
         steps = [Step("merged_checkMesh", "run", root,
-                      ("checkMesh", "-case", ".", "-allTopology", "-meshQuality"))]
+                      ("checkMesh", "-case", ".", "-allTopology", "-meshQuality",
+                       "-writeSets", "vtk", "-writeFields", WRITE_FIELDS))]
         if ami:
             steps.append(Step("merged_amiWeights", "run", root, (
                 "postProcess", "-case", ".", "-dict", AMI_WEIGHTS_DICT, "-constant")))
@@ -220,6 +234,6 @@ def import_cases(config: MachineProjectConfig) -> ImportCases:
     mesh = config.imported_mesh
     assert mesh is not None
     if mesh.ami_pairs:
-        merged[AMI_WEIGHTS_DICT] = _ami_weights_dict()
+        merged[AMI_WEIGHTS_DICT] = imported_ami_weights_dict()
     return ImportCases(dict(common), merged, retype(config), expected_patches(config),
                        ami_sides(config))

@@ -17,14 +17,17 @@ file's content hash, the converter, the scale and the tool; the assembly on
 the imported mesh and the patch settings, so a patch-type change never
 converts again, and a physics change re-runs case setup only (invariant 14).
 A converter's exit code 0 is not success: the import checks the mesh it
-wrote, and checkMesh's "Failed N mesh checks" fails the mesh whatever the
-exit code (owner review of E0). Every mesh is written binary and never read
-whole in Python (M2a): areas, radii and boxes come from the surface.
+wrote, and checkMesh's failed checks are classified (quality.py, M2a): a
+BLOCKING one fails the mesh whatever the exit code (owner review of E0), a
+quality-only failure is a WARNING with the cells past each limit per cell
+zone. Every mesh is written binary and never read whole in Python (M2a):
+areas, radii and boxes come from the surface.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
@@ -45,7 +48,8 @@ from machines.mesh_folder import (
     read_patches,
     region_count,
 )
-from machines.msh_import import surface
+from machines.msh_import import quality, surface
+from machines.msh_import.ami_detail import pair_details
 from machines.msh_import.cases import (
     IMPORTED_CASE,
     MERGED_CASE,
@@ -96,7 +100,7 @@ from machines.project_store import write_last_meshed
 from machines.validation import check_all
 from mesh.estimator import CellEstimate, ResourceStatus
 from mesh.parser import CheckMeshParser
-from mesh.validator import MeshQualityValidator, ValidityStatus
+from mesh.validator import MeshQualityValidator, QualityStatus, ValidityStatus
 from openfoam.commands import MeshingStep
 from openfoam.dictionary import OpenFOAMFileWriter
 from openfoam.environment import tool_identity, validate_environment
@@ -106,6 +110,8 @@ from vawt.status import RunState
 IMPORT = "machine_import_mesh"
 MESH_VIEWS = "machine_mesh_views"  # the merged mesh's surface and cuts (3D pane)
 IMPORT_REPORT = "reports/mesh_import.json"
+QUALITY_REPORT = "reports/mesh_quality_zones.json"  # per cell zone (quality.py)
+SETS_DIR = "postProcessing/constant"  # checkMesh -writeSets vtk, in cases/merged/
 AREA_AFTER_IMPORT = "INLET_AREA_AFTER_IMPORT"  # case_setup.validation
 # postProcess AMIWeights reads the mesh as converted: the rotor not turned.
 AT_REST = "at rest (0 deg)"
@@ -384,8 +390,33 @@ class ImportRun:
                 raise _Stop("The assembled mesh is not the intended one.", *stopping)
             return _mesh_files(run.root, MERGED_CASE)
         steps = plan.cases.check_steps(bool(self.mesh.ami_pairs))
-        return [Path((await self.pipe._command(run, step, index)).log_path)
+        logs = [Path((await self.pipe._command(run, step, index)).log_path)
                 for index, step in enumerate(steps, start=1)]
+        return [*logs, self._zone_quality()]
+
+    def _zone_quality(self) -> Path:
+        """reports/mesh_quality_zones.json: per cell zone, the cells past each
+        quality limit and the worst value, from the fields checkMesh wrote; then
+        the fields and the region sets are removed (the vtk sets stay)."""
+        run = self.run
+        merged = run.root / "cases" / MERGED_CASE
+        values = dict(re.findall(r"^\s*(\w+)\s+([^;\s]+);", _read(
+            merged / "system/meshQualityDict"), re.MULTILINE))
+        limits = quality.limits_of(values)
+        found = quality.zone_quality(merged, set(quality.FIELDS), limits)
+        removed = quality.remove_outputs(merged)
+        path = run.root / QUALITY_REPORT
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({
+            "run_id": run.run_id,
+            "limits": {kind: {"past": side, "limit": value}
+                       for kind, (side, value) in limits.items()},
+            "by_zone": {kind: [row.as_dict() for row in rows] for kind, rows in found.items()},
+            "note": "cells whose checkMesh field (-writeFields) is past the meshQualityDict "
+                    "limit; a cell takes the worst of its faces",
+            "sets": f"cases/{MERGED_CASE}/{SETS_DIR}/ (VTK, for ParaView)",
+            "removed": removed}, indent=2) + "\n", encoding="utf-8")
+        return path
 
     async def _import(self, plan: _Plan, force: bool) -> list[Path]:
         run = self.run
@@ -528,6 +559,8 @@ class ImportRun:
         ami_text = _read(logs / AMI_WEIGHTS_LOG)
         metrics = CheckMeshParser().parse_text(check_text, logs / CHECK_MESH_LOG)
         report = MeshQualityValidator().assess(metrics, run.config.quality)
+        findings = quality.classify(check_text)
+        report = self._two_levels(report, findings)
         expected = self._expectation(plan)
         patches, unreadable = read_patches(merged, "merged")
         extra: list[Issue] = [unreadable] if unreadable else list(check_patches(patches,
@@ -535,16 +568,20 @@ class ImportRun:
         extra += check_zones(merged, expected.cell_zones, expected.name)
         extra += check_ami_pairing(merged)
         if expected.ami_pairs:
-            extra += check_ami_weights(ami_text, expected.ami_pairs,
-                                       self.pipe.thresholds.imported_ami_weights_range,
-                                       when=AT_REST)
+            extra += [self._ami_detail(i) for i in check_ami_weights(
+                ami_text, expected.ami_pairs, self.pipe.thresholds.imported_ami_weights_range,
+                when=AT_REST)]
         extra += check_baffles(check_text)
-        if metrics.failed_checks and report.validity is not ValidityStatus.INVALID:
-            # Never reached with the current validator; kept explicit (owner review).
+        if any(f.level == quality.BLOCKING for f in findings) and \
+                report.validity is not ValidityStatus.INVALID:
+            # Never reached: a BLOCKING finding keeps CHECKMESH_FAILURE (owner review).
             report = replace(report, validity=ValidityStatus.INVALID, status="failed")
         if any(i.is_stopping for i in extra):
             report = replace(report, validity=ValidityStatus.INVALID, status="failed")
-        report = replace(report, issues=(*report.issues, *extra))
+        issues = (*report.issues, *extra)
+        report = replace(report, issues=issues, status=(
+            "failed" if report.status == "failed" or has_stopping_issue(issues)
+            else "review" if issues else "passed"))
         path = run.root / MESH_REPORT
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = report.as_dict()
@@ -555,9 +592,78 @@ class ImportRun:
         payload["ami_weights_when"] = AT_REST
         payload["ami_weights_range"] = list(self.pipe.thresholds.imported_ami_weights_range)
         payload["imported"] = {"report": IMPORT_REPORT, "converter": converter(plan.info)}
+        payload["checkmesh_findings"] = [asdict(f) for f in findings]
+        payload["quality_by_zone"] = self._by_zone()
+        payload["quality_sets"] = f"cases/{MERGED_CASE}/{SETS_DIR}/"
         path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         run.issues.extend(report.issues)
         return path, report.status != "failed", report.status
+
+
+    def _by_zone(self) -> dict[str, Any]:
+        try:
+            found = json.loads((self.run.root / QUALITY_REPORT).read_text("utf-8"))
+            return dict(found["by_zone"])
+        except (OSError, ValueError, KeyError, TypeError):
+            return {}
+
+    def _two_levels(self, report: Any, findings: tuple[quality.Finding, ...]) -> Any:
+        """checkMesh's failed checks in two levels (owner, M2a): without a
+        BLOCKING one the mesh is valid and each quality class is a WARNING
+        with its cells per zone; with one, CHECKMESH_FAILURE names them."""
+        if not findings:
+            return report
+        blocking = [f for f in findings if f.level == quality.BLOCKING]
+        by_zone = self._by_zone()
+        warnings = []
+        for kind in dict.fromkeys(f.kind for f in findings if f.level == quality.WARNING):
+            texts = [f.text for f in findings if f.kind == kind]
+            rows = by_zone.get(kind) or []
+            where = "; ".join(
+                f"{r['zone']} {r['cells_past_limit']:,} of {r['cells']:,} cells "
+                f"({r['percent']:.3g} %), worst {r['worst']:.4g}"
+                for r in rows if r["cells_past_limit"]) if rows else ""
+            warnings.append(_issue(
+                IssueSeverity.WARNING, IssueCategory.MESH_QUALITY, IssueStage.MESH_VALIDATION,
+                "MESH_QUALITY_WARNING", f"Mesh quality, {kind}: {'; '.join(texts)}."
+                + (f" By cell zone: {where}." if where else
+                   " No per-zone field for this check: checkMesh's face count only."
+                   if kind not in quality.FIELDS else ""),
+                f"Open cases/{MERGED_CASE}/{SETS_DIR}/ in ParaView for the faces and cells; "
+                "improve the mesh there if the solver struggles. An imported mesh is not "
+                "stopped for quality alone (owner, M2a).", kind=kind, checkmesh=texts,
+                by_zone=rows))
+        others = tuple(i for i in report.issues if i.code != "CHECKMESH_FAILURE")
+        if not blocking and report.metrics.recognized:
+            issues = (*others, *warnings)
+            return replace(report, validity=ValidityStatus.VALID, quality=QualityStatus.REVIEW,
+                           issues=issues, status=("failed" if has_stopping_issue(issues)
+                                                  else "review"))
+        failure = next((i for i in report.issues if i.code == "CHECKMESH_FAILURE"), None)
+        if failure is not None:
+            kinds = ", ".join(dict.fromkeys(f.kind for f in blocking))
+            failure = replace(failure, message=(
+                f"checkMesh reported {report.metrics.failed_checks} failed mesh check(s); "
+                f"BLOCKING: {kinds}."), details={
+                **failure.details, "blocking": [asdict(f) for f in blocking]})
+        return replace(report, issues=(*others, *((failure,) if failure else ()), *warnings))
+
+    def _ami_detail(self, issue: Issue) -> Issue:
+        """An AMI weights WARNING with where each side falls short (ami_detail.py)."""
+        pair = issue.details.get("pair")
+        zones = self.mesh.zones
+        if issue.code != "AMI_WEIGHTS_OUT_OF_RANGE" or not pair or not zones:
+            return issue
+        zone = zones[0]
+        low = self.pipe.thresholds.imported_ami_weights_range[0]
+        sides = pair_details(self.run.root / "cases" / MERGED_CASE, (pair[0], pair[1]), low,
+                             (zone.origin.x, zone.origin.y, zone.origin.z),
+                             surface.axis_vector(zone.axis))
+        if not sides:
+            return issue
+        text = " ".join(s.sentence(low, zone.axis.value) for s in sides)
+        return replace(issue, message=f"{issue.message} {text}",
+                       details={**issue.details, "sides": [s.as_dict() for s in sides]})
 
 
 # --- the scratch conversion (owner answer 4) ------------------------------------------------

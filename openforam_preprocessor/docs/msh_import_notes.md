@@ -791,7 +791,7 @@ normal to the first other axis, and across the axis at its mid-span), with
 mesh view of an imported project draws the boundary by patch (each patch
 simplified by vertex clustering on its own grid) and the cuts; M1c could not
 draw it at all (its cut planes came from `rotating_zones`, empty for an
-imported project). checkMesh's problem locations are drawn after commit 2.
+imported project). checkMesh's problem locations are drawn since commit 2 (13.3).
 
 An M1 project (ASCII, no surface) has no current surface: the UI treats it
 as not yet converted, and the next run imports it again (the import's
@@ -804,3 +804,51 @@ from the surface: interface radii within 0.5 mm of E0's text reads (GV
 FaceGroup13 0.3200, FaceGroup27 0.3822; RU r1_inflow_1 0.3200, r1_outflow_1
 0.1752; DT_INLET 0.1752; SV-Outlet 0.3822). Conversion plus surface: GV 0.6 s,
 RU 1.4 s, DT 2.1 s, SC 10.1 s.
+
+### 13.3 checkMesh in two levels, quality per zone, AMI detail (commit 2)
+
+`machines/msh_import/quality.py`, for imported meshes only (STL and VAWT keep
+the one-level rule; `mesh/validator.py` is unchanged). Each `***` line and
+each non-zero `-meshQuality` table row of checkMesh's log is classified:
+
+| Level | Classes (checkMesh wording, evidence 1) |
+|---|---|
+| BLOCKING | zero or negative cell volumes; open cells; wrongly oriented faces (face pyramids); open boundary; face pyramid volume (table); faces over 90 deg non-orthogonal (on neither list, so BLOCKING, named) |
+| WARNING | skewness; non-orthogonality; aspect ratio; concave cells; tet quality, interpolation weight, cell determinant, volume ratio, face twist (table; owner, after evidence 1) |
+| BLOCKING | any other line, and a "Failed N mesh checks" count the lines do not explain (the table counts as one failure and has no `***` line) |
+
+Without a BLOCKING class the mesh is VALID, quality REVIEW, status review:
+one MESH_QUALITY_WARNING per class, with checkMesh's own lines and, per cell
+zone, the cells past the limit, their share and the worst value. With one,
+CHECKMESH_FAILURE names the BLOCKING classes. The checkMesh pass adds
+`-writeSets vtk -writeFields (nonOrthoAngle skewness faceWeight aspectRatio)`:
+only those fields agree with checkMesh's counts (evidence 9: GV's table has
+0 faces on cells with determinant < 0.001 where the cellDeterminant field has
+1,282 cells below it; minTetVolume has no cell <= 0 where the table has 123
+tet-quality faces; cellVolumeRatio 14 cells where the table has 0), so tet
+quality, determinant, volume ratio, twist and concavity are given as face
+totals, said so. A cell field takes the worst of the cell's faces. The
+per-zone figures go to `reports/mesh_quality_zones.json` and the mesh
+report; the fields, `cellToRegion` and the region sets are then deleted; the
+VTK sets stay in `cases/merged/postProcessing/constant/` for ParaView and are
+drawn as problem markers in the mesh view.
+
+Real v2512, the import's own command on the owner's files (opt-in): GV
+WARNING only (non-orthogonality: down 11,282 of 66,560 cells, worst 78.5 deg;
+skin 5,724 of 71,680, 81.6 deg; up 802, 72.8 deg; upStream 267, 68.5 deg.
+Skewness: upStream 11 cells, 5.52. Tet quality: 123 faces, no per-zone
+field), RU and DT Mesh OK, SC WARNING only (skewness 768 cells, 8.13;
+non-orthogonality 40,337 cells, 84.9 deg; interpolation weight 200 cells,
+0.0198; tet quality and determinant as totals). checkMesh: GV 1.4 s, RU 3.5 s,
+DT 6.1 s, SC 32.5 s. The M1 coarse rotating mesh (non-orthogonality only)
+now imports with a WARNING instead of failing.
+
+AMI weights of an imported mesh run with `writeFields true`
+(`machines/msh_import/ami_detail.py`); an AMI_WEIGHTS_OUT_OF_RANGE warning
+then says, for each side, the share of its area below the range's lower
+end, where (radius and position along the rotation axis), which edge, and
+the side's own extent. On the 23 M machine's files: "RU_DT_ru: 0.21 % of its
+area (830 of 36000 faces) below 0.95, at r 0.175 to 0.1752 m, z -0.1908 to
+-0.1907 m (its outer (largest-radius) edge); the side spans r 0.04136 to
+0.1752 m ..."; "RU_DT_dt: 0.044 % ... at r 0.04135 to 0.04154 m (its inner
+(smallest-radius) edge)".

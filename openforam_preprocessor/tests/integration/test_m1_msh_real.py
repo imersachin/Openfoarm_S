@@ -184,11 +184,14 @@ def test_units_in_mm_give_the_same_mesh_as_metres(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(not HAS_GMSH, reason="the gmsh package makes the coarse mesh")
-def test_a_mesh_failing_checkmesh_with_exit_0_fails(tmp_path: Path,
-                                                    monkeypatch: pytest.MonkeyPatch) -> None:
-    """Owner review: "Failed N mesh checks" fails the mesh whatever the exit code.
-    The rotating geometry meshed coarser (0.5, 0.05 instead of the fixture's 0.3,
-    0.04) has a non-orthogonality checkMesh counts as a failed check."""
+def test_a_quality_only_checkmesh_failure_is_a_warning(tmp_path: Path,
+                                                       monkeypatch: pytest.MonkeyPatch) -> None:
+    """The rotating geometry meshed coarser (0.5, 0.05 instead of the fixture's
+    0.3, 0.04) has a non-orthogonality checkMesh counts as a failed check (exit
+    0). M1 failed the mesh on it; since M2a (owner: two levels for an imported
+    mesh) a quality-only failure is a WARNING with the cells per zone, and the
+    case is set up. BLOCKING classes still fail it (test_m2a_quality, on
+    v2512's own wording)."""
     from tests.fixtures.msh.m1.make_gmsh_small import coarse, make_gmsh
 
     monkeypatch.setattr(make_gmsh, "_mesh", lambda _a, _b: coarse(0.5, 0.05))
@@ -198,10 +201,15 @@ def test_a_mesh_failing_checkmesh_with_exit_0_fails(tmp_path: Path,
 
     log = (tmp_path / "project/logs/merged/checkMesh.log").read_text("utf-8")
     assert re.search(r"Failed \d+ mesh checks", log)
-    assert not result.succeeded and result.mesh is not None
-    assert result.mesh.status.value == "FAILED"
-    assert "CHECKMESH_FAILURE" in {i.code for i in result.issues}
-    assert result.case_setup is not None and result.case_setup.reason == "MESH_NOT_READY"
+    assert result.succeeded and result.mesh is not None
+    codes = {i.code: i.severity.value for i in result.issues}
+    assert "CHECKMESH_FAILURE" not in codes and codes["MESH_QUALITY_WARNING"] == "WARNING"
+    report = json.loads((tmp_path / "project/reports/mesh_quality_report.json").read_text("utf-8"))
+    assert report["assessment"]["mesh_validity"] == "VALID"
+    assert report["quality_by_zone"]["non-orthogonality"]  # per zone, from v2512's fields
+    merged = tmp_path / "project/cases/merged"
+    assert list((merged / "postProcessing/constant").glob("*/*.vtp"))  # sets for ParaView
+    assert not (merged / "constant/nonOrthoAngle").exists()  # read, then removed
 
 
 # --- after the M1b testing review -----------------------------------------------------------
