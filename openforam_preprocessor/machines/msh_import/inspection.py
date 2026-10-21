@@ -14,15 +14,12 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import numpy as np
-
 from core.issues import Issue
 from machines.config import PatchType
-from machines.mesh_folder import poly_mesh_dir
+from machines.msh_import import surface
 from machines.msh_import.detect import MeshFileInfo, Point
 from machines.msh_import.validation import read_mesh_file
 from machines.patches import suggest_region_types
-from visualization.foam_reader import FoamReadError, read_boundary, read_faces, read_points
 
 BOX_FROM_FILE = "read from the file"
 BOX_FROM_CONVERSION = "from the converted mesh"
@@ -94,31 +91,7 @@ class PatchGeometry:
 
 
 def patch_geometry(folder: Path, names: tuple[str, ...]) -> dict[str, PatchGeometry]:
-    """Area and area-weighted centroid of patches of a converted mesh: the
-    evidence shown beside a proposed AMI pair."""
-    poly = poly_mesh_dir(folder)
-    try:
-        patches = {p.name: p for p in read_boundary(poly / "boundary")}
-        points = read_points(poly / "points")
-        faces = read_faces(poly / "faces")
-    except FoamReadError:
-        return {}
-    found: dict[str, PatchGeometry] = {}
-    for name in names:
-        patch = patches.get(name)
-        if patch is None:
-            continue
-        total, weighted = 0.0, np.zeros(3)
-        for face in faces[patch.start_face:patch.start_face + patch.n_faces]:
-            corners = points[face]
-            centre = corners.mean(axis=0)
-            nxt = np.roll(corners, -1, axis=0)
-            areas = 0.5 * np.linalg.norm(np.cross(corners - centre, nxt - centre), axis=1)
-            # Each fan triangle's centroid, weighted by its area.
-            centroids = (corners + nxt + centre) / 3
-            total += float(areas.sum())
-            weighted += (centroids * areas[:, None]).sum(axis=0)
-        centroid = (weighted / total).tolist() if total else [0.0, 0.0, 0.0]
-        found[name] = PatchGeometry(name, patch.n_faces, total,
-                                    (centroid[0], centroid[1], centroid[2]))
-    return found
+    """Area and area-weighted centroid of patches of a converted mesh, from its
+    extracted surface (surface.py): the evidence shown beside a proposed AMI pair."""
+    return {name: PatchGeometry(name, shape.faces, shape.area, shape.centroid)
+            for name, shape in surface.patch_shapes(folder, names).items()}

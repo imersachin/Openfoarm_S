@@ -25,8 +25,8 @@ import pytest
 from case_setup.validation import check_physics
 from core.workflow.run_lock import RunLock
 from machines.config import MachineProjectConfig
+from machines.msh_import import surface
 from machines.msh_import.cases import MERGED_CASE, import_cases, used_names
-from machines.msh_import.checks import face_area, patch_areas
 from machines.msh_import.pipeline import (
     ASSEMBLE_EXECUTABLES,
     AT_REST,
@@ -41,19 +41,20 @@ from machines.msh_import.revolution import (
     over_revolution,
     revolution_files,
 )
+from machines.msh_import.surface import BoundarySurface, patch_areas
 from machines.pipeline import CASE_SETUP_REPORT, MESH_REPORT, MachinePipeline
 from machines.service import MachineService, _CheckCache
 from machines.validation import MachineThresholds, check_all
 from tests.fakes import PLENTY, openfoam_env
-from tests.fakes_msh import FakeMshRunner, write_mesh
+from tests.fakes_msh import FakeMshRunner, fake_surface, write_mesh
 from tests.fixtures.machines.configs import patch
 from tests.fixtures.msh import configs
 from tests.fixtures.msh.configs import M1, mesh_file
 
 Data = dict[str, Any]
 TOOLS = (*IMPORT_EXECUTABLES, *ASSEMBLE_EXECUTABLES, *CHECK_EXECUTABLES, "moveDynamicMesh")
-# The fake's patches: 10 triangles of box corners 0, 1, 2, each half of the
-# rotating box's y-z face (2 m x 2 m): 10 x 2 m^2.
+# The fake's patches: 10 triangles of box corners (0, 1, 2) or (7, 6, 5), each
+# half of one of the rotating box's y-z faces (2 m x 2 m): 10 x 2 m^2.
 FAKE_PATCH_AREA = 20.0
 
 
@@ -98,19 +99,34 @@ def model(data: Data) -> MachineProjectConfig:
 # --- 1. the inlet area measured from the mesh -------------------------------------------------
 
 def test_a_face_area_is_the_magnitude_of_its_area_vector() -> None:
-    points = np.array([[0, 0, 0], [2, 0, 0], [2, 3, 0], [0, 3, 0], [1, 1.5, 1.0]], float)
-    assert face_area(points, np.array([0, 1, 2, 3])) == pytest.approx(6.0)  # a 2 x 3 quad
-    assert face_area(points, np.array([0, 1, 2])) == pytest.approx(3.0)
-    # A warped quad: its projected (vector) area, as OpenFOAM's magSf.
-    warped = np.array([[0, 0, 0], [1, 0, 0.5], [1, 1, 0], [0, 1, 0.5]], float)
-    assert face_area(warped, np.arange(4)) == pytest.approx(1.0)
+    points = np.array([[0, 0, 0], [2, 0, 0], [2, 3, 0], [0, 3, 0],  # a 2 x 3 quad
+                       [0, 0, 0], [1, 0, 0.5], [1, 1, 0], [0, 1, 0.5]], float)  # warped
+    found = BoundarySurface(points, np.array([0, 4, 7, 11]),
+                            np.array([0, 1, 2, 3, 0, 1, 2, 4, 5, 6, 7]),
+                            np.zeros(3, dtype=np.int64), ("faces",))
+    areas, _ = found.area_vectors(np.arange(3))
+    # The warped quad: its projected (vector) area, as OpenFOAM's magSf.
+    assert areas == pytest.approx([6.0, 3.0, 1.0])
 
 
 def test_patch_areas_sum_the_faces_of_each_patch(tmp_path: Path) -> None:
     write_mesh(tmp_path / "constant/polyMesh", [("inlet", "patch", 4), ("outlet", "patch", 0)],
                {}, 10, ((0.0, 0.0, 0.0), (1.0, 2.0, 3.0)))
+    assert patch_areas(tmp_path, ["inlet"]) == {}  # no surface extracted yet
+    fake_surface(tmp_path)
     found = patch_areas(tmp_path, ["inlet", "outlet", "nothing"])
     assert found == {"inlet": pytest.approx(4 * 0.5 * 2.0 * 3.0)}  # no faces: left out
+
+
+def test_a_surface_of_another_mesh_is_not_read(tmp_path: Path) -> None:
+    """The surface records the mesh it was made from: after the mesh changes it
+    is not used (a new import extracts it again)."""
+    poly = tmp_path / "constant/polyMesh"
+    write_mesh(poly, [("inlet", "patch", 4)], {}, 10, ((0.0, 0.0, 0.0), (1.0, 2.0, 3.0)))
+    fake_surface(tmp_path)
+    assert surface.load(tmp_path) is not None
+    write_mesh(poly, [("inlet", "patch", 5)], {}, 10, ((0.0, 0.0, 0.0), (1.0, 2.0, 3.0)))
+    assert surface.load(tmp_path) is None and patch_areas(tmp_path, ["inlet"]) == {}
 
 
 def test_before_the_import_a_flow_rate_inlet_is_info_not_blocking(tmp_path: Path) -> None:
@@ -291,7 +307,7 @@ def test_the_revolution_hash_is_the_assembled_mesh(setup: Setup) -> None:
     assert setup.run(configs.rotating(setup.upload())).succeeded
     before = mesh_hash(setup.root)
     points = setup.root / "cases" / MERGED_CASE / "constant/polyMesh/points"
-    points.write_text(points.read_text("utf-8") + "\n", encoding="utf-8")
+    points.write_bytes(points.read_bytes() + b"\n")
     assert mesh_hash(setup.root) != before
 
 
@@ -337,13 +353,13 @@ def test_an_ami_patch_loses_its_converter_group(tmp_path: Path) -> None:
 
 def test_only_the_rotor_walls_of_the_zone_are_measured(tmp_path: Path) -> None:
     """LOW: two zones, each with its own rotor wall."""
-    from machines.tip_radius import zone_patch_points
     write_mesh(tmp_path / "constant/polyMesh", [("rotor_a", "wall", 2), ("rotor_b", "wall", 2)],
                {"a": 2, "b": 2}, 4, ((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
+    fake_surface(tmp_path)
     # Face i is owned by cell i: rotor_a's faces by zone a's cells 0 and 1.
-    found = zone_patch_points(tmp_path, ["rotor_a", "rotor_b"], np.array([0, 1]))
+    found = surface.zone_patch_points(tmp_path, ["rotor_a", "rotor_b"], "a")
     assert found is not None and found[0] == ("rotor_a",)
-    assert zone_patch_points(tmp_path, ["rotor_b"], np.array([0, 1])) is None
+    assert surface.zone_patch_points(tmp_path, ["rotor_b"], "a") is None
 
 
 def test_the_answered_area_info_is_not_left_in_the_run(setup: Setup) -> None:

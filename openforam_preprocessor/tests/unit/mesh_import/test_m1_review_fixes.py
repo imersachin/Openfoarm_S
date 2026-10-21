@@ -142,7 +142,7 @@ def test_box_conversion_then_units_then_run_converts_once(setup: Setup) -> None:
 
     assert result.succeeded, result.message
     assert setup.runner.names().count("gmshToFoam") == 1
-    assert setup.runner.names()[1] == "transformPoints"
+    assert setup.runner.names()[3] == "transformPoints"  # after the box's surface
     assert f"{IMPORT}:scratch" in result.reused
 
 

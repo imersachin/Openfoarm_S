@@ -659,3 +659,148 @@ message shows in Imported mesh as soon as the file is chosen)
 
 Not in the browser list: a binary Gmsh file without the gmsh package
 (GMSH_BINARY_NEEDS_GMSH; gmsh is installed here; covered by unit tests).
+
+## 13. M2a: large single meshes (owner approval after E0 on the Francis turbine)
+
+E0 on the owner's Francis turbine (four Fluent files: GV and RU single
+passages, DT and SC-SV full 360°; 23 M cells assembled by hand) is reported
+in the session record; the files are never committed (`/root/meshes`, opt-in
+tests with `MACHINES_E0_DIR`). The owner's decisions: binary for every
+imported mesh; a two-level checkMesh for imported meshes only (unclassified
+failures stay BLOCKING); the revolution check in the background (36 x 10 deg
+by default, coarser sweeps offered above 10 min, 45 deg preferred over 30
+deg); a machine-wide heavy-step lock that says who holds it; a disk file
+picker with a copy into WSL; a preflight from the measured E0 figures.
+
+### 13.1 Evidence before the commits (v2512, this machine: 31 GB RAM, 32 cores)
+
+**1. checkMesh wording per defect class.** Tiny blockMesh cubes (4 x 4 x 4)
+with one defect each, checked plain, with `-allGeometry -allTopology`, and
+with the app's flags (`-allTopology -meshQuality`):
+
+| Defect made | `***` lines (all three runs unless noted) | `-meshQuality` table rows |
+|---|---|---|
+| two point layers swapped | High aspect ratio cells; **Zero or negative cell volume detected** (16 cells); Number of non-orthogonality errors; Error in face pyramids | non-orthogonality > 65; face pyramid volume < 1e-13 |
+| one point pushed through its neighbours | Number of non-orthogonality errors: 4; **Error in face pyramids**: 16 faces are incorrectly oriented (volumes stay positive) | the same two |
+| one face's points reversed | **Open cells found**; non-orthogonality errors; Error in face pyramids (`-allGeometry` adds face tets, Concave cells) | non-orthogonality |
+| last boundary face removed | **Boundary openness** ... possible hole; Open cells (`-allTopology` adds "Open cells found, number of cells: 1 ... zipUpMesh") | none |
+| shear 80 deg | `*`Number of severely non-orthogonal (> 70 degrees) faces: 96 (one star: not a failure); **Max skewness = 5.67, 32 highly skew faces** | non-orthogonality > 65 |
+| stretch x 5000 | **High aspect ratio cells found**, Max aspect ratio: 5000 (`-allGeometry` adds Cells with small determinant) | face-decomposition tet quality < 1e-15; cells with determinant < 0.001 |
+
+"Concave cells" is only checked with `-allGeometry`, which the import does
+not run; `-meshQuality` reports concavity in its table. The table ("Checking
+faces in error") counts as one failed check and has no `***` line.
+
+On the owner's meshes, `-allTopology -meshQuality`:
+
+| Mesh | Time / peak RAM | `***` | Table rows (non-zero) |
+|---|---|---|---|
+| GV passage | 2.0 s / 0.4 GB | Max skewness 5.52, 11 faces | non-orthogonality > 65: 28,008; tet quality: 123 |
+| RU passage | 5.0 s / 1.0 GB | Mesh OK | none |
+| DT | 7.9 s / 2.1 GB | Mesh OK | none |
+| SC-SV | 39.8 s / 7.1 GB | Max skewness 8.13, 384 faces | non-orthogonality 42,291; tet quality 550; skewness 384; interpolation weight < 0.05: 95; determinant < 0.001: 380 |
+| GV ring (7.9 M) | 42.0 s / 11.1 GB | none | non-orthogonality 793,800; tet quality 3,444 |
+| RU ring (10.8 M) | 57.4 s / 14.9 GB | Mesh OK | none |
+| machine (23 M) | 170 s / **31.9 GB** | SC skewness | as SC plus the GV ring |
+
+Owner decision on these rows: tet quality, interpolation weight, cell
+determinant, volume ratio and face twist are WARNINGs, shown per zone; face
+pyramid volume stays BLOCKING.
+
+The cost is `-allTopology`: at 23 M cells it alone takes 141 s and 31.9 GB
+(`-meshQuality` alone 71 s / 20.7 GB; plain 52 s / 19.2 GB). It is also what
+reports wall baffles ("identical duplicate faces", needed for MSH_BAFFLE_PAIR:
+no such line without it on the E3 baffle mesh). `mergeOrSplitBaffles
+-detectOnly` counts the same faces (100 = 2 x 50) in 8.1 s / 9.2 GB at 23 M.
+M2a keeps `-allTopology` for a single file (SC: 7 GB) and models its RAM in
+the preflight; the 23 M assembly is M2b's question.
+
+**2. The tip radius from the zone's own walls, by tools.** A topoSet faceSet
+of the chosen wall patches, subset to the faces of the zone's cells, made a
+faceZone; surfaceMeshExtract wrote it with every patch in one pass (23 M:
+topoSet 12.3 s / 11.9 GB, extraction 7.2 s / 9.2 GB). A wall of another zone
+in the list (SV-SS) dropped out (882,834 to 813,600 faces). The app makes one
+faceZone per cell zone instead (the zone's outer surface: `cellToFace
+outside`, its boundary faces included), so any choice of walls is measured
+later without a tool run: a patch face is in the zone when the same face
+(the same point labels; the extraction merges points) is in the zone's
+surface. RU passage: all 82,976 patch faces found in exactly one zone
+surface; SC: 384,961 of 384,961. Cost: RU (12 zones) 1.7 + 1.6 s, SC 7.7 +
+6.9 s / 0.9 GB, the machine (22 zones) 19.6 + 9.2 s / 10.1 GB and a 300 MB
+.vtp (zone surfaces repeat the faces between zones).
+
+**3. AMI weights per face at rest.** `postProcess -constant` with the
+AMIWeights function object and `writeFields true` writes
+`postProcessing/AMIWeights1/constant/<patch>_{src,tgt}.vtp` with a per-face
+`weightsSum`: 9.5 s / 9.2 GB at 23 M (as without), a few MB. RU to DT at
+rest: runner side 830 faces below 0.95, 0.209 % of the area, all at r 0.1751
+m, z -0.1908 (the shroud edge); draft-tube side 64 faces, 0.044 %, at r
+0.0414 m (the hub edge), the picture `-checkAMI` gave over the revolution.
+
+**4. Copy from a Windows drive.** A 586 MB file on E: not read for a month,
+copied into WSL in 8 MB chunks with sha256 computed while copying: 2.25 s
+(261 MB/s) cold, 1.78 s warm; re-hashing the copy 0.26 s; hashes equal.
+
+**5. One checkMesh pass with sets and fields.** `-meshQuality -writeSets vtk
+-writeFields (nonOrthoAngle skewness cellDeterminant faceWeight minTetVolume
+minPyrVolume cellVolumeRatio aspectRatio)`: SC 29.8 s / 5.8 GB, the machine
+89.5 s / 21.0 GB. The fields go to `constant/` (1.5 GB binary at 23 M), the
+sets to `postProcessing/constant/<set>/<set>.vtp` (a cell set as its faces);
+the region cell sets (`region0..3`, 312 MB at 23 M) and `cellToRegion` only
+to `constant/polyMesh/sets` and `constant/`. checkMesh's field names in
+v2512: aspectRatio cellAspectRatio cellDeterminant cellRegion cellShapes
+cellVolume cellVolumeRatio cellZone faceWeight faceZone minPyrVolume
+minTetVolume nonOrthoAngle skewness wallDistance (no twist, no concavity).
+
+**6. Cuts by a tool.** The `surfaces` function object (`cuttingPlane`,
+`interpolate false`, `triangulate false`, `fields ()`) through `postProcess
+-constant` writes each cut's cell outlines as polygons: DT 2.5 s / 0.5 GB,
+the machine 16.0 s / 10.8 GB.
+
+**7. A surface case beside the mesh.** topoSet and surfaceMeshExtract in a
+case whose `constant/polyMesh` files are links to another case's: the
+source's points, faces, owner, neighbour, boundary, cellZones and faceZones
+were byte-identical afterwards; only the case's own faceZones and sets were
+written.
+
+### 13.2 Binary meshes and the extracted surface (commit 1)
+
+Every imported case (`imported`, `merged`, `imported_scratch`) writes binary;
+STL meshing keeps its ASCII controlDict. Nothing reads an imported mesh's
+points, faces or owner in Python. What stays text in a binary mesh and is
+read: the boundary file (a dictionary; `foam_reader.read_boundary` accepts
+its binary header, every other reader still refuses one), the owner header's
+nCells, the zone names.
+
+`machines/msh_import/surface.py`: `cases/<case>_surface/` links to the mesh,
+topoSet makes `zoneSurface_<zone>` for each cell zone, surfaceMeshExtract
+writes `boundary.vtp`, and `regions.json` records the region names (from the
+log) and the stat of the mesh files it was made from; a surface of another
+mesh is not used. From it: patch areas (as magSf, float32 points), boxes,
+area-weighted centroids (the AMI pair evidence), the zone radius (its outer
+surface), the rotor walls of a zone (tip radius), the scratch conversion's
+box (the boundary's points). The import extracts it only after the cheap
+checks accept the mesh (cell count, zones, lost patches), so a rejected mesh
+costs nothing more; the defaultFaces box is read from it.
+
+A new operation `machine_mesh_views` after checkMesh makes the merged mesh's
+surface and two cuts through the first mesh zone (the plane through its axis
+normal to the first other axis, and across the axis at its mid-span), with
+`cuts.json` recording the planes. Display only: a failure is a WARNING
+(MESH_VIEW_FAILED), nothing is recorded and the next run tries again. The
+mesh view of an imported project draws the boundary by patch (each patch
+simplified by vertex clustering on its own grid) and the cuts; M1c could not
+draw it at all (its cut planes came from `rotating_zones`, empty for an
+imported project). checkMesh's problem locations are drawn after commit 2.
+
+An M1 project (ASCII, no surface) has no current surface: the UI treats it
+as not yet converted, and the next run imports it again (the import's
+recorded outputs now include the surface).
+
+Real v2512 (`tests/integration/test_m2a_real.py`): the rotating test mesh's
+inlet 4.0 m², zone radius 0.500 m, tip radius from the rotor patch, both
+cuts; the owner's files (opt-in) converted binary for their box and measured
+from the surface: interface radii within 0.5 mm of E0's text reads (GV
+FaceGroup13 0.3200, FaceGroup27 0.3822; RU r1_inflow_1 0.3200, r1_outflow_1
+0.1752; DT_INLET 0.1752; SV-Outlet 0.3822). Conversion plus surface: GV 0.6 s,
+RU 1.4 s, DT 2.1 s, SC 10.1 s.

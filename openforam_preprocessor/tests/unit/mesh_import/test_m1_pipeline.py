@@ -26,11 +26,13 @@ from machines.msh_import.pipeline import (
     IMPORT,
     IMPORT_EXECUTABLES,
     IMPORT_REPORT,
+    MESH_VIEWS,
     convert_scratch,
 )
 from machines.operations import ASSEMBLE, CASE_SETUP, CHECK_MESH, VALIDATE, VALIDATE_MESH
 from machines.pipeline import MESH_REPORT, MachinePipeline, MachineRunResult
 from openfoam.runner import RunStatus
+from tests import foam_binary
 from tests.fakes import PLENTY, openfoam_env
 from tests.fakes_msh import FakeMshRunner
 from tests.fixtures.machines.configs import patch
@@ -40,10 +42,13 @@ from vawt.status import RunState
 
 Data = dict[str, Any]
 TOOLS = (*IMPORT_EXECUTABLES, *ASSEMBLE_EXECUTABLES, *CHECK_EXECUTABLES)
-FULL = [VALIDATE, IMPORT, ASSEMBLE, CHECK_MESH, VALIDATE_MESH, CASE_SETUP]
+FULL = [VALIDATE, IMPORT, ASSEMBLE, CHECK_MESH, MESH_VIEWS, VALIDATE_MESH, CASE_SETUP]
 # 7 patch types, then 4 entries and the inGroups removal for each side of the
 # AMI pair (M1c: in place).
-ORDER = ["gmshToFoam", *["foamDictionary"] * (7 + 10), "checkMesh", "postProcess"]
+SURFACE = ["topoSet", "surfaceMeshExtract"]  # the boundary surface (M2a)
+# The cuts for the 3D pane are made by postProcess on the merged mesh's surface case.
+ORDER = ["gmshToFoam", *SURFACE, *["foamDictionary"] * (7 + 10), "checkMesh", "postProcess",
+         *SURFACE, "postProcess"]
 
 
 class Project:
@@ -140,8 +145,8 @@ def test_units_are_applied_after_conversion_with_transform_points(
     scale = next(a for a in runner.argv if a[0] == "transformPoints")
     assert scale[-2:] == ("-scale", "(0.001 0.001 0.001)")
     assert runner.names().index("transformPoints") == 1  # right after the converter
-    points = (project.root / "cases/imported/constant/polyMesh/points").read_text("utf-8")
-    assert "(0.0030000000000000001 0.001 0.001)" in points
+    points = foam_binary.read_points(project.root / "cases/imported/constant/polyMesh/points")
+    assert [0.003, 0.001, 0.001] in points.tolist()  # binary (M2a)
     assert codes(result)["MSH_UNITS_SUSPECT"] == "WARNING"  # 4 mm across
 
 
@@ -149,7 +154,7 @@ def test_cached_steps_are_reused(project: Project, gmsh: Data) -> None:
     project.run(gmsh)
     result, runner = project.run(gmsh)
 
-    assert set(result.reused) == {IMPORT, ASSEMBLE, CHECK_MESH, CASE_SETUP}
+    assert set(result.reused) == {IMPORT, ASSEMBLE, CHECK_MESH, MESH_VIEWS, CASE_SETUP}
     assert runner.calls == []
 
 
@@ -242,8 +247,10 @@ def test_faces_in_no_group_stop_the_import_with_their_count_and_box(
     issue = next(i for i in result.issues if i.code == "GMSH_UNGROUPED_FACES")
 
     assert issue.severity.value == "BLOCKING" and issue.details["faces"] == 872
-    assert issue.details["box"] == [[-1.0, -1.0, -1.0], [-1.0, 1.0, 1.0]]  # the fake's face
-    assert "872 boundary faces between (-1 -1 -1) and (-1 1 1) m" in issue.message
+    # The fake's faces lie on both x ends of the rotating box (fakes_msh), read
+    # from the extracted surface (M2a).
+    assert issue.details["box"] == [[-1.0, -1.0, -1.0], [3.0, 1.0, 1.0]]
+    assert "872 boundary faces between (-1 -1 -1) and (3 1 1) m" in issue.message
     assert "Physical Surface" in issue.suggested_action
 
 
@@ -305,7 +312,7 @@ def test_a_binary_gmsh_file_is_resaved_before_conversion(
 
     scratch = asyncio.run(convert_scratch(project.root, info, file_sha256(path),
                                           runner=runner, env=project.env, tool="t"))
-    assert runner.names() == ["resave", "gmshToFoam"]
+    assert runner.names() == ["resave", "gmshToFoam", *SURFACE]
     assert runner.argv[0][1].endswith("resave.py") and runner.argv[1][1] == "resaved.msh"
     assert scratch.box == ((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)) and scratch.issues == ()
 
@@ -324,12 +331,12 @@ def test_the_scratch_conversion_is_promoted_not_repeated(
     tool = pipeline._tool(config, ("gmshToFoam",))
     asyncio.run(convert_scratch(project.root, inspect_mesh_file(path), file_sha256(path),
                                 runner=runner, env=project.env, tool=tool))
-    assert runner.names() == ["gmshToFoam"]
+    assert runner.names() == ["gmshToFoam", *SURFACE]  # the box from its surface
     result = pipeline.run_sync(project.root, config)
 
     assert result.succeeded, result.message
     assert runner.names().count("gmshToFoam") == 1  # no second conversion
-    assert runner.names()[1] == "transformPoints"
+    assert runner.names()[3] == "transformPoints"
     assert f"{IMPORT}:scratch" in result.reused
     assert not (project.root / "cases" / SCRATCH_CASE / "scratch.json").exists()
     log = project.root / "logs" / IMPORTED_CASE / "00_promote.log"

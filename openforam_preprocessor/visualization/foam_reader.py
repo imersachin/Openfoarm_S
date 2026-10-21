@@ -2,7 +2,10 @@
 
 Supports the uncompressed ASCII format this application configures in
 controlDict (writeFormat ascii; writeCompression off). Anything else raises
-FoamReadError with an explanation instead of guessing.
+FoamReadError with an explanation instead of guessing. The one exception is
+the boundary file: a dictionary, written as text in a binary mesh too (v2512;
+an imported mesh is binary, M2a), so its header's format is not a reason to
+refuse it.
 """
 
 from __future__ import annotations
@@ -37,7 +40,7 @@ class PolyMeshSurface:
     patches: tuple[Patch, ...]
 
 
-def _read(path: Path) -> tuple[dict[str, str], str]:
+def _read(path: Path, text_in_binary: bool = False) -> tuple[dict[str, str], str]:
     if not path.is_file():
         if path.with_name(path.name + ".gz").is_file():
             raise FoamReadError(f"{path.name} is compressed (.gz); only uncompressed ASCII "
@@ -52,7 +55,8 @@ def _read(path: Path) -> tuple[dict[str, str], str]:
             if len(parts) == 2:
                 header[parts[0]] = parts[1].strip().strip('"')
         text = text[match.end():]
-    if header.get("format", "ascii") != "ascii":
+    if header.get("format", "ascii") not in (("ascii", "binary") if text_in_binary
+                                             else ("ascii",)):
         raise FoamReadError(f"{path.name} is in {header['format']} format; only ASCII meshes "
                             "can be displayed.")
     return header, _COMMENTS.sub(" ", text)
@@ -113,7 +117,7 @@ def read_faces(path: Path) -> list[np.ndarray]:
 
 
 def read_boundary(path: Path) -> tuple[Patch, ...]:
-    _, text = _read(path)
+    _, text = _read(path, text_in_binary=True)
     patches: list[Patch] = []
     for name, body in re.findall(r"(\S+)\s*\{([^{}]*)\}", text):
         values = dict(re.findall(r"(\w+)\s+([^;]+);", body))

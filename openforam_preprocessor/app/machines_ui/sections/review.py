@@ -6,6 +6,7 @@ import streamlit as st
 
 from app.components.widgets import render_issues
 from app.machines_ui import state
+from machines.msh_import.pipeline import IMPORT, MESH_VIEWS
 from machines.operations import (
     ASSEMBLE,
     CASE_SETUP,
@@ -36,7 +37,9 @@ OPERATION_LABELS = {
     VALIDATE: "Validate the configuration",
     GENERATE_CASES: "Write the OpenFOAM dictionaries",
     ASSEMBLE: "Assemble (mergeMeshes, createPatch, patch types)",
+    IMPORT: "Import the mesh (convert, binary; its boundary surface)",
     CHECK_MESH: "checkMesh and AMI weights",
+    MESH_VIEWS: "Views of the mesh for the 3D pane (surface, two cuts)",
     VALIDATE_MESH: "Mesh validation",
     CASE_SETUP: "Case setup (fields and dictionaries; not solved)",
 }

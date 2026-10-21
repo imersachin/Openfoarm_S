@@ -14,7 +14,6 @@ which configuration fields each owns; section status follows it.
 from __future__ import annotations
 
 import asyncio
-import functools
 import json
 import math
 import os
@@ -60,9 +59,8 @@ from machines.config import (
 )
 from machines.joints import propose_joints
 from machines.mesh_folder import MeshFolderReport, check_mesh_folder
-from machines.msh_import.cases import IMPORTED_CASE, SCRATCH_CASE, converter
-from machines.msh_import.checks import patch_areas, zone_cells
-from machines.msh_import.checks import zone_radius as mesh_zone_radius
+from machines.msh_import import surface as mesh_surface
+from machines.msh_import.cases import IMPORTED_CASE, MERGED_CASE, SCRATCH_CASE, converter
 from machines.msh_import.inspection import MeshInspection, PatchGeometry, patch_geometry
 from machines.msh_import.inspection import inspect as inspect_mesh_file_view
 from machines.msh_import.pipeline import (
@@ -102,6 +100,8 @@ from machines.previews import (
     PreviewLimits,
     cut_planes,
     flow_arrows,
+    imported_mesh_preview,
+    imported_mesh_signature,
     mesh_preview,
     mesh_signature,
     patch_kinds,
@@ -121,7 +121,7 @@ from machines.project_store import (
     read_ui_settings,
     write_ui_settings,
 )
-from machines.tip_radius import MeasuredRadius, differs, radial_max, zone_patch_points
+from machines.tip_radius import MeasuredRadius, differs, radial_max
 from machines.validation import CheckedConfig, MachineThresholds, check_all, parse_config
 from mesh.estimator import CellEstimate, ResourceAssessment, ResourceEstimator, SystemResources
 from openfoam.environment import tool_identity, validate_environment
@@ -575,7 +575,7 @@ class MachineService(RunControl):
         folder, factor = converted
         refs = {p.name: p.source.ref for p in config.patches
                 if p.source.kind is SourceKind.MESH_PATCH}
-        areas = _patch_areas(folder, tuple(sorted(set(refs.values()))))
+        areas = mesh_surface.patch_areas(folder, sorted(set(refs.values())))
         return {name: areas[ref] * factor**2 for name, ref in refs.items() if ref in areas}
 
     def _converted_mesh(self, mesh: ImportedMesh) -> tuple[Path, float] | None:
@@ -591,8 +591,8 @@ class MachineService(RunControl):
                 done = float(found[key])
             except (OSError, ValueError, TypeError, KeyError):
                 continue
-            if found.get("sha256") == mesh.sha256 and done > 0 and (
-                    folder / "constant" / "polyMesh" / "boundary").is_file():
+            if (found.get("sha256") == mesh.sha256 and done > 0
+                    and mesh_surface.load(folder) is not None):  # converted, with its surface
                 return folder, mesh.source_units.to_metres / done
         return None
 
@@ -612,7 +612,7 @@ class MachineService(RunControl):
                            and p.source.kind is SourceKind.MESH_PATCH)
             if own is None or converted is None or not walls:
                 return None
-            found = _rotor_points(converted[0], tuple(walls), own.cell_zone)
+            found = mesh_surface.zone_patch_points(converted[0], walls, own.cell_zone)
             if found is None:
                 return None
             names, points = found
@@ -1169,7 +1169,10 @@ class MachineService(RunControl):
         if config is None:
             return PreviewKey(view, None, issues, notes)
         signature = [setup_signature(config, self.preview_limits)]
-        if poly is not None:
+        if poly is not None and config.imported_mesh is not None:
+            signature.append(imported_mesh_signature(self.root / "cases" / MERGED_CASE,
+                                                     patch_kinds(config), self.preview_limits))
+        elif poly is not None:
             signature.append(mesh_signature(poly, patch_kinds(config), (), self.preview_limits))
         return PreviewKey(view, sha256_json([signature, config.model_dump(mode="json"),
                                              list(notes)]), issues, notes)
@@ -1186,7 +1189,11 @@ class MachineService(RunControl):
                 "Run the mesh again.", IssueSeverity.WARNING)), built=False)
         setup = setup_preview(self.root, config, self.preview_limits)
         stored = setup
-        if poly is not None:
+        if poly is not None and config.imported_mesh is not None:
+            # Binary and never read whole: the surface and cuts the run made (M2a).
+            stored = imported_mesh_preview(self.root, self.root / "cases" / MERGED_CASE,
+                                           patch_kinds(config), self.preview_limits)
+        elif poly is not None:
             stored = mesh_preview(self.root, poly, patch_kinds(config),
                                   cut_planes(config, setup.scene), self.preview_limits)
         scene = stored.scene
@@ -1221,46 +1228,7 @@ class MachineService(RunControl):
             return None
         if own is None or not isinstance(report, dict) or report.get("sha256") != mesh.sha256:
             return None
-        return mesh_zone_radius(self.root / "cases" / IMPORTED_CASE, own)
-
-
-def _patch_areas(folder: Path, names: tuple[str, ...]) -> dict[str, float]:
-    """patch_areas, read once per version of the mesh's faces and points."""
-    poly = folder / "constant" / "polyMesh"
-    try:
-        stamp = tuple((s.st_size, s.st_mtime_ns) for s in (
-            (poly / n).stat() for n in ("boundary", "faces", "points")))
-    except OSError:
-        return {}
-    return dict(_areas_of(str(folder), names, stamp))
-
-
-def _rotor_points(folder: Path, walls: tuple[str, ...], cell_zone: str,
-                  ) -> tuple[tuple[str, ...], np.ndarray] | None:
-    """zone_patch_points of the zone's cells, read once per version of the mesh."""
-    poly = folder / "constant" / "polyMesh"
-    try:
-        stamp = tuple((s.st_size, s.st_mtime_ns) for s in (
-            (poly / n).stat() for n in ("boundary", "faces", "points", "owner", "cellZones")))
-    except OSError:
-        return None
-    return _rotor_points_of(str(folder), walls, cell_zone, stamp)
-
-
-@functools.lru_cache(maxsize=8)
-def _rotor_points_of(folder: str, walls: tuple[str, ...], cell_zone: str,
-                     stamp: tuple[tuple[int, int], ...],
-                     ) -> tuple[tuple[str, ...], np.ndarray] | None:
-    cells = zone_cells(Path(folder), cell_zone)
-    if cells is None or not len(cells):
-        return None
-    return zone_patch_points(Path(folder), walls, cells)
-
-
-@functools.lru_cache(maxsize=16)
-def _areas_of(folder: str, names: tuple[str, ...],
-              stamp: tuple[tuple[int, int], ...]) -> tuple[tuple[str, float], ...]:
-    return tuple(patch_areas(Path(folder), names).items())
+        return mesh_surface.config_zone_radius(self.root / "cases" / IMPORTED_CASE, own)
 
 
 _CHECKS = _CheckCache()

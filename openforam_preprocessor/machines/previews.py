@@ -1021,6 +1021,171 @@ def _problem_markers(poly: Path, points: np.ndarray, faces: _Faces, owner: np.nd
     return markers
 
 
+# --- the mesh scene of an imported mesh (M2a) -----------------------------------------------
+#
+# The imported polyMesh is binary and never read whole: the boundary comes from the
+# surface the tools extracted (machines.msh_import.surface), each patch decimated by
+# vertex clustering on a grid sized to the patch; the cuts are the cell outlines a
+# cuttingPlane wrote when the mesh was checked, through the first mesh zone (the
+# plane through its axis normal to the first other axis, and across the axis at its
+# mid-span); checkMesh's problem locations come with the quality pass.
+
+ALONG, ACROSS = "along", "across"  # the cut files' names
+
+
+def imported_cut_planes(config: MachineProjectConfig,
+                        zone_points: np.ndarray | None) -> tuple[Plane, ...]:
+    """The two cuts of an imported mesh through its first mesh zone; () without one.
+    zone_points: the points of the zone's outer surface (its mid-span), if known."""
+    mesh = config.imported_mesh
+    if mesh is None or not mesh.zones:
+        return ()
+    zone = mesh.zones[0]
+    origin = np.array([zone.origin.x, zone.origin.y, zone.origin.z])
+    e = unit(zone.axis)
+    centre = origin
+    if zone_points is not None and len(zone_points):
+        along = (zone_points - origin) @ e
+        centre = origin + e * (along.min() + along.max()) / 2.0
+    normal = unit(plane_axes(zone.axis)[1])
+    return (Plane(f"cut through the {zone.name} axis", _t(centre), _t(normal)),
+            Plane(f"cut across the {zone.name} axis at {zone.axis.value} = "
+                  f"{centre[zone.axis.position]:.4g} m", _t(centre), _t(e)))
+
+
+def cluster(points: np.ndarray, triangles: np.ndarray, cap: int,
+            ) -> tuple[np.ndarray, np.ndarray]:
+    """At most about `cap` triangles: vertex clustering on a grid sized to these
+    points, coarsened until it fits (E0: 4.3 M triangles of a 23 M-cell machine
+    to 16-165 k in about a second a level). Returns (vertices, triangles)."""
+    used, inverse = np.unique(triangles, return_inverse=True)
+    vertices = points[used]
+    local = inverse.reshape(-1, 3)
+    if len(local) <= cap:
+        return vertices, local
+    low = vertices.min(axis=0)
+    span = float((vertices.max(axis=0) - low).max()) or 1.0
+    cells = max(2, int(math.sqrt(cap)))
+    while True:
+        h = span / cells
+        grid = np.floor((vertices - low) / h).astype(np.int64)
+        flat = (grid[:, 0] * (cells + 2) + grid[:, 1]) * (cells + 2) + grid[:, 2]
+        _, rep = np.unique(flat, return_inverse=True)
+        moved = rep[local]
+        keep = ((moved[:, 0] != moved[:, 1]) & (moved[:, 1] != moved[:, 2])
+                & (moved[:, 0] != moved[:, 2]))
+        kept = np.unique(np.sort(moved[keep], axis=1), axis=0)
+        if len(kept) <= cap or cells <= 2:
+            sums = np.zeros((int(rep.max()) + 1, 3))
+            np.add.at(sums, rep, vertices)
+            return sums / np.bincount(rep).astype(float)[:, None], kept
+        cells = max(2, int(cells * 0.7))
+
+
+def _fan(surface: Any, faces: np.ndarray) -> np.ndarray:
+    """Fan triangulation of surface faces (machines.msh_import.surface)."""
+    starts = surface.offsets[faces]
+    sizes = surface.offsets[faces + 1] - starts
+    flat = surface.connectivity
+    parts = []
+    for k in range(1, int(sizes.max(initial=2)) - 1):
+        s = starts[sizes > k + 1]
+        parts.append(np.column_stack([flat[s], flat[s + k], flat[s + k + 1]]))
+    return np.vstack(parts) if parts else np.zeros((0, 3), dtype=np.int64)
+
+
+def imported_view_files(folder: Path) -> list[Path]:
+    """The files the imported mesh scene is drawn from (folder: cases/merged/)."""
+    from machines.msh_import import surface
+
+    target = surface.surface_dir(folder)
+    return [folder / "constant" / "polyMesh" / "boundary", target / surface.SURFACE_FILE,
+            target / surface.REGIONS_FILE, target / surface.CUTS_RECORD,
+            surface.cut_file(folder, ALONG), surface.cut_file(folder, ACROSS)]
+
+
+def _imported_inputs(kinds: Mapping[str, str], limits: PreviewLimits) -> dict[str, Any]:
+    return {"version": PREVIEW_VERSION, "view": "mesh", "source": "imported",
+            "kinds": dict(sorted(kinds.items())), "limits": limits.__dict__}
+
+
+def imported_mesh_signature(folder: Path, kinds: Mapping[str, str],
+                            limits: PreviewLimits) -> str:
+    return sha256_json({**_imported_inputs(kinds, limits),
+                        "files": [_stat(p) for p in imported_view_files(folder)]})
+
+
+def imported_mesh_hash(folder: Path, kinds: Mapping[str, str], limits: PreviewLimits) -> str:
+    return sha256_json({**_imported_inputs(kinds, limits),
+                        "files": [[p.name, sha256_file(p) if p.is_file() else None]
+                                  for p in imported_view_files(folder)]})
+
+
+def recorded_planes(folder: Path) -> tuple[Plane, ...]:
+    """The planes the cuts of the imported mesh in `folder` were made on."""
+    from machines.msh_import import surface
+
+    return tuple(Plane(name, origin, normal)
+                 for name, origin, normal in surface.read_cuts(folder))
+
+
+def build_imported_mesh_scene(folder: Path, kinds: Mapping[str, str],
+                              limits: PreviewLimits | None = None, key: str = "") -> Scene:
+    """Boundary by patch and the cuts of the imported mesh in `folder`
+    (cases/merged/), on the planes they were made on."""
+    from machines.msh_import import surface as extracted
+
+    limits = limits or PreviewLimits()
+    planes = recorded_planes(folder)
+    found = extracted.load(folder)
+    try:
+        patches = read_boundary(folder / "constant" / "polyMesh" / "boundary")
+    except FoamReadError:
+        patches = ()
+    if found is None or not patches:
+        return Scene("mesh", key, issues=(_issue(
+            "VIEW_MESH_UNAVAILABLE", "The mesh cannot be displayed: its boundary surface "
+            "was not extracted.", "Run the mesh again; the surface is made when the mesh "
+            "is checked.", IssueCategory.MESHING, path=str(folder)),))
+    notes: list[str] = []
+    listed = [(p, found.faces(p.name)) for p in patches if p.n_faces]
+    listed = [(p, faces) for p, faces in listed if len(faces)]
+    keep = allocate([len(f) for _, f in listed], limits.max_faces,
+                    limits.min_faces_per_patch)
+    surfaces = []
+    for (patch, faces), count in zip(listed, keep, strict=True):
+        vertices, triangles = cluster(found.points, _fan(found, faces), max(count, 1))
+        surfaces.append(Surface(
+            f"{patch.name} ({patch.patch_type})",
+            _patch_kind(patch.name, patch.patch_type, kinds), vertices.astype(np.float32),
+            triangles.astype(np.int32), min(len(triangles), len(faces)), len(faces)))
+    shown, total = sum(s.shown for s in surfaces), sum(s.total for s in surfaces)
+    if shown < total:
+        notes.append(f"The boundary is simplified for display: {shown:,} triangles for "
+                     f"{total:,} faces (display limit {limits.max_faces:,}; each patch "
+                     "simplified on its own grid).")
+    lines = []
+    for plane, name in zip(planes, (ALONG, ACROSS), strict=False):
+        segments = extracted.cut_segments(extracted.cut_file(folder, name))
+        if segments is None:
+            notes.append(f"The {plane.name} was not made; run the mesh again to draw it.")
+            continue
+        n = len(segments)
+        if not n:
+            notes.append(f"The {plane.name} does not cross the mesh.")
+            continue
+        segments = segments[sample_indices(n, limits.max_cut_segments)]
+        if n > len(segments):
+            notes.append(_thin_note(f"cell edges on the {plane.name}", len(segments), n,
+                                    limits.max_cut_segments))
+        flat = np.full((len(segments) * 3, 3), np.nan)
+        flat[0::3], flat[1::3] = segments[:, 0], segments[:, 1]
+        lines.append(Lines(plane.name, CUT, flat[:-1].astype(np.float32), len(segments), n))
+    notes.append("checkMesh problem locations of an imported mesh are not drawn yet.")
+    return Scene("mesh", key, tuple(surfaces), tuple(lines), (), (),
+                 _bounds([s.vertices for s in surfaces]), tuple(notes))
+
+
 # --- storage --------------------------------------------------------------------------------
 
 def _encode(scene: Scene) -> dict[str, np.ndarray]:
@@ -1198,6 +1363,15 @@ def mesh_preview(root: Path, poly: Path, kinds: Mapping[str, str], planes: Seque
         "mesh", lambda: mesh_signature(poly, kinds, planes, limits),
         lambda: mesh_hash(poly, kinds, planes, limits),
         lambda key: build_mesh_scene(poly, kinds, planes, limits, key))
+
+
+def imported_mesh_preview(root: Path, folder: Path, kinds: Mapping[str, str],
+                          limits: PreviewLimits | None = None) -> StoredPreview:
+    limits = limits or PreviewLimits()
+    return PreviewStore(root).get(
+        "mesh", lambda: imported_mesh_signature(folder, kinds, limits),
+        lambda: imported_mesh_hash(folder, kinds, limits),
+        lambda key: build_imported_mesh_scene(folder, kinds, limits, key))
 
 
 def patch_kinds(config: MachineProjectConfig) -> dict[str, str]:

@@ -12,8 +12,8 @@ wrote:
 - after checkMesh: wall baffles ("identical duplicate faces"), which are
   kept as walls (fluent3DMeshToFoam keeps the pair, E0)
 
-Plus the zone radius about its axis, computed from the zone's points (shown
-labelled "computed from the zone"; owner answer 3).
+The geometry (the box of defaultFaces) comes from the surface the tools
+extracted (surface.py): the polyMesh is binary and never read whole (M2a).
 """
 
 from __future__ import annotations
@@ -23,27 +23,19 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage
-from machines.config import MachineProjectConfig, MeshZone
+from machines.config import MachineProjectConfig
 from machines.mesh_folder import poly_mesh_dir
+from machines.msh_import import surface
 from machines.msh_import.detect import MeshFileInfo, MeshFormat
-from visualization.foam_reader import (
-    FoamReadError,
-    Patch,
-    read_boundary,
-    read_faces,
-    read_labels,
-    read_points,
-)
+from visualization.foam_reader import FoamReadError, read_boundary
 
 DEFAULT_FACES = "defaultFaces"  # gmshToFoam's patch for faces in no group (E0)
+UNGROUPED = "GMSH_UNGROUPED_FACES"
 _COUNTS = re.compile(r"nCells:\s*(\d+)")
 _BAFFLES = re.compile(r"identical duplicate faces \(baffle faces\):\s*(\d+)")
+# The names are text in a binary cellZones file too (its labels are not; M2a).
 _ZONE_NAME = re.compile(r"^\s*(\S+)\s*\n\s*\{\s*type\s+cellZone;", re.MULTILINE)
-_ZONE = re.compile(r"^\s*(\S+)\s*\n\s*\{\s*type\s+cellZone;\s*cellLabels\s+List<label>\s*"
-                   r"(?:(\d+)\s*\(([^)]*)\)|(\d+)\s*\{\s*(\d+)\s*\})", re.MULTILINE)
 Point = tuple[float, float, float]
 
 
@@ -84,46 +76,14 @@ def mesh_cells(folder: Path) -> int | None:
     return int(match[1]) if match else None
 
 
-def _faces_box(folder: Path, patch: Patch) -> tuple[Point, Point] | None:
-    poly = poly_mesh_dir(folder)
+def has_mesh(folder: Path) -> bool:
+    """A readable boundary and cells: worth extracting the surface of (else
+    check_converted says what is wrong)."""
     try:
-        points = read_points(poly / "points")
-        faces = read_faces(poly / "faces")[patch.start_face:patch.start_face + patch.n_faces]
+        read_boundary(poly_mesh_dir(folder) / "boundary")
     except FoamReadError:
-        return None
-    if not faces:
-        return None
-    used = points[np.unique(np.concatenate(faces))]
-    low, high = used.min(axis=0).tolist(), used.max(axis=0).tolist()
-    return (low[0], low[1], low[2]), (high[0], high[1], high[2])
-
-
-def face_area(points: np.ndarray, face: np.ndarray) -> float:
-    """The magnitude of a face's area vector, as OpenFOAM's magSf: triangles
-    from each edge to the mean of the face's points, their area vectors summed."""
-    corners = points[face]
-    centre = corners.mean(axis=0)
-    following = np.roll(corners, -1, axis=0)
-    return float(np.linalg.norm(np.cross(corners - centre, following - centre).sum(axis=0)) / 2)
-
-
-def patch_areas(folder: Path, names: Sequence[str]) -> dict[str, float]:
-    """The area of each named patch in the mesh's units (m^2 for a converted and
-    scaled mesh): the sum of its face areas, "measured from the mesh". A patch
-    the mesh lacks, or one with no faces, is left out."""
-    poly = poly_mesh_dir(folder)
-    try:
-        patches = {p.name: p for p in read_boundary(poly / "boundary")}
-        wanted = [patches[n] for n in names if n in patches and patches[n].n_faces]
-        if not wanted:
-            return {}
-        points = read_points(poly / "points")
-        faces = read_faces(poly / "faces")
-    except (FoamReadError, OSError):
-        return {}
-    return {p.name: sum(face_area(points, f)
-                        for f in faces[p.start_face:p.start_face + p.n_faces])
-            for p in wanted}
+        return False
+    return bool(mesh_cells(folder))
 
 
 def _rounded(point: Point) -> str:
@@ -156,11 +116,12 @@ def check_converted(folder: Path, info: MeshFileInfo, config: MachineProjectConf
     found = {p.name: p for p in patches}
     default = found.get(DEFAULT_FACES)
     if default is not None and default.n_faces > 0:
-        box = _faces_box(folder, default)
+        shape = surface.patch_shapes(folder, [DEFAULT_FACES]).get(DEFAULT_FACES)
+        box = shape.box if shape is not None else None
         where = (f" between {_rounded(box[0])} and {_rounded(box[1])} {unit}"
                  if box else "")
         issues.append(_issue(
-            IssueSeverity.BLOCKING, "GMSH_UNGROUPED_FACES",
+            IssueSeverity.BLOCKING, UNGROUPED,
             f"{default.n_faces} boundary faces{where} are in no physical group; gmshToFoam put "
             f"them in a patch '{DEFAULT_FACES}'.",
             "In Gmsh, add the surfaces in that box to a Physical Surface (a patch), then save "
@@ -212,49 +173,3 @@ def check_baffles(check_mesh_log: str) -> tuple[Issue, ...]:
         "fluent3DMeshToFoam keeps both walls; checkMesh reports their faces as identical "
         "duplicate faces (E0). Real Fluent shadow pairs are not tested on real files.",
         baffle_faces=count),)
-
-
-# --- the zone radius ------------------------------------------------------------------------
-
-def zone_cells(folder: Path, name: str) -> np.ndarray | None:
-    """The cell labels of a cell zone, or None if there is none."""
-    path = poly_mesh_dir(folder) / "cellZones"
-    if not path.is_file():
-        return None
-    text = path.read_text(encoding="utf-8", errors="replace")
-    for match in _ZONE.finditer(text):
-        if match[1] != name:
-            continue
-        if match[3] is not None:
-            return np.array(match[3].split(), dtype=np.int64)
-        return np.full(int(match[4]), int(match[5]), dtype=np.int64)  # uniform list
-    return None
-
-
-def zone_radius(folder: Path, zone: MeshZone) -> float | None:
-    """The largest distance of the zone's points from its axis (through the
-    origin): an upper bound of the rotor tip radius, computed from the zone."""
-    cells = zone_cells(folder, zone.cell_zone)
-    if cells is None or not len(cells):
-        return None
-    poly = poly_mesh_dir(folder)
-    try:
-        owner = read_labels(poly / "owner")
-        neighbour = read_labels(poly / "neighbour")
-        faces = read_faces(poly / "faces")
-        points = read_points(poly / "points")
-    except FoamReadError:
-        return None
-    inside = np.zeros(int(max(owner.max(), cells.max())) + 1, dtype=bool)
-    inside[cells] = True
-    touching = inside[owner]
-    touching[:len(neighbour)] |= inside[neighbour]
-    selected = np.flatnonzero(touching)
-    if not len(selected):  # no face of the mesh belongs to a zone cell
-        return None
-    labels = np.unique(np.concatenate([faces[i] for i in selected]))
-    axis = np.zeros(3)
-    axis["xyz".index(zone.axis.value)] = 1.0
-    relative = points[labels] - np.array([zone.origin.x, zone.origin.y, zone.origin.z])
-    radial = relative - np.outer(relative @ axis, axis)
-    return float(np.linalg.norm(radial, axis=1).max())

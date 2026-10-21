@@ -23,6 +23,10 @@ cyclicAMI, neighbourPatch, transform and matchTolerance in the boundary file
 (v2512, M1c; checkMesh "Mesh OK", AMI weights and pimpleFoam as before).
 createPatch with a patch's own name would leave its type unchanged (exit 0;
 v2512, M1b), so it is used only for renamed patches.
+
+Every case writes binary (M2a): a large mesh is never read whole in Python;
+its geometry comes from the surface the tools extract (surface.py). The
+boundary file stays text, and so do the zone names and the headers.
 """
 
 from __future__ import annotations
@@ -32,7 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from machines.assembly import AMI_WEIGHTS_DICT, CYCLIC_AMI, Step, _ami_weights_dict
-from machines.case_generator import _common
+from machines.case_generator import _common, _control_dict
 from machines.config import MachineProjectConfig, PatchType, SourceKind
 from machines.msh_import import resave
 from machines.msh_import.detect import DIRECT_GMSH_VERSIONS, MeshFileInfo, MeshFormat
@@ -44,6 +48,20 @@ MERGED_CASE = "merged"
 SCRATCH_CASE = "imported_scratch"
 RESAVED = "resaved.msh"  # in cases/imported/: the MSH 2.2 copy gmshToFoam reads
 AMI_MATCH_TOLERANCE = "0.0001"
+
+
+def binary_control_dict() -> str:
+    """The meshing controlDict with writeFormat binary: every imported mesh is
+    written binary (owner, M2a), so no file is converted to text on the way.
+    The STL path keeps its ASCII controlDict."""
+    text = _control_dict()
+    ascii_format = "writeFormat     ascii;"
+    assert ascii_format in text
+    return text.replace(ascii_format, "writeFormat     binary;")
+
+
+def binary_common(config: MachineProjectConfig) -> dict[str, str]:
+    return {**_common(config), "system/controlDict": binary_control_dict()}
 
 
 def converter(info: MeshFileInfo) -> str:
@@ -194,7 +212,7 @@ def _set(root: str, name: str, patch: str, key: str, value: str) -> Step:
 
 
 def import_cases(config: MachineProjectConfig) -> ImportCases:
-    common = _common(config)
+    common = binary_common(config)
     merged = dict(common)
     patch_dict = create_patch_dict(config)
     if patch_dict is not None:

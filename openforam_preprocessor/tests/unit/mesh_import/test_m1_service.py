@@ -107,7 +107,8 @@ def test_a_binary_file_gets_its_box_from_one_scratch_conversion(
     after = setup.service.inspect_mesh(path)
 
     assert scratch.issues == () and scratch.converter == "gmshToFoam"
-    assert setup.runner.names() == ["resave", "gmshToFoam"]
+    # The box of the converted mesh's boundary surface (M2a: the mesh is binary).
+    assert setup.runner.names() == ["resave", "gmshToFoam", "topoSet", "surfaceMeshExtract"]
     assert after.box == scratch.box and after.box_source == BOX_FROM_CONVERSION
 
 

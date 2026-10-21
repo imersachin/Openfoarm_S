@@ -1,65 +1,135 @@
 """Test double for the OpenFOAM utilities of a .msh import (M1-MSH).
 
-Outputs follow the inputs the way the real tools did in E0 and M1b, in the
-real ASCII formats, so the application's readers and checks run unchanged:
-the converters write a polyMesh with the file's patches (Fluent walls as
-wall, everything else patch) and cell zones, an owner header with nCells,
-points spanning the file's box; transformPoints scales the points;
-createPatch moves a patch's faces to a new patch (and, like v2512, leaves a
-patch alone when the new name is its own); foamDictionary sets a type or adds
-a neighbourPatch (other entries it adds are not kept); checkMesh reports
-"Mesh OK" or failed checks (with exit 0, as the real one); postProcess reports
-AMI weights at rest and moveDynamicMesh over the steps of its controlDict, for
-the cyclicAMI pairs of the boundary file. The re-save script copies the file.
-Switches simulate failures.
+Outputs follow the inputs the way the real tools did in E0, M1b and M2a, in
+the real formats, so the application's readers and checks run unchanged: the
+converters write a binary polyMesh (M2a: every imported mesh is binary; the
+boundary file, the zone names and the headers stay text) with the file's
+patches (Fluent walls as wall, everything else patch) and cell zones, an
+owner header with nCells, points spanning the file's box; transformPoints
+scales the points; createPatch moves a patch's faces to a new patch (and, like
+v2512, leaves a patch alone when the new name is its own); foamDictionary sets
+a type or adds a neighbourPatch (other entries it adds are not kept); topoSet
+does nothing the fake needs; surfaceMeshExtract writes the boundary as a VTK
+PolyData file, one region per patch and per zone surface, and lists them in
+its log ("surfZone N : name"); checkMesh reports "Mesh OK" or failed checks
+(with exit 0, as the real one); postProcess reports AMI weights at rest, or
+writes one polygon per cutting plane of a cuts dictionary; moveDynamicMesh
+reports the weights over the steps of its controlDict, for the cyclicAMI
+pairs of the boundary file. The re-save script copies the file. Switches
+simulate failures.
+
+The geometry, written binary where the app must never read it, is kept in
+fake.json beside the mesh: 8 box corners, the cells, the zones. Boundary face
+i is a triangle on box corners (0, 1, 2) when i is even, (7, 6, 5) when odd
+(both halves of an end face of the box, so each patch's area is its faces x
+half that face, and the boundary's points span the whole box), with its own
+point labels (3i, 3i+1, 3i+2): a face of a zone's surface is the same face as
+the patch face it duplicates, as in the real extraction. Face i is owned by
+cell i mod cells; a zone holds consecutive cells.
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 import re
 import shutil
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Any
+
+import numpy as np
 
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage
 from machines.msh_import.detect import inspect_mesh_file
 from openfoam.runner import CommandResult, OpenFOAMRunner, RunStatus
+from tests import foam_binary
 
 Patches = list[tuple[str, str, int]]  # name, type, faces
 Neighbours = dict[str, str]  # cyclicAMI patch -> its neighbourPatch
 CONVERTERS = ("fluent3DMeshToFoam", "gmshToFoam")
+FAKE = "fake.json"  # the fake's own record of the geometry, beside the polyMesh files
+TRIANGLES = ((0, 1, 2), (7, 6, 5))  # box corners of even and odd boundary faces
+Box = tuple[tuple[float, float, float], tuple[float, float, float]]
 
 
 def write_mesh(poly: Path, patches: Patches, zones: Mapping[str, int], cells: int,
-               box: tuple[tuple[float, float, float], tuple[float, float, float]]) -> None:
-    """A polyMesh the readers accept: 8 box corners, one triangle per boundary
-    face, face i owned by cell i mod cells, the zones as consecutive cell labels."""
+               box: Box) -> None:
+    """A binary polyMesh as v2512 writes it (the app reads only the boundary,
+    the owner header and the zone names), and fake.json: 8 box corners, the
+    cells, the zones as consecutive cell labels."""
     poly.mkdir(parents=True, exist_ok=True)
     (x0, y0, z0), (x1, y1, z1) = box
     corners = [(x, y, z) for x in (x0, x1) for y in (y0, y1) for z in (z0, z1)]
-    (poly / "points").write_text(f"{len(corners)}\n(\n" + "".join(
-        f"({x:.17g} {y:.17g} {z:.17g})\n" for x, y, z in corners) + ")\n", encoding="utf-8")
     total = sum(f for _, _, f in patches)
-    (poly / "faces").write_text(f"{total}\n(\n" + "3(0 1 2)\n" * total + ")\n",
-                                encoding="utf-8")
-    owners = "".join(f"{i % cells}\n" for i in range(total))
-    (poly / "owner").write_text(
-        f'FoamFile\n{{\n    format ascii;\n    note "nPoints:8  nCells:{cells}  '
-        f'nFaces:{total}  nInternalFaces:0";\n    class labelList;\n}}\n{total}\n(\n{owners})\n',
-        encoding="utf-8")
-    (poly / "neighbour").write_text("0\n(\n)\n", encoding="utf-8")
-    write_boundary(poly, patches)
-    start = 0
-    rows = []
+    spans, start = {}, 0
     for name, count in zones.items():
-        labels = " ".join(str(i) for i in range(start, start + count))
-        rows.append(f"{name}\n{{\n    type cellZone;\n    cellLabels List<label> {count}"
-                    f"\n({labels})\n;\n}}\n")
+        spans[name] = [start, count]
         start += count
+    (poly / FAKE).write_text(json.dumps({"corners": corners, "cells": cells,
+                                         "zones": spans}), encoding="utf-8")
+    _write_points(poly, np.array(corners, dtype="<f8"))
+    foam_binary.write(poly / "faces", "faceCompactList",
+                      np.arange(0, 3 * total + 1, 3, dtype="<i4"))
+    foam_binary.write(poly / "owner", "labelList", np.arange(total, dtype="<i4") % cells,
+                      note=f"nPoints:8  nCells:{cells}  nFaces:{total}  nInternalFaces:0")
+    foam_binary.write(poly / "neighbour", "labelList", np.zeros(0, dtype="<i4"))
+    write_boundary(poly, patches)
     if zones:
-        (poly / "cellZones").write_text(f"{len(zones)}\n(\n{''.join(rows)})\n",
-                                        encoding="utf-8")
+        rows = b"".join(
+            f"{name}\n{{\n    type            cellZone;\ncellLabels      List<label> ".encode()
+            + foam_binary.binary_list(np.arange(s, s + n, dtype="<i4")).rstrip(b"\n")
+            + b"\n;\n}\n\n" for name, (s, n) in spans.items())
+        (poly / "cellZones").write_bytes(
+            foam_binary.header("regIOobject", "cellZones").encode()
+            + f"{len(zones)}\n(\n".encode() + rows + b")\n")
+
+
+def _write_points(poly: Path, corners: np.ndarray) -> None:
+    foam_binary.write(poly / "points", "vectorField", corners)
+
+
+def geometry(poly: Path) -> dict[str, Any]:
+    """fake.json of a polyMesh (through the links of a surface case)."""
+    found: dict[str, Any] = json.loads(
+        ((poly / "boundary").resolve().parent / FAKE).read_text("utf-8"))
+    return found
+
+
+def fake_surface(folder: Path) -> None:
+    """Extract the surface of a fake mesh case as a run does (surface.py), with
+    the fake surfaceMeshExtract."""
+    from machines.msh_import import surface
+    from machines.msh_import.checks import mesh_zone_names
+
+    zones = sorted(mesh_zone_names(folder))
+    surface.prepare(folder, zones, {})
+    step = surface.steps(folder.name, zones)[-1]
+    log = FakeMshRunner()._surfaceMeshExtract(step.argv, surface.surface_dir(folder))
+    assert surface.index(folder, log)
+
+
+def vtp(points: np.ndarray, connectivity: np.ndarray, offsets: np.ndarray,
+        region: np.ndarray | None = None) -> str:
+    """VTK XML PolyData as OpenFOAM's vtk writer makes it: base64 binary
+    arrays, each after its UInt64 byte count."""
+    def array(kind: str, name: str, values: np.ndarray, components: int = 1) -> str:
+        raw = np.ascontiguousarray(values).tobytes()
+        data = base64.b64encode(np.uint64(len(raw)).tobytes() + raw).decode()
+        extra = f" NumberOfComponents='{components}'" if components > 1 else ""
+        return (f"        <DataArray type='{kind}' Name='{name}'{extra} format='binary'>\n"
+                f"{data}\n        </DataArray>\n")
+    cells = ("      <CellData>\n" + array("Int32", "region", region.astype("<i4"))
+             + "      </CellData>\n") if region is not None else ""
+    return ("<?xml version='1.0'?>\n<VTKFile type='PolyData' version='0.1' "
+            "byte_order='LittleEndian' header_type='UInt64'>\n  <PolyData>\n"
+            f"    <Piece NumberOfPoints='{len(points)}' NumberOfPolys='{len(offsets)}'>\n"
+            "      <Points>\n" + array("Float32", "Points", points.astype("<f4"), 3)
+            + "      </Points>\n      <Polys>\n"
+            + array("Int32", "connectivity", connectivity.astype("<i4"))
+            + array("Int32", "offsets", offsets.astype("<i4"))
+            + "      </Polys>\n" + cells + "    </Piece>\n  </PolyData>\n</VTKFile>\n")
 
 
 def write_boundary(poly: Path, patches: Patches, neighbours: Neighbours | None = None) -> None:
@@ -70,7 +140,9 @@ def write_boundary(poly: Path, patches: Patches, neighbours: Neighbours | None =
         rows.append(f"    {name}\n    {{\n        type {kind};\n        nFaces {faces};\n"
                     f"        startFace {start};\n{extra}    }}\n")
         start += faces
-    (poly / "boundary").write_text(f"{len(patches)}\n(\n{''.join(rows)})\n", encoding="utf-8")
+    # Text under a binary header, as v2512 writes the boundary of a binary mesh.
+    (poly / "boundary").write_text(foam_binary.header("polyBoundaryMesh", "boundary")
+                                   + f"{len(patches)}\n(\n{''.join(rows)})\n", encoding="utf-8")
 
 
 def read_boundary(poly: Path) -> Patches:
@@ -200,11 +272,47 @@ class FakeMshRunner(OpenFOAMRunner):
 
     def _transformPoints(self, argv: Sequence[str], case: Path) -> str:  # noqa: N802
         factor = float(argv[argv.index("-scale") + 1].strip("()").split()[0])
-        path = self._poly(case) / "points"
-        text = path.read_text("utf-8")
-        path.write_text(re.sub(r"\(([^()]+)\)", lambda m: "(" + " ".join(
-            f"{float(v) * factor:.17g}" for v in m[1].split()) + ")", text), encoding="utf-8")
+        poly = self._poly(case)
+        found = geometry(poly)
+        found["corners"] = [[v * factor for v in c] for c in found["corners"]]
+        (poly / FAKE).write_text(json.dumps(found), encoding="utf-8")
+        _write_points(poly, np.array(found["corners"], dtype="<f8"))
         return "transformPoints End\n"
+
+    def _topoSet(self, argv: Sequence[str], case: Path) -> str:  # noqa: N802
+        return "topoSet End\n"
+
+    def _surfaceMeshExtract(self, argv: Sequence[str], case: Path) -> str:  # noqa: N802
+        """Every patch (in boundary order), then with -faceZones each cell zone's
+        surface (topoSet's zoneSurface_<zone>, in its dictionary's order): the
+        boundary faces owned by the zone's cells."""
+        poly = self._poly(case)
+        found = geometry(poly)
+        corners = np.array(found["corners"], dtype=float)
+        cells = int(found["cells"])
+        regions: list[tuple[str, list[int]]] = []
+        start = 0
+        for name, _, count in read_boundary(poly):
+            regions.append((name, list(range(start, start + count))))
+            start += count
+        total = start
+        if "-faceZones" in argv and (case / "system/topoSetDict").is_file():
+            listed = re.findall(r"name (zoneSurface_\S+); type faceZoneSet",
+                                (case / "system/topoSetDict").read_text("utf-8"))
+            for zone_set in listed:
+                first, count = found["zones"][zone_set.removeprefix("zoneSurface_")]
+                regions.append((zone_set, [i for i in range(total)
+                                           if first <= i % cells < first + count]))
+        points = np.array([corners[TRIANGLES[i % 2][k]] for i in range(total)
+                           for k in range(3)]).reshape(-1, 3)
+        faces = [i for _, members in regions for i in members]
+        region = np.array([r for r, (_, members) in enumerate(regions) for _ in members])
+        connectivity = np.array([3 * i + k for i in faces for k in range(3)])
+        offsets = 3 * np.arange(1, len(faces) + 1)
+        (case / argv[-1]).write_text(vtp(points, connectivity, offsets, region),
+                                     encoding="utf-8")
+        listing = "".join(f"surfZone {r} : {name}\n" for r, (name, _) in enumerate(regions))
+        return f"Writing merged surface to \"{argv[-1]}\"\n{listing}End\n"
 
     def _createPatch(self, argv: Sequence[str], case: Path) -> str:  # noqa: N802
         poly = self._poly(case)
@@ -259,7 +367,28 @@ class FakeMshRunner(OpenFOAMRunner):
         return [(s, t) for k, (s, t) in enumerate(listed) if (t, s) not in listed[:k]]
 
     def _postProcess(self, argv: Sequence[str], case: Path) -> str:  # noqa: N802
+        if "-dict" in argv and argv[argv.index("-dict") + 1].endswith("cutsDict"):
+            return self._cuts(case)
         return self._weights(self._pairs(case), *self.weights)
+
+    @staticmethod
+    def _cuts(case: Path) -> str:
+        """One square (side 0.2) on each cutting plane, centred on its point."""
+        text = (case / "system/cutsDict").read_text("utf-8")
+        out = case / "postProcessing/cuts/constant"
+        out.mkdir(parents=True, exist_ok=True)
+        for name, point, normal in re.findall(
+                r"(\w+) \{ type cuttingPlane; point \(([^)]*)\); normal \(([^)]*)\);", text):
+            p = np.array(point.split(), dtype=float)
+            n = np.array(normal.split(), dtype=float)
+            u = np.cross(n, (1.0, 0.0, 0.0) if abs(n[0]) < 0.9 else (0.0, 1.0, 0.0))
+            u /= np.linalg.norm(u)
+            v = np.cross(n, u)
+            square = np.array([p + 0.1 * (a * u + b * v)
+                               for a, b in ((-1, -1), (1, -1), (1, 1), (-1, 1))])
+            (out / f"{name}.vtp").write_text(vtp(square, np.arange(4), np.array([4])),
+                                             encoding="utf-8")
+        return "surfaces End\n"
 
     def _moveDynamicMesh(self, argv: Sequence[str], case: Path) -> str:  # noqa: N802
         control = (case / "system/controlDict").read_text("utf-8")

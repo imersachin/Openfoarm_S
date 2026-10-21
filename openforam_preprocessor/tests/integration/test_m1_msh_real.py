@@ -43,11 +43,13 @@ from machines.pipeline import MachinePipeline, MachineRunResult
 from machines.service import MachineService
 from tests.fixtures.msh import configs
 from tests.fixtures.msh.configs import M1, mesh_file
-from visualization.foam_reader import read_boundary, read_points
+from tests.foam_binary import read_points
+from visualization.foam_reader import read_boundary
 
 E0 = Path(__file__).parents[1] / "fixtures" / "msh" / "e0" / "common"
 TOOLS = ("gmshToFoam", "fluent3DMeshToFoam", "transformPoints", "foamMeshToFluent",
-         *ASSEMBLE_EXECUTABLES, *CHECK_EXECUTABLES, "pimpleFoam")
+         "topoSet", "surfaceMeshExtract", *ASSEMBLE_EXECUTABLES, *CHECK_EXECUTABLES,
+         "pimpleFoam")
 HAS_GMSH = importlib.util.find_spec("gmsh") is not None
 pytestmark = [
     pytest.mark.openfoam,
@@ -218,7 +220,8 @@ def test_detected_names_are_what_the_real_converter_writes(tmp_path: Path, name:
     info = inspect_mesh_file(path)
     converted = {p.name for p in read_boundary(poly / "boundary")} - {"defaultFaces"}
     zones = set(re.findall(r"^(\S+)\s*\n\{\s*type\s+cellZone;",
-                           (poly / "cellZones").read_text("utf-8"), re.M))
+                           # binary since M2a: the names are text, the labels not
+                           (poly / "cellZones").read_text("utf-8", errors="replace"), re.M))
 
     assert set(info.patches) == converted
     assert set(info.cell_zones) == zones

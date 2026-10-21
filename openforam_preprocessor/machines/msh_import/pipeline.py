@@ -2,10 +2,13 @@
 
     validate (the file and the configuration, before any OpenFOAM command)
     -> import: re-save (binary Gmsh), convert at scale 1, transformPoints to
-       metres, the checks on what the converter wrote (cases/imported/)
+       metres, the boundary surface (topoSet, surfaceMeshExtract; M2a), the
+       checks on what the converter wrote (cases/imported/)
     -> assemble: copy, createPatch (renamed patches), foamDictionary (AMI
        pairs under their own names, patch types) (cases/merged/)
-    -> checkMesh, AMI weights -> mesh validation -> case setup (with physics)
+    -> checkMesh, AMI weights
+    -> mesh views: the merged mesh's surface and two cuts, for the 3D pane
+    -> mesh validation -> case setup (with physics)
 
 The same run lock, status file, run record, artifact manifest, environment
 check and resource preflight as an STL project (MachinePipeline). Each step
@@ -15,7 +18,8 @@ the imported mesh and the patch settings, so a patch-type change never
 converts again, and a physics change re-runs case setup only (invariant 14).
 A converter's exit code 0 is not success: the import checks the mesh it
 wrote, and checkMesh's "Failed N mesh checks" fails the mesh whatever the
-exit code (owner review of E0).
+exit code (owner review of E0). Every mesh is written binary and never read
+whole in Python (M2a): areas, radii and boxes come from the surface.
 """
 
 from __future__ import annotations
@@ -31,7 +35,7 @@ from case_setup.validation import check_physics
 from core.artifacts.hashing import files_under, hash_files, sha256_json
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage, has_stopping_issue
 from machines.assembly import AMI_WEIGHTS_DICT, Step
-from machines.case_generator import _control_dict, _fv_schemes, _fv_solution
+from machines.case_generator import _fv_schemes, _fv_solution
 from machines.mesh_folder import (
     MeshExpectation,
     check_ami_pairing,
@@ -41,11 +45,13 @@ from machines.mesh_folder import (
     read_patches,
     region_count,
 )
+from machines.msh_import import surface
 from machines.msh_import.cases import (
     IMPORTED_CASE,
     MERGED_CASE,
     SCRATCH_CASE,
     ImportCases,
+    binary_control_dict,
     convert_steps,
     converter,
     import_cases,
@@ -54,13 +60,13 @@ from machines.msh_import.cases import (
     used_names,
 )
 from machines.msh_import.checks import (
+    UNGROUPED,
     check_baffles,
     check_converted,
     check_zones,
+    has_mesh,
     mesh_cells,
     mesh_zone_names,
-    patch_areas,
-    zone_radius,
 )
 from machines.msh_import.detect import MeshFileInfo
 from machines.msh_import.validation import read_mesh_file
@@ -85,6 +91,7 @@ from machines.pipeline import (
     _Run,
     _Stop,
 )
+from machines.previews import ACROSS, ALONG, imported_cut_planes
 from machines.project_store import write_last_meshed
 from machines.validation import check_all
 from mesh.estimator import CellEstimate, ResourceStatus
@@ -95,9 +102,9 @@ from openfoam.dictionary import OpenFOAMFileWriter
 from openfoam.environment import tool_identity, validate_environment
 from openfoam.runner import OpenFOAMRunner, RunStatus
 from vawt.status import RunState
-from visualization.foam_reader import FoamReadError, read_points
 
 IMPORT = "machine_import_mesh"
+MESH_VIEWS = "machine_mesh_views"  # the merged mesh's surface and cuts (3D pane)
 IMPORT_REPORT = "reports/mesh_import.json"
 AREA_AFTER_IMPORT = "INLET_AREA_AFTER_IMPORT"  # case_setup.validation
 # postProcess AMIWeights reads the mesh as converted: the rotor not turned.
@@ -105,9 +112,11 @@ AT_REST = "at rest (0 deg)"
 SCRATCH_RECORD = "scratch.json"  # in cases/imported_scratch/
 PROMOTE_LOG = "00_promote.log"
 CONVERTERS = ("fluent3DMeshToFoam", "gmshToFoam")
-IMPORT_EXECUTABLES = (*CONVERTERS, "transformPoints")
+SURFACE_EXECUTABLES = ("topoSet", "surfaceMeshExtract")  # surface.py
+IMPORT_EXECUTABLES = (*CONVERTERS, "transformPoints", *SURFACE_EXECUTABLES)
 ASSEMBLE_EXECUTABLES = ("createPatch", "foamDictionary")
 CHECK_EXECUTABLES = ("checkMesh", "postProcess")
+VIEW_EXECUTABLES = (*SURFACE_EXECUTABLES, "postProcess")
 # Heuristic only: tetrahedra per node of a Gmsh mesh, for the preflight when the
 # file declares no cell count (a tetrahedral mesh has about 5-6 per node).
 CELLS_PER_GMSH_NODE = 6
@@ -115,16 +124,18 @@ _GENERATED = ("system/createPatchDict", AMI_WEIGHTS_DICT)  # removed when not wr
 _STAGE = {"fluent3DMeshToFoam": IssueStage.MESH_IMPORT, "gmshToFoam": IssueStage.MESH_IMPORT,
           "transformPoints": IssueStage.MESH_IMPORT, "createPatch": IssueStage.PATCH_CREATION,
           "foamDictionary": IssueStage.PATCH_CREATION, "checkMesh": IssueStage.CHECK_MESH,
-          "postProcess": IssueStage.MESH_VALIDATION}
+          "postProcess": IssueStage.MESH_VALIDATION, "topoSet": IssueStage.MESH_IMPORT,
+          "surfaceMeshExtract": IssueStage.MESH_IMPORT}
 
 
 def import_operations(physics: bool) -> tuple[str, ...]:
-    return (VALIDATE, IMPORT, ASSEMBLE, CHECK_MESH, VALIDATE_MESH,
+    return (VALIDATE, IMPORT, ASSEMBLE, CHECK_MESH, MESH_VIEWS, VALIDATE_MESH,
             *((CASE_SETUP,) if physics else ()))
 
 
 def import_executables(info: MeshFileInfo, factor: float) -> tuple[str, ...]:
-    return (converter(info), *(("transformPoints",) if factor != 1.0 else ()))
+    return (converter(info), *(("transformPoints",) if factor != 1.0 else ()),
+            *SURFACE_EXECUTABLES)
 
 
 def _write(root: Path, case: str, files: Mapping[str, str]) -> None:
@@ -189,9 +200,23 @@ class ImportRun:
                     "ami": sha256_json(plan.cases.ami),
                     "tool": self._tool(ASSEMBLE_EXECUTABLES)}
         merged = root / "cases" / MERGED_CASE
+        if op == MESH_VIEWS:
+            return {**hash_files(root, _mesh_files(root, MERGED_CASE)),
+                    "planes": sha256_json(self._planes()),
+                    "tool": self._tool(VIEW_EXECUTABLES)}
         files = [*_mesh_files(root, MERGED_CASE), merged / "system/meshQualityDict",
                  *((merged / AMI_WEIGHTS_DICT,) if self.mesh.ami_pairs else ())]
         return {**hash_files(root, files), "tool": self._tool(CHECK_EXECUTABLES)}
+
+    def _planes(self) -> list[tuple[str, str, surface.Point, surface.Point]]:
+        """The cuts for the 3D pane: (file name, label, point, normal), through the
+        first mesh zone, at its mid-span on the imported surface."""
+        folder = self.run.root / "cases" / IMPORTED_CASE
+        zones = self.mesh.zones
+        points = surface.zone_points(folder, zones[0].cell_zone) if zones else None
+        planes = imported_cut_planes(self.run.config, points)
+        return [(name, p.name, p.origin, p.normal)
+                for name, p in zip((ALONG, ACROSS), planes, strict=False)]
 
     # --- the run -----------------------------------------------------------------------
 
@@ -214,9 +239,9 @@ class ImportRun:
         _write(run.root, IMPORTED_CASE, plan.cases.imported)
         _write(run.root, MERGED_CASE, plan.cases.merged)
 
-        ops = (IMPORT, ASSEMBLE, CHECK_MESH)
+        ops = (IMPORT, ASSEMBLE, CHECK_MESH, MESH_VIEWS)
         names = {IMPORT: import_executables(info, plan.factor), ASSEMBLE: ASSEMBLE_EXECUTABLES,
-                 CHECK_MESH: CHECK_EXECUTABLES}
+                 CHECK_MESH: CHECK_EXECUTABLES, MESH_VIEWS: VIEW_EXECUTABLES}
         may_run: dict[str, bool] = {}
         for op in ops:
             stale = force or not run.store.check(op, self._inputs(plan, op)).reusable
@@ -242,6 +267,11 @@ class ImportRun:
                 continue
             run.store.invalidate(op)  # a failed or cancelled run never leaves a record
             run.executed.append(op)
+            if op == MESH_VIEWS:
+                made = await self._views()
+                if made is not None:
+                    run.store.record(op, inputs, made)
+                continue
             outputs = await self._execute(plan, op, force)
             run.store.record(op, inputs, outputs)
         # Every run: the zone radii follow the configured axis and origin, also
@@ -285,9 +315,9 @@ class ImportRun:
                             report=report_path)
 
     def areas(self) -> dict[str, float]:
-        """Every configured patch's area in m^2, measured from the assembled mesh."""
-        return patch_areas(self.run.root / "cases" / MERGED_CASE,
-                           [p.name for p in self.run.config.patches])
+        """Every configured patch's area in m^2, measured from the imported mesh's
+        surface (renaming a patch does not change its faces), under its name."""
+        return surface.config_areas(self.run.root / "cases" / IMPORTED_CASE, self.run.config)
 
     # --- preflight -----------------------------------------------------------------------
 
@@ -369,13 +399,60 @@ class ImportRun:
         scale = scale_step(plan.factor)
         if scale is not None:
             await self.pipe._command(run, scale, len(steps) + 1)
+        # The surface only for a mesh the other checks accept; faces in no group
+        # are reported with their box, read from it.
         found = check_converted(case, plan.info, run.config, "m")
+        if not [i for i in found if i.is_stopping and i.code != UNGROUPED]:
+            await self._surface(IMPORTED_CASE)
+            found = check_converted(case, plan.info, run.config, "m")
         stopping = [i for i in found if i.is_stopping]
         if stopping:
             raise _Stop("The converted mesh is not usable; it was not kept for reuse. "
                         f"Review logs/{IMPORTED_CASE}/.", *stopping)
         run.issues.extend(found)
-        return _mesh_files(run.root, IMPORTED_CASE)
+        return [*_mesh_files(run.root, IMPORTED_CASE), *surface.outputs(case)]
+
+    async def _surface(self, case: str) -> None:
+        """The boundary surface of cases/<case>/ (surface.py), or stop."""
+        run = self.run
+        folder = run.root / "cases" / case
+        zones = sorted(mesh_zone_names(folder))
+        surface.prepare(folder, zones, _converter_files())
+        log = ""
+        for index, step in enumerate(surface.steps(case, zones), start=1):
+            log = _read(Path((await self.pipe._command(run, step, index)).log_path))
+        if not surface.index(folder, log):
+            raise _Stop(f"The boundary surface of the {case} mesh could not be read.", _issue(
+                IssueSeverity.BLOCKING, IssueCategory.EXECUTION, IssueStage.MESH_IMPORT,
+                "MESH_SURFACE_UNREADABLE", f"surfaceMeshExtract wrote no surface of the {case} "
+                "mesh that the app can read.",
+                f"Read logs/{surface.surface_case(case)}/; report the log if it ends normally."))
+
+    async def _views(self) -> list[Path] | None:
+        """The merged mesh's surface and the two cuts for the 3D pane. Display
+        only: a failure is a WARNING and the run goes on (nothing is recorded, so
+        the next run tries again); a cancellation stops it."""
+        run = self.run
+        folder = run.root / "cases" / MERGED_CASE
+        planes = self._planes()
+        try:
+            await self._surface(MERGED_CASE)
+            made: list[Path] = []
+            if planes:
+                surface.write_cuts(folder, planes)
+                await self.pipe._command(run, surface.cut_step(MERGED_CASE), 3)
+                made = [surface.surface_dir(folder) / surface.CUTS_RECORD,
+                        *(surface.cut_file(folder, name) for name, *_ in planes)]
+        except _Stop as stop:
+            if stop.state is RunState.CANCELLED:
+                raise
+            run.issues.append(_issue(
+                IssueSeverity.WARNING, IssueCategory.EXECUTION, IssueStage.VISUALIZATION,
+                "MESH_VIEW_FAILED", "The 3D view of the mesh could not be made: "
+                f"{stop.message}", f"Read logs/{surface.surface_case(MERGED_CASE)}/. The mesh "
+                "and its checks are not affected."))
+            return None
+        return [*surface.outputs(folder), *(p for p in made if p.is_file())]
 
     def _promote(self, plan: _Plan) -> bool:
         """Move the scratch conversion's polyMesh into cases/imported/ when its
@@ -409,7 +486,7 @@ class ImportRun:
         identity = tool_identity(run.config.openfoam_profile,
                                  import_executables(plan.info, plan.factor), self.pipe._env())
         patches, _ = read_patches(case, IMPORTED_CASE)
-        radii = {z.name: zone_radius(case, z) for z in self.mesh.zones}
+        radii = {z.name: surface.config_zone_radius(case, z) for z in self.mesh.zones}
         payload = {
             "run_id": run.run_id, "source": str(self.mesh.source_path),
             "sha256": plan.digest, "format": plan.info.format.value if plan.info.format else None,
@@ -425,7 +502,8 @@ class ImportRun:
             "names_used": used_names(run.config),
             "cell_zones": sorted(mesh_zone_names(case)),
             "zone_radius_m": radii, "zone_radius_note": "computed from the zone: the largest "
-            "distance of its points from the rotation axis",
+            "distance of its points from the rotation axis (on its outer surface, extracted "
+            "by surfaceMeshExtract)",
             "patch_area_m2": self.areas(), "patch_area_note": "measured from the mesh: the "
             "sum of the patch's face areas, after renaming and scaling",
             "logs": f"logs/{IMPORTED_CASE}/",
@@ -547,23 +625,43 @@ async def convert_scratch(root: Path, info: MeshFileInfo, digest: str, *,
                 "MSH_CONVERT_FAILED", f"{step.argv[0]} failed on {info.path.name}.",
                 f"Read logs/{SCRATCH_CASE}/; export the mesh again.",
                 log=str(log), tail=list(result.stderr_tail or result.tail)[-20:])))
-    try:
-        points = read_points(case / POLY_MESH / "points")
-    except FoamReadError as error:
+    box = await _scratch_surface(root, case, runner=runner, env=env)
+    if box is None:
         return ScratchResult(None, converter(info), log, (_issue(
             IssueSeverity.BLOCKING, IssueCategory.EXECUTION, IssueStage.MESH_IMPORT,
-            "MSH_CONVERT_FAILED", f"The converter wrote no readable mesh: {error}",
-            f"Read logs/{SCRATCH_CASE}/; export the mesh again.", log=str(log)),))
-    low, high = points.min(axis=0).tolist(), points.max(axis=0).tolist()
-    record = {**scratch_record(info, digest, tool), "box": [low, high]}
+            "MSH_CONVERT_FAILED", "The converter wrote no mesh whose boundary could be read.",
+            f"Read logs/{SCRATCH_CASE}/ and logs/{surface.surface_case(SCRATCH_CASE)}/; "
+            "export the mesh again.", log=str(log)),))
+    low, high = box
+    record = {**scratch_record(info, digest, tool), "box": [list(low), list(high)]}
     (case / SCRATCH_RECORD).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-    return ScratchResult(((low[0], low[1], low[2]), (high[0], high[1], high[2])),
-                         converter(info), log)
+    return ScratchResult(box, converter(info), log)
+
+
+async def _scratch_surface(root: Path, case: Path, *, runner: OpenFOAMRunner,
+                           env: Mapping[str, str] | None) -> Box | None:
+    """The surface of the scratch conversion and the box of its boundary
+    points (the mesh's box); None if either cannot be made."""
+    if not has_mesh(case):
+        return None
+    zones = sorted(mesh_zone_names(case))
+    surface.prepare(case, zones, _converter_files())
+    name = surface.surface_case(SCRATCH_CASE)
+    text = ""
+    for index, step in enumerate(surface.steps(SCRATCH_CASE, zones), start=1):
+        result = await runner.run_step(_meshing_step(step, index, name),
+                                       case_root=root / "cases" / name, env=env,
+                                       logs_dir=root / "logs" / name)
+        if result.status is not RunStatus.SUCCESS:
+            return None
+        text = _read(Path(result.log_path))
+    return surface.mesh_box(case) if surface.index(case, text) else None
 
 
 def _converter_files() -> dict[str, str]:
-    """controlDict, fvSchemes, fvSolution for the converter (no quality settings)."""
-    return {"system/controlDict": _control_dict(), "system/fvSchemes": _fv_schemes(),
+    """controlDict (binary), fvSchemes, fvSolution for the converter and the
+    surface cases (no quality settings)."""
+    return {"system/controlDict": binary_control_dict(), "system/fvSchemes": _fv_schemes(),
             "system/fvSolution": _fv_solution()}
 
 
