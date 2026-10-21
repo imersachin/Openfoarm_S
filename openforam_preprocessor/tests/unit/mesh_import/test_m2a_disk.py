@@ -262,3 +262,17 @@ def test_the_service_lists_a_folder_and_copies_into_the_project(
     assert service.mesh_copies() == [] and target.is_file()
     deadline = time.monotonic() + 1
     assert time.monotonic() < deadline
+
+
+def test_unnamed_zones_are_never_offered_as_an_ami_pair(tmp_path: Path) -> None:
+    """FaceGroup21 / FaceGroup22 end in 1 and 2 only because of their zone ids
+    (the owner's GV passage, browser check)."""
+    from machines.msh_import.inspection import suggest_pairs
+
+    path = tmp_path / "groups.msh"
+    path.write_bytes(FLUENT_UNNAMED.replace(b"(13 (e 4 c 3 4)(", b"(13 (15 4 c 3 4)(")
+                     .replace(b"(13 (d 2 3 24 4)(", b"(13 (16 2 3 3 4)(")
+                     .replace(b"(39 (14 wall SC-Inlet)())", b""))
+    info = inspect_mesh_file(path)
+    assert info.patches == ("FaceGroup21", "FaceGroup22")
+    assert suggest_pairs(info) == ()

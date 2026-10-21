@@ -167,6 +167,7 @@ def revolution_view(ctx: state.Context, report: dict[str, Any] | None) -> None:
     if ctx.service.revolution_state() is not None:
         revolution_progress(ctx)
     else:
+        render_issues(ctx.service.revolution_messages())
         options = ctx.service.revolution_sweeps()
         choice = st.radio("Steps", [n for n, _ in options], horizontal=True,
                           key="machines_revolution_steps",

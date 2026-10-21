@@ -338,7 +338,7 @@ def _read_fluent(path: Path, handle: BinaryIO, size: int) -> MeshFileInfo:
             "the conversion fails."))
     unnamed = {f"{UNNAMED_PREFIX}{z}": k for z, k in sorted(faces.items())
                if z not in zones and k not in FLUENT_INTERIOR_TYPES}
-    if unnamed and not issues:
+    if unnamed and not any(i.is_stopping for i in issues):
         issues.append(_issue(
             IssueSeverity.INFO, "MSH_UNNAMED_ZONES",
             f"{len(unnamed)} boundary zone(s) of {path.name} have no name; they will be "

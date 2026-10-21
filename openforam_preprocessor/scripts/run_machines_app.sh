@@ -33,7 +33,11 @@ else
     echo "The app starts, but meshing cannot run." >&2
 fi
 
-has_streamlit() { [ -x "$1" ] || command -v "$1" >/dev/null 2>&1 || return 1; "$1" -c "import streamlit" 2>/dev/null; }
+# The app's own packages, not only streamlit: another project's venv is not taken.
+has_streamlit() {
+    [ -x "$1" ] || command -v "$1" >/dev/null 2>&1 || return 1
+    "$1" -c "import streamlit, trimesh, pydantic, psutil, plotly" 2>/dev/null
+}
 remembered() {
     [ -f "$settings" ] || return 0
     python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("python", ""))' \

@@ -509,7 +509,15 @@ class MachineService(RunControl):
         busy = lock.acquire()
         if busy is not None:
             return ScratchResult(None, converter(info), None, (busy,))
+        heavy = HeavyLock()
+        if heavy.acquire() is not None:
+            lock.release()
+            return ScratchResult(None, converter(info), None, (_issue(
+                IssueSeverity.WARNING, "HEAVY_STEP_RUNNING",
+                f"Another heavy step is running: {heavy.holder_text() or 'unknown'}.",
+                "Convert for the box when it has finished."),))
         try:
+            heavy.describe(self.root, "conversion for the box", None)
             names = (converter(info),)
             found = validate_environment(self._profile(), names, self._env(),
                                          verified_versions=VERIFIED_VERSIONS)
@@ -520,6 +528,7 @@ class MachineService(RunControl):
                                                runner=self.pipeline.runner, env=self.env,
                                                tool=tool))
         finally:
+            heavy.release()
             lock.release()
 
     def check_ami_revolution(self) -> RevolutionResult:
@@ -593,6 +602,7 @@ class MachineService(RunControl):
             lock = RunLock(self.root)
             busy = lock.acquire()
             if busy is not None:
+                meta["issues"] = [busy.as_dict()]
                 return RevolutionResult((), 0, 0, mesh_hash(self.root), (busy,))
             heavy = HeavyLock()
             try:
@@ -600,13 +610,20 @@ class MachineService(RunControl):
                     meta["waiting"] = who
 
                 if not await heavy.wait(cancel_event.is_set, waiting):
+                    meta["issues"] = [_issue(
+                        IssueSeverity.INFO, "AMI_REVOLUTION_CANCELLED",
+                        "The check was cancelled while it waited for another heavy step.",
+                        "Start it again when ready.").as_dict()]
                     return RevolutionResult((), 0, 0, mesh_hash(self.root))
                 meta["waiting"], meta["started"] = "", time.time()
                 heavy.describe(self.root, f"AMI weights {over_revolution(steps)}", estimate)
-                return await check_revolution(
+                result = await check_revolution(
                     self.root, config, runner=self.pipeline.runner, env=self.env,
                     ami_range=self.thresholds.imported_ami_weights_range, steps=steps,
                     cancel_event=cancel_event)
+                if not result.done:  # its report says why; a page shows it once
+                    meta["issues"] = [i.as_dict() for i in result.issues]
+                return result
             finally:
                 heavy.release()
                 lock.release()
@@ -632,6 +649,15 @@ class MachineService(RunControl):
 
     def cancel_revolution(self) -> bool:
         return self.revolutions.cancel(self.root)
+
+    def revolution_messages(self) -> tuple[Issue, ...]:
+        """Why the last background check did not finish (a busy run lock, a
+        cancel): given once, then forgotten."""
+        if self.revolutions.active(self.root) is not None:
+            return ()
+        meta = _REVOLUTION_META.get(self.root.resolve(), {})
+        found = meta.pop("issues", [])
+        return tuple(Issue.from_dict(i) for i in found)
 
     def revolution_is_current(self, report: Mapping[str, Any]) -> bool:
         """Whether a check over one revolution is of the assembled mesh as it is,
@@ -667,11 +693,22 @@ class MachineService(RunControl):
         return _summary(str(path), stat.st_size, stat.st_mtime_ns)
 
     def mesh_copy_target(self, source: Path) -> Path:
-        return self.root / "inputs" / "mesh" / source.name
+        """inputs/mesh/<name>, or <stem>-2, -3 ... when that name holds another
+        file (one copied from elsewhere, or an upload): a copy never replaces it."""
+        folder = self.root / "inputs" / "mesh"
+        for n in range(1, 1000):
+            target = folder / (source.name if n == 1 else f"{source.stem}-{n}{source.suffix}")
+            status = disk.read_status(target)
+            if status is not None and status.source == str(source):
+                return target  # a copy of this same file: again, or still running
+            if status is None and not target.exists() and not disk.JOBS.running(target):
+                return target
+        raise ValueError(f"No free name for {source.name} in {folder}.")
 
     def start_mesh_copy(self, source: Path) -> tuple[Path, bool]:
         """Copy a file from a Windows drive into the project in the background
-        (disk.copy_file); (target, started). Not started when one is running."""
+        (disk.copy_file); (target, started). Not started when this same file is
+        being copied already."""
         target = self.mesh_copy_target(source)
         return target, disk.JOBS.start(source, target)
 

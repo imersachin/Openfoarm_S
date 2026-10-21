@@ -83,10 +83,9 @@ def use_file(ctx: state.Context, path: Path) -> None:
     """Use a picked file: one on a Windows drive is copied into the project first
     (read in place it is 6.5 times slower, E0), any other is used where it is."""
     if disk.on_windows_drive(path):
-        target, started = ctx.service.start_mesh_copy(path)
+        # Not started again when this same file is being copied: its progress shows.
+        target, _ = ctx.service.start_mesh_copy(path)
         st.session_state[WAITING] = str(target)
-        if not started:
-            st.info(f"{path.name} is already being copied.")
         return
     choose(ctx, str(path), ctx.service.inspect_mesh(path).sha256)
 
@@ -112,7 +111,11 @@ def picker(ctx: state.Context) -> None:
     typed = st.text_input("A folder or a .msh file", key="machines_disk_typed")
     st.caption(r"For example `E:\Meshes\Francis`, `\\wsl$\Ubuntu-24.04\root\meshes` or "
                "`/root/meshes`.")
-    if st.button("Go", key="machines_disk_go", disabled=not typed):
+    # Never disabled: a typed path is committed by the click itself (disabled until
+    # Enter, the first click did nothing; M2a browser check).
+    if st.button("Go", key="machines_disk_go") and not typed:
+        st.warning("Type a folder or a .msh file first.")
+    elif st.session_state.get("machines_disk_go") and typed:
         resolved = disk.to_wsl(typed)
         if resolved.path is not None and resolved.path.is_file():
             if disk.inside(resolved.path, roots) is None:
@@ -127,7 +130,7 @@ def picker(ctx: state.Context) -> None:
     if found.path is None:
         st.warning(found.message)
         return
-    top, up, keep = st.columns([6, 1, 2])
+    top, up, keep = st.columns([5, 1, 3])
     top.markdown(f"**{found.root.label if found.root else ''}** `{found.path}`")
     if found.root is not None and found.path != found.root.path and up.button(
             "Up", key="machines_disk_up"):

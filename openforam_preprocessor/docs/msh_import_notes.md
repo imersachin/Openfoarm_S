@@ -950,3 +950,50 @@ mesh, in the background, the lock released afterwards.
   sets non-orthogonal correctors and limited schemes, each labelled with the
   reason ("max non-orthogonality 81.6 deg in GV").
 - The heavy-step lock for STL runs (snappyHexMesh) too.
+
+## 14. Browser checklist, M2a (owner, before the merge)
+
+Start the app by double-clicking `scripts\run_machines_app.cmd` (or the desktop
+shortcut that `scripts\make_desktop_shortcut.cmd` makes): nothing to set; the
+browser opens at http://localhost:8502 by itself. Projects below are Custom,
+Use: Import .msh. Your Francis files are in `\\wsl$\Ubuntu-24.04\root\meshes`.
+
+| # | Do | Expect | Result |
+|---|---|---|---|
+| M1 | Double-click `scripts\make_desktop_shortcut.cmd`, then the new "Rotating Machines" desktop icon | A window starts the app; the browser opens the app within a few seconds (no setting typed) | |
+| M2 | Imported mesh: open "Or pick a file on this computer" | Buttons WSL home, C:, E: (your drives) | |
+| M3 | Type `\\wsl$\Ubuntu-24.04\root\meshes`, Go | 4 .msh files with size and date; GV "25 boundary zone(s), 25 without a name", RU "55 ..., 6 without a name", SC 3,427,708 cells | |
+| M4 | Remember this folder; press F5; open the picker | The folder is listed again (an app setting) | |
+| M5 | Use GV | Patches FaceGroup13 ... FaceGroup55 with their file types (outflow, wall, periodic, periodic-shadow); INFO "25 boundary zone(s) ... have no name; they will be called FaceGroup13 ..."; no AMI pair suggested from FaceGroup numbers | |
+| M6 | Copy `SC-SV-HH-HighRe.msh` to a folder on E: in Windows Explorer; in the picker go to that folder (E:, then the folders, or paste its Windows path), "Copy and use" | A progress bar (MB, MB/s, time left, "checking the copy"), then the file is used from the project's `inputs\mesh\`; INFO "SC-Inlet, SV-Outlet: the name says inlet or outlet, the file types them wall" | |
+| M7 | Start M6 again and press F5 during the copy; then "Cancel the copy" on a second try | The progress is still shown after F5; Cancel leaves no file | |
+| M8 | A rotating project (A1-A7 of section 12 on `rotating_41.msh`), Save, Review | "Import the mesh (convert, binary; its boundary surface)", "Views of the mesh for the 3D pane (surface, two cuts)" in the plan | |
+| M9 | Run it; 3D preview, Mesh | The boundary by patch and two cuts (M1c could not draw this view) | |
+| M10 | Mesh section | Validity VALID; no table if no quality warning. With the coarse mesh of the real test it is VALID, Quality REVIEW, a "Quality by cell zone" table and the ParaView sets folder | |
+| M11 | Mesh: choose 8 x 45 deg, Check over one revolution; press F5 while it runs | Progress "Checking over one revolution (8 x 45 deg): k of 8 steps"; after F5 still shown; Cancel works; the report says "(8 x 45 deg)" | |
+| M12 | Start a run in another project while M11 runs | That run waits: "Waiting for another heavy step to finish: <project>: AMI weights over one revolution ..., started HH:MM" and starts after it | |
+
+The 23 M-cell assembly of your four files is M2b; these checks use your files
+one at a time.
+
+### 13.7 Fixes after the M2a testing review (PASS WITH FINDINGS; no HIGH)
+
+- MEDIUM: checkMesh writes a VTK set only when it has faces, so the sets of an
+  earlier check were drawn on a mesh that passed: they are removed before
+  each checkMesh (and the non-region polyMesh sets).
+- MEDIUM: the step preflight read the last checkMesh log whatever file it was
+  of (GV's 0.5 M cells for SC's 3.4 M): it is used only when the import
+  report has the same file's hash; else the file's declared count.
+- MEDIUM: the free RAM was measured before waiting for the heavy-step lock (a
+  second project blocked by the first's 20 GB): the lock is taken first.
+- LOW: a copy of another file with the same name now goes to <stem>-2 ...;
+  the same file again reuses its copy. The unnamed-zones INFO also for a
+  binary Fluent file. Why a background check did not finish (a busy run
+  lock, a cancel) is shown once; its old log is removed at the start (the
+  bar no longer shows the last check's steps) and a cancel before the mesh
+  copy stops it. The box conversion takes the heavy-step lock (refused with
+  the holder named, never waiting). The launcher takes only a Python with
+  the app's packages (streamlit, trimesh, pydantic, psutil, plotly).
+- From the browser check: Go was disabled until the path box was left, so
+  the first click did nothing; FaceGroup names were offered as AMI pairs
+  ("ending in 1 and 2"); both fixed.

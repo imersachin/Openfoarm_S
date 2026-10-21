@@ -270,16 +270,19 @@ class ImportRun:
             if has_stopping_issue(found):
                 raise _Stop("The OpenFOAM environment is not usable; nothing was run.", *found)
             run.issues.extend(found)
-        if any(may_run.values()):  # the E0 model of each step first (M2a), then M1's
-            self._step_preflight(plan, [op for op in ops if may_run[op]])
-        if may_run[IMPORT]:
-            self._preflight(info, allow_risk)
+        # The heavy-step lock first, so the free RAM is measured with no other heavy
+        # step running (review of M2a); then each step's E0 model, then M1's check.
         if any(may_run.values()):
-            current = run.root / MESH_REPORT
-            if current.is_file():
-                current.replace(run.root / SUPERSEDED_MESH_REPORT)
             await self._take_heavy_lock()
         try:
+            if any(may_run.values()):
+                self._step_preflight(plan, [op for op in ops if may_run[op]])
+            if may_run[IMPORT]:
+                self._preflight(info, allow_risk)
+            if any(may_run.values()):
+                current = run.root / MESH_REPORT
+                if current.is_file():
+                    current.replace(run.root / SUPERSEDED_MESH_REPORT)
             await self._operations(plan, ops, force)
         finally:
             self.heavy.release()
@@ -371,9 +374,15 @@ class ImportRun:
                 state=RunState.CANCELLED)
 
     def _cells(self, plan: _Plan) -> tuple[int | None, float | None]:
-        """Cells and the share of hexahedra: from the last checkMesh of this
-        mesh when there is one, else the file's own count (types unknown)."""
-        log = _read(self.run.root / "logs" / MERGED_CASE / CHECK_MESH_LOG)
+        """Cells and the share of hexahedra: from the last checkMesh when the
+        import report says it was of this same file, else the file's own count
+        (types unknown). A log of another file is never used (review of M2a)."""
+        try:
+            report = json.loads((self.run.root / IMPORT_REPORT).read_text("utf-8"))
+            same = isinstance(report, dict) and report.get("sha256") == plan.digest
+        except (OSError, ValueError):
+            same = False
+        log = _read(self.run.root / "logs" / MERGED_CASE / CHECK_MESH_LOG) if same else ""
         cells = re.search(r"^\s*cells:\s+(\d+)", log, re.MULTILINE)
         hexes = re.search(r"^\s*hexahedra:\s+(\d+)", log, re.MULTILINE)
         if cells and int(cells[1]):
@@ -490,6 +499,11 @@ class ImportRun:
             if stopping:
                 raise _Stop("The assembled mesh is not the intended one.", *stopping)
             return _mesh_files(run.root, MERGED_CASE)
+        # checkMesh writes a set only when it has faces: the sets of an earlier
+        # check would show problems the mesh no longer has (review of M2a).
+        merged = run.root / "cases" / MERGED_CASE
+        shutil.rmtree(merged / SETS_DIR, ignore_errors=True)
+        shutil.rmtree(merged / POLY_MESH / "sets", ignore_errors=True)
         steps = plan.cases.check_steps(bool(self.mesh.ami_pairs))
         logs = [Path((await self._step(step, index, "checkMesh" if index == 1
                                        else "amiWeights")).log_path)

@@ -17,7 +17,7 @@ from pathlib import Path
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage
 from machines.config import PatchType
 from machines.msh_import import surface
-from machines.msh_import.detect import MeshFileInfo, Point
+from machines.msh_import.detect import UNNAMED_PREFIX, MeshFileInfo, Point
 from machines.msh_import.validation import read_mesh_file
 from machines.patches import suggest_region_types
 
@@ -64,6 +64,8 @@ def suggest_pairs(info: MeshFileInfo) -> tuple[tuple[str, str, str], ...]:
     found: list[tuple[str, str, str]] = []
     names = set(info.patches)
     for name in info.patches:
+        if re.fullmatch(rf"{UNNAMED_PREFIX}\d+", name):
+            continue  # the number is the converter's zone id, not a pair (M2a: GV)
         for a, b in _PAIR_ENDINGS:
             if name.endswith(a) and len(name) > len(a):
                 other = name[: -len(a)] + b

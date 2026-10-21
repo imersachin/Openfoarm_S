@@ -169,13 +169,19 @@ async def check_revolution(root: Path, config: MachineProjectConfig, *,
         return RevolutionResult((), 0, 0, digest, (blocked,))
     mesh = config.imported_mesh
     assert mesh is not None
+    logs = root / "logs" / REVOLUTION_CASE
+    (logs / REVOLUTION_LOG).unlink(missing_ok=True)  # progress() reads this check's only
+    if cancel_event is not None and cancel_event.is_set():
+        return RevolutionResult((), 0, 0, digest, (_issue(
+            IssueSeverity.INFO, IssueCategory.TIMEOUT_CANCELLATION,
+            IssueStage.MESH_VALIDATION, "AMI_REVOLUTION_CANCELLED",
+            "The check was cancelled before it started.", "Start it again when ready."),))
     case = root / "cases" / REVOLUTION_CASE
     shutil.rmtree(case, ignore_errors=True)
     shutil.copytree(root / "cases" / MERGED_CASE / POLY_MESH, case / POLY_MESH,
                     ignore=shutil.ignore_patterns(*_EXCLUDED))
     for relative, body in revolution_files(config, steps).items():
         OpenFOAMFileWriter.write_if_changed(case / relative, body)
-    logs = root / "logs" / REVOLUTION_CASE
     try:
         result = await runner.run_step(
             MeshingStep(("moveDynamicMesh", "-case", ".", "-checkAMI"), REVOLUTION_LOG,
