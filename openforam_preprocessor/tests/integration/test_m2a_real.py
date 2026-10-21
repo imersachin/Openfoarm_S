@@ -172,3 +172,25 @@ def test_a_large_real_mesh_has_only_quality_warnings_and_their_cells_per_zone(
     print(f"\n{name}: checkMesh {spent:.1f} s; " + "; ".join(
         f"{kind}: " + ", ".join(f"{r.zone} {r.bad}/{r.cells} worst {r.worst:.3g}"
                                 for r in rows if r.bad) for kind, rows in zones.items()))
+
+
+def test_the_revolution_check_runs_in_the_background_on_real_openfoam(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """M2a: 8 x 45 deg in the background under the heavy-step lock; the report
+    is labelled with its steps."""
+    from machines.heavy_lock import HEAVY_LOCK_ENV
+    from machines.msh_import.revolution import read_report
+
+    monkeypatch.setenv(HEAVY_LOCK_ENV, str(tmp_path / "heavy.lock"))
+    service = MachineService(tmp_path / "project")
+    path = service.store_mesh_file("rotating_41.msh", (M1 / "rotating_41.msh").read_bytes())
+    service.save(configs.rotating(path))
+    config = service.saved_config()
+    assert config is not None and service.pipeline.run_sync(service.root, config).succeeded
+    started = service.start_revolution(8)
+    assert started.started, started.issues
+    active = service.revolutions.latest(service.root)
+    assert active is not None and active.finished.wait(120)
+    report = read_report(service.root)
+    assert report is not None and report["when"] == "over one revolution (8 x 45 deg)"
+    assert report["steps"] == 8 and not (tmp_path / "heavy.lock").exists()

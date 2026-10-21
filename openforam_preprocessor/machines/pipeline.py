@@ -521,7 +521,8 @@ class MachinePipeline:
 
     # --- OpenFOAM operations -------------------------------------------------------------------
 
-    async def _command(self, run: _Run, step: Step, index: int) -> CommandResult:
+    async def _command(self, run: _Run, step: Step, index: int,
+                       on_pid: Callable[[int], None] | None = None) -> CommandResult:
         if run.cancel_event is not None and run.cancel_event.is_set():
             raise _Stop("Run cancelled.", _issue(
                 IssueSeverity.ERROR, IssueCategory.TIMEOUT_CANCELLATION,
@@ -542,6 +543,8 @@ class MachinePipeline:
         def started(pid: int) -> None:
             run.status(run.stage, command={**command, "pid": pid,
                                            "pid_create_time": process_create_time(pid)})
+            if on_pid is not None:
+                on_pid(pid)
 
         result = await self.runner.run_step(
             MeshingStep(step.argv, log_name, _STAGES.get(name, IssueStage.OPENFOAM_EXECUTION)),

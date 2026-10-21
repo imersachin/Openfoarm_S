@@ -19,6 +19,7 @@ import json
 import math
 import os
 import threading
+import time
 import uuid
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
@@ -59,8 +60,10 @@ from machines.config import (
     SourceKind,
     StlSource,
 )
+from machines.heavy_lock import HeavyLock
 from machines.joints import propose_joints
 from machines.mesh_folder import MeshFolderReport, check_mesh_folder
+from machines.msh_import import resources
 from machines.msh_import import surface as mesh_surface
 from machines.msh_import.cases import IMPORTED_CASE, MERGED_CASE, SCRATCH_CASE, converter
 from machines.msh_import.inspection import MeshInspection, PatchGeometry, patch_geometry
@@ -81,6 +84,9 @@ from machines.msh_import.revolution import (
     check_key,
     check_revolution,
     mesh_hash,
+    over_revolution,
+    progress,
+    sweeps,
     unavailable,
 )
 from machines.msh_import.scan import Summary, summarize
@@ -301,6 +307,7 @@ class MachineService(RunControl):
         *,
         pipeline: MachinePipeline | None = None,
         registry: RunRegistry | None = None,
+        revolutions: RunRegistry | None = None,
         env: Mapping[str, str] | None = None,
         mounts: list[Mount] | None = None,
         system_probe: Callable[[Path], SystemResources] | None = None,
@@ -316,6 +323,7 @@ class MachineService(RunControl):
         self.env = env  # None: the process environment
         self.pipeline = pipeline or MachinePipeline(environment=env)
         self.registry = registry or REGISTRY
+        self.revolutions = revolutions or REVOLUTIONS
         self.mounts = mounts
         self.system_probe = system_probe or SystemResources.detect
         self.estimator = estimator or ResourceEstimator()
@@ -539,6 +547,91 @@ class MachineService(RunControl):
                 ami_range=self.thresholds.imported_ami_weights_range))
         finally:
             lock.release()
+
+    # --- the revolution check in the background (M2a) ------------------------------------
+
+    def revolution_sweeps(self) -> list[tuple[int, float | None]]:
+        """(steps, estimated seconds) to offer: 36 x 10 deg, and the coarser
+        sweeps when that is estimated over 10 min (revolution.sweeps); the
+        estimate from the mesh's cells and the E0 model, or this mesh's last
+        measured step (resources.py)."""
+        step = self._revolution_step()
+        return [(n, step * n if step is not None else None) for n in sweeps(step)]
+
+    def _revolution_step(self) -> float | None:
+        try:
+            report = json.loads((self.root / MESH_REPORT).read_text("utf-8"))
+            cells = int(report["metrics"]["cells"])
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+        return resources.estimate("revolution_step", cells).seconds
+
+    def start_revolution(self, steps: int) -> StartResult:
+        """The check over one revolution on a background thread (one per project),
+        under the run lock and the machine-wide heavy-step lock; returns at once."""
+        config = self.saved_config()
+        if config is None or config.imported_mesh is None:
+            return StartResult(False, None, (_issue(
+                IssueSeverity.BLOCKING, "AMI_REVOLUTION_UNAVAILABLE",
+                "The saved project has no imported mesh.",
+                "Save an imported-mesh project and run the import first."),))
+        blocked = unavailable(config, self.root)
+        if blocked is not None:
+            return StartResult(False, None, (blocked,))
+        found = validate_environment(config.openfoam_profile, REVOLUTION_EXECUTABLES,
+                                     self._env(), verified_versions=VERIFIED_VERSIONS)
+        if has_stopping_issue(found):
+            return StartResult(False, None, tuple(found))
+        step = self._revolution_step()
+        run_id = uuid.uuid4().hex
+        estimate = step * steps if step is not None else None
+        meta: dict[str, Any] = {"steps": steps, "started": time.time(),
+                                "label": over_revolution(steps), "estimate_s": estimate,
+                                "waiting": ""}
+
+        async def work(cancel_event: Any) -> Any:
+            lock = RunLock(self.root)
+            busy = lock.acquire()
+            if busy is not None:
+                return RevolutionResult((), 0, 0, mesh_hash(self.root), (busy,))
+            heavy = HeavyLock()
+            try:
+                def waiting(who: str) -> None:
+                    meta["waiting"] = who
+
+                if not await heavy.wait(cancel_event.is_set, waiting):
+                    return RevolutionResult((), 0, 0, mesh_hash(self.root))
+                meta["waiting"], meta["started"] = "", time.time()
+                heavy.describe(self.root, f"AMI weights {over_revolution(steps)}", estimate)
+                return await check_revolution(
+                    self.root, config, runner=self.pipeline.runner, env=self.env,
+                    ami_range=self.thresholds.imported_ami_weights_range, steps=steps,
+                    cancel_event=cancel_event)
+            finally:
+                heavy.release()
+                lock.release()
+
+        active, started = self.revolutions.start(self.root, run_id, work)
+        if not started:
+            return StartResult(False, active.run_id, (_issue(
+                IssueSeverity.INFO, "AMI_REVOLUTION_RUNNING",
+                "A check over one revolution of this project is already running.",
+                "Follow its progress, or cancel it."),))
+        _REVOLUTION_META[self.root.resolve()] = meta
+        return StartResult(True, run_id, ())
+
+    def revolution_state(self) -> dict[str, Any] | None:
+        """A running check: steps done of planned, seconds since it started, the
+        estimate, whom it waits for; None when none is running."""
+        if self.revolutions.active(self.root) is None:
+            return None
+        meta = dict(_REVOLUTION_META.get(self.root.resolve(), {}))
+        meta["done"] = progress(self.root) if not meta.get("waiting") else 0
+        meta["elapsed_s"] = time.time() - float(meta.get("started", time.time()))
+        return meta
+
+    def cancel_revolution(self) -> bool:
+        return self.revolutions.cancel(self.root)
 
     def revolution_is_current(self, report: Mapping[str, Any]) -> bool:
         """Whether a check over one revolution is of the assembled mesh as it is,
@@ -1284,6 +1377,9 @@ class MachineService(RunControl):
 
 
 _CHECKS = _CheckCache()
+# Revolution checks run apart from mesh runs (the Run page shows mesh runs only).
+REVOLUTIONS = RunRegistry()
+_REVOLUTION_META: dict[Path, dict[str, Any]] = {}
 
 
 @functools.lru_cache(maxsize=64)

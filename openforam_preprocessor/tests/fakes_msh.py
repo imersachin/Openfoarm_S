@@ -37,8 +37,10 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import re
 import shutil
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -194,6 +196,10 @@ class FakeMshRunner(OpenFOAMRunner):
         lines, the -meshQuality table), e.g. from tests/fixtures/msh/m2a.
     fields: cell field values checkMesh -writeFields writes, {field: value or
         per-cell values}; the rest at good values.
+    report_pid: give each command this process's PID through on_start (so a
+        run reads a real peak memory).
+    hold, gate: the command `hold` runs until `gate` is set, or stops as
+        cancelled when its cancel event is set first.
     baffles: checkMesh reports this many baffle faces.
     weights: (min, max) AMI sum(weights) at rest.
     turning: (min, max) AMI sum(weights) moveDynamicMesh reports half way round
@@ -206,6 +212,8 @@ class FakeMshRunner(OpenFOAMRunner):
                  drop_patches: Sequence[str] = (), zones: Mapping[str, int] | None = None,
                  failed_checks: int = 0, baffles: int = 0, check_text: str = "",
                  fields: Mapping[str, float | Sequence[float]] | None = None,
+                 report_pid: bool = False, hold: str | None = None,
+                 gate: threading.Event | None = None,
                  weights: tuple[float, float] = (0.98, 1.03),
                  turning: tuple[float, float] = (0.97, 1.04),
                  turned_steps: int | None = None,
@@ -218,6 +226,7 @@ class FakeMshRunner(OpenFOAMRunner):
         self.drop, self.zones = set(drop_patches), zones
         self.failed_checks, self.baffles, self.weights = failed_checks, baffles, weights
         self.check_text, self.fields = check_text, dict(fields or {})
+        self.report_pid, self.hold, self.gate = report_pid, hold, gate
         self.turning, self.turned_steps = turning, turned_steps
         self.cancel_after = cancel_after
 
@@ -243,6 +252,13 @@ class FakeMshRunner(OpenFOAMRunner):
             return self._result(argv, case_root, log, RunStatus.FAILED, 1, Issue(
                 category=IssueCategory.EXECUTION, severity=IssueSeverity.ERROR, stage=stage,
                 code="COMMAND_FAILED", message=f"{name} exited with code 1."))
+        if self.report_pid and on_start is not None:
+            on_start(os.getpid())
+        if self.hold == name and self.gate is not None:
+            while not self.gate.is_set():
+                if cancel_event is not None and cancel_event.is_set():
+                    break
+                await asyncio.sleep(0.01)
         override = self.outcome.get(name)
         if override is None and cancel_event is not None and cancel_event.is_set():
             override = RunStatus.CANCELLED

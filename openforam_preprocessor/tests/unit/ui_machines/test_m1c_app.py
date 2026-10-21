@@ -260,6 +260,12 @@ def test_a_run_shows_the_import_mesh_and_case_apart(msh: MshUi) -> None:
     assert "(WARNING outside 0.95–1.05)" in shown
     assert "Not checked yet." in shown
     ok(app.button(key="machines_ami_revolution").click().run())
+    service = msh.service("demo")  # the check runs in the background (M2a)
+    deadline = time.monotonic() + 30
+    while service.revolution_state() is not None:
+        assert time.monotonic() < deadline
+        time.sleep(0.05)
+    ok(app.run())
     shown = texts(app)
     assert "over one revolution (36 x 10 deg): sum(weights) 0.9946–1.104" in shown
     warnings = "\n".join(str(w.value) for w in app.warning)

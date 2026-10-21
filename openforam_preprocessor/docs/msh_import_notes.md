@@ -897,3 +897,56 @@ the app's `.venv`, python3), remembers it, and opens the browser once
 to not). Tested with nothing set: it found `/root/venvs/ofpp/bin/python` and
 answered in 2 s. `scripts/make_desktop_shortcut.cmd` puts a "Rotating
 Machines" shortcut to `run_machines_app.cmd` on the desktop.
+
+### 13.5 Preflight per step, one heavy step at a time, the revolution check in the background (commit 4)
+
+`machines/msh_import/resources.py`: each heavy step of an imported mesh
+(conversion, surface, checkMesh, AMI weights, views, one revolution step) is
+estimated from the E0 measurements, scaled by the cells (the last checkMesh
+of this mesh, else the file's declared count) and the share of hexahedra
+(hex-dominant or mixed figures; unknown counts as mixed), with a 1.25
+margin. Each step's real peak is read while it runs (the process's VmHWM in
+`/proc/<pid>/status`, through the runner's `on_start`; STL runs pass none)
+and recorded in `reports/resource_history.json` by the file's content hash;
+the next preflight of that mesh uses the larger of the model and the
+measured peak x 1.25. Before the operations: the largest step over the free
+RAM is BLOCKING (STEP_RAM_BLOCKED, nothing started), over 70 % a WARNING
+(STEP_RAM_HIGH); `reports/step_resources.json` lists every step with its
+basis. It runs before M1's whole-mesh preflight, which stays for the cell
+limit. Weak evidence, written with the figures: one machine, four parts, one
+assembly; the cell types alone change them about 2 times.
+
+`machines/heavy_lock.py`: `~/.machines/heavy.lock` (`MACHINES_HEAVY_LOCK`
+for another file), the run lock's stale-holder rules, held by an imported
+mesh's run while its OpenFOAM operations run and by the revolution check;
+its record names the project, the step, when it started and the estimate. A
+second run or check waits, cancellably, and says for whom ("francis:
+checkMesh, started 14:02, about 3 min left"). STL runs do not take it.
+
+The revolution check (`MachineService.start_revolution`) runs on the app's
+own thread (a registry apart from mesh runs), under the project's run lock
+and the heavy-step lock, with its progress from the log's "Time =" lines,
+the elapsed time and the estimate, and a Cancel (the step stops as
+cancelled; AMI_REVOLUTION_CANCELLED in the report). 36 x 10 deg is the
+default; when it is estimated over 10 min, 8 x 45 deg (preferred: on a
+15-blade runner 8 positions, 30 deg only 4) and 12 x 30 deg are offered with
+their estimates (23 M cells: 36 x 10 deg about 64 min with the margin). The
+label always states the steps. Real v2512: 8 x 45 deg on the rotating test
+mesh, in the background, the lock released afterwards.
+
+### 13.6 Later (owner's future list, M2a)
+
+- Measure STL meshes against the two-level rule before deciding for them;
+  measure STL AMI sums and tighten 0.85-1.5 with evidence.
+- M2b: when the runner is built from N passage copies, sweep one pitch
+  (360/N deg) in about 12 steps, labelled "over one blade pitch (24 deg,
+  12 x 2 deg), equivalent to a full revolution because the runner mesh
+  repeats every 24 deg".
+- M2b: cyclicACMI for partly overlapping interfaces (evidence item); the
+  23 M assembly's checkMesh without -allTopology (31.9 GB), baffles counted
+  by mergeOrSplitBaffles -detectOnly instead (8 s / 9.2 GB).
+- M2c: a decimation grid per part; the zone colours and the cut plane.
+- Case setup reads the per-zone quality and, above 70 deg non-orthogonality,
+  sets non-orthogonal correctors and limited schemes, each labelled with the
+  reason ("max non-orthogonality 81.6 deg in GV").
+- The heavy-step lock for STL runs (snappyHexMesh) too.

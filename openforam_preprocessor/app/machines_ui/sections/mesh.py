@@ -107,6 +107,37 @@ def zone_quality_view(report: dict[str, Any]) -> None:
         st.caption(f"The bad faces and cells for ParaView: `{report['quality_sets']}`")
 
 
+def _duration(seconds: float) -> str:
+    return f"{seconds / 60:.0f} min" if seconds >= 90 else f"{seconds:.0f} s"
+
+
+def _sweep_label(steps: int, seconds: float | None) -> str:
+    return f"{steps} x {360 / steps:g} deg" + (f" (about {_duration(seconds)})"
+                                                if seconds is not None else "")
+
+
+@st.fragment(run_every=2.0)
+def revolution_progress(ctx: state.Context) -> None:
+    """The running check: steps done, time, estimate, Cancel (also after a
+    refresh: the check runs on the app's own thread)."""
+    found = ctx.service.revolution_state()
+    if found is None:
+        st.rerun(scope="app")
+        return
+    if found.get("waiting"):
+        st.info(f"Waiting for another heavy step to finish: {found['waiting']}.")
+    else:
+        steps = int(found.get("steps") or 1)
+        done = min(int(found.get("done") or 0), steps)
+        estimate = found.get("estimate_s")
+        st.progress(done / steps, text=(
+            f"Checking {found.get('label')}: {done} of {steps} steps, "
+            f"{_duration(float(found.get('elapsed_s') or 0))}"
+            + (f" of about {_duration(float(estimate))}" if estimate else "")))
+    if st.button("Cancel the check", key="machines_revolution_cancel"):
+        ctx.service.cancel_revolution()
+
+
 def import_view(report: dict[str, Any]) -> None:
     """What the import did: converter, OpenFOAM, cells, names, zone radius, areas."""
     openfoam = report.get("openfoam") or {}
@@ -133,13 +164,23 @@ def revolution_view(ctx: state.Context, report: dict[str, Any] | None) -> None:
     """The optional check of the AMI weights over one revolution."""
     st.markdown("**AMI weights over one revolution** (optional: the zone is turned without "
                 "solving the flow)")
-    if st.button("Check over one revolution (36 x 10 deg)", key="machines_ami_revolution",
-                 disabled=ctx.active):
-        with st.spinner("Turning the zone…"):
-            result = ctx.service.check_ami_revolution()
-        state.add_messages(i for i in result.issues if not result.done
-                           or i.code != "AMI_WEIGHTS_OUT_OF_RANGE")
-        st.rerun()
+    if ctx.service.revolution_state() is not None:
+        revolution_progress(ctx)
+    else:
+        options = ctx.service.revolution_sweeps()
+        choice = st.radio("Steps", [n for n, _ in options], horizontal=True,
+                          key="machines_revolution_steps",
+                          format_func=lambda n: _sweep_label(n, dict(options)[n]))
+        if len(options) > 1:
+            st.caption("36 x 10 deg is estimated over 10 min on this mesh, so coarser sweeps "
+                       "are offered: 45 deg steps are preferred to 30 deg (on a 15-blade "
+                       "runner they test 8 rotor positions, 30 deg steps only 4).")
+        steps = int(choice or options[0][0])
+        if st.button(f"Check over one revolution ({steps} x {360 / steps:g} deg)",
+                     key="machines_ami_revolution", disabled=ctx.active):
+            started = ctx.service.start_revolution(steps)
+            state.add_messages(started.issues)
+            st.rerun()
     if report is None:
         st.caption("Not checked yet.")
         return

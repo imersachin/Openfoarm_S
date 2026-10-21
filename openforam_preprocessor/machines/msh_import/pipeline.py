@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import threading
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
@@ -39,6 +40,7 @@ from core.artifacts.hashing import files_under, hash_files, sha256_json
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage, has_stopping_issue
 from machines.assembly import AMI_WEIGHTS_DICT, Step
 from machines.case_generator import _fv_schemes, _fv_solution
+from machines.heavy_lock import HeavyLock
 from machines.mesh_folder import (
     MeshExpectation,
     check_ami_pairing,
@@ -48,7 +50,7 @@ from machines.mesh_folder import (
     read_patches,
     region_count,
 )
-from machines.msh_import import quality, surface
+from machines.msh_import import quality, resources, surface
 from machines.msh_import.ami_detail import pair_details
 from machines.msh_import.cases import (
     IMPORTED_CASE,
@@ -104,12 +106,17 @@ from mesh.validator import MeshQualityValidator, QualityStatus, ValidityStatus
 from openfoam.commands import MeshingStep
 from openfoam.dictionary import OpenFOAMFileWriter
 from openfoam.environment import tool_identity, validate_environment
-from openfoam.runner import OpenFOAMRunner, RunStatus
+from openfoam.runner import CommandResult, OpenFOAMRunner, RunStatus
 from vawt.status import RunState
 
 IMPORT = "machine_import_mesh"
 MESH_VIEWS = "machine_mesh_views"  # the merged mesh's surface and cuts (3D pane)
+OPERATION_STEPS = {IMPORT: "import (convert, surface)", ASSEMBLE: "assembly",
+                   CHECK_MESH: "checkMesh", MESH_VIEWS: "views for the 3D pane"}
+STEP_KINDS = {IMPORT: ("convert", "surface"), CHECK_MESH: ("checkMesh", "amiWeights"),
+              MESH_VIEWS: ("views",)}  # resources.py's steps of each operation
 IMPORT_REPORT = "reports/mesh_import.json"
+STEP_RESOURCES = "reports/step_resources.json"  # each heavy step's estimate (resources.py)
 QUALITY_REPORT = "reports/mesh_quality_zones.json"  # per cell zone (quality.py)
 SETS_DIR = "postProcessing/constant"  # checkMesh -writeSets vtk, in cases/merged/
 AREA_AFTER_IMPORT = "INLET_AREA_AFTER_IMPORT"  # case_setup.validation
@@ -184,6 +191,9 @@ class ImportRun:
         mesh = run.config.imported_mesh
         assert mesh is not None
         self.mesh = mesh
+        self.heavy = HeavyLock()
+        self.key = ""  # the file's content hash, once read (the resources history)
+        self.estimates: dict[str, resources.Estimate] = {}
 
     # --- cache inputs ------------------------------------------------------------------
 
@@ -242,6 +252,7 @@ class ImportRun:
         info, digest = read_mesh_file(self.mesh.source_path)
         assert digest is not None  # validation: the file is readable and unchanged
         plan = _Plan(info, digest, self.mesh.source_units.to_metres, import_cases(config))
+        self.key = digest
         _write(run.root, IMPORTED_CASE, plan.cases.imported)
         _write(run.root, MERGED_CASE, plan.cases.merged)
 
@@ -259,27 +270,19 @@ class ImportRun:
             if has_stopping_issue(found):
                 raise _Stop("The OpenFOAM environment is not usable; nothing was run.", *found)
             run.issues.extend(found)
+        if any(may_run.values()):  # the E0 model of each step first (M2a), then M1's
+            self._step_preflight(plan, [op for op in ops if may_run[op]])
         if may_run[IMPORT]:
             self._preflight(info, allow_risk)
         if any(may_run.values()):
             current = run.root / MESH_REPORT
             if current.is_file():
                 current.replace(run.root / SUPERSEDED_MESH_REPORT)
-        for op in ops:
-            run.status(op)
-            inputs = self._inputs(plan, op)
-            if not force and run.store.check(op, inputs).reusable:
-                run.reused.append(op)
-                continue
-            run.store.invalidate(op)  # a failed or cancelled run never leaves a record
-            run.executed.append(op)
-            if op == MESH_VIEWS:
-                made = await self._views()
-                if made is not None:
-                    run.store.record(op, inputs, made)
-                continue
-            outputs = await self._execute(plan, op, force)
-            run.store.record(op, inputs, outputs)
+            await self._take_heavy_lock()
+        try:
+            await self._operations(plan, ops, force)
+        finally:
+            self.heavy.release()
         # Every run: the zone radii follow the configured axis and origin, also
         # when the import itself is reused.
         self._report(plan)
@@ -319,6 +322,104 @@ class ImportRun:
         return pipe._result(run, succeeded, message,
                             RunState.SUCCEEDED if succeeded else RunState.FAILED,
                             report=report_path)
+
+    async def _operations(self, plan: _Plan, ops: tuple[str, ...], force: bool) -> None:
+        """Each operation, reused when its record verifies; the heavy-step lock's
+        record names the step running."""
+        run = self.run
+        for op in ops:
+            run.status(op)
+            inputs = self._inputs(plan, op)
+            if not force and run.store.check(op, inputs).reusable:
+                run.reused.append(op)
+                continue
+            self.heavy.describe(run.root, OPERATION_STEPS.get(op, op), self._seconds(op))
+            run.store.invalidate(op)  # a failed or cancelled run never leaves a record
+            run.executed.append(op)
+            if op == MESH_VIEWS:
+                made = await self._views()
+                if made is not None:
+                    run.store.record(op, inputs, made)
+                continue
+            outputs = await self._execute(plan, op, force)
+            run.store.record(op, inputs, outputs)
+
+    def _seconds(self, op: str) -> float | None:
+        found = [self.estimates[k].seconds for k in STEP_KINDS.get(op, ())
+                 if k in self.estimates]
+        return sum(found) if found else None
+
+    # --- one heavy step at a time, and their resources (M2a) -------------------------------
+
+    async def _take_heavy_lock(self) -> None:
+        """The machine-wide heavy-step lock (heavy_lock.py), waiting while another
+        project or check holds it; the run says for whom."""
+        run = self.run
+
+        def waiting(who: str) -> None:
+            run.status(run.stage, message=f"Waiting for another heavy step to finish: {who}.")
+
+        def cancelled() -> bool:
+            return run.cancel_event is not None and run.cancel_event.is_set()
+
+        if not await self.heavy.wait(cancelled, waiting):
+            raise _Stop("Run cancelled while waiting for another heavy step.", _issue(
+                IssueSeverity.ERROR, IssueCategory.TIMEOUT_CANCELLATION,
+                IssueStage.RESOURCE_PREFLIGHT, "RUN_CANCELLED",
+                "The run was cancelled while it waited for another heavy step.",
+                "Start the run again when the other step has finished."),
+                state=RunState.CANCELLED)
+
+    def _cells(self, plan: _Plan) -> tuple[int | None, float | None]:
+        """Cells and the share of hexahedra: from the last checkMesh of this
+        mesh when there is one, else the file's own count (types unknown)."""
+        log = _read(self.run.root / "logs" / MERGED_CASE / CHECK_MESH_LOG)
+        cells = re.search(r"^\s*cells:\s+(\d+)", log, re.MULTILINE)
+        hexes = re.search(r"^\s*hexahedra:\s+(\d+)", log, re.MULTILINE)
+        if cells and int(cells[1]):
+            return int(cells[1]), (int(hexes[1]) / int(cells[1]) if hexes else None)
+        found, _ = preflight_cells(plan.info)
+        return found, None
+
+    def _step_preflight(self, plan: _Plan, ops: list[str]) -> None:
+        """Each heavy step's RAM and time from the E0 models (resources.py),
+        against the free RAM: over it BLOCKED, over 70 % a WARNING. Written to
+        reports/step_resources.json."""
+        run = self.run
+        cells, hexes = self._cells(plan)
+        free = self.pipe.system_probe(run.root).available_ram_bytes
+        history = resources.read_history(run.root)
+        estimates = [resources.estimate(kind, cells or 0, hexes, plan.info.size, history,
+                                        self.key)
+                     for op in ops for kind in STEP_KINDS.get(op, ())
+                     if cells or kind == "convert"]
+        rows = [{**e.as_dict(), "label": resources.LABELS[e.step]} for e in estimates]
+        path = run.root / STEP_RESOURCES
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"free_ram_bytes": free, "cells": cells,
+                                    "hex_share": hexes, "steps": rows,
+                                    "note": resources.NOTE}, indent=2) + "\n",
+                        encoding="utf-8")
+        self.estimates = {e.step: e for e in estimates}
+        if free is None or not estimates:
+            return
+        worst = max(estimates, key=lambda e: e.ram_bytes)
+        needed = f"{worst.ram_bytes / 1e9:.1f} GB of {free / 1e9:.1f} GB free"
+        if worst.ram_bytes > free:
+            raise _Stop("Resource preflight BLOCKED the run.", _issue(
+                IssueSeverity.BLOCKING, IssueCategory.RESOURCE_RISK,
+                IssueStage.RESOURCE_PREFLIGHT, "STEP_RAM_BLOCKED",
+                f"The {resources.LABELS[worst.step]} needs about {needed} "
+                f"({worst.basis}, with a 1.25 margin).",
+                "Close other programs or give WSL more memory (.wslconfig), then run "
+                "again.", **worst.as_dict()))
+        if worst.ram_bytes > resources.WARN_SHARE * free:
+            run.issues.append(_issue(
+                IssueSeverity.WARNING, IssueCategory.RESOURCE_RISK,
+                IssueStage.RESOURCE_PREFLIGHT, "STEP_RAM_HIGH",
+                f"The {resources.LABELS[worst.step]} needs about {needed} "
+                f"({worst.basis}, with a 1.25 margin).",
+                "Avoid other memory-hungry work while it runs.", **worst.as_dict()))
 
     def areas(self) -> dict[str, float]:
         """Every configured patch's area in m^2, measured from the imported mesh's
@@ -390,7 +491,8 @@ class ImportRun:
                 raise _Stop("The assembled mesh is not the intended one.", *stopping)
             return _mesh_files(run.root, MERGED_CASE)
         steps = plan.cases.check_steps(bool(self.mesh.ami_pairs))
-        logs = [Path((await self.pipe._command(run, step, index)).log_path)
+        logs = [Path((await self._step(step, index, "checkMesh" if index == 1
+                                       else "amiWeights")).log_path)
                 for index, step in enumerate(steps, start=1)]
         return [*logs, self._zone_quality()]
 
@@ -426,7 +528,8 @@ class ImportRun:
         steps = convert_steps(plan.info, self.mesh.source_path, IMPORTED_CASE)
         if force or not self._promote(plan):  # force: convert again, reuse nothing
             for index, step in enumerate(steps, start=1):
-                await self.pipe._command(run, step, index)
+                await self._step(step, index, "convert" if step.name.endswith("_convert")
+                                 else None)
         scale = scale_step(plan.factor)
         if scale is not None:
             await self.pipe._command(run, scale, len(steps) + 1)
@@ -443,6 +546,31 @@ class ImportRun:
         run.issues.extend(found)
         return [*_mesh_files(run.root, IMPORTED_CASE), *surface.outputs(case)]
 
+    async def _step(self, step: Step, index: int, kind: str | None) -> CommandResult:
+        """A step, its peak memory measured (the process's VmHWM, read while it
+        runs) and recorded for the preflight of this mesh (resources.py)."""
+        peaks: list[int] = []
+        done = threading.Event()
+
+        def watch(pid: int) -> None:
+            def sample() -> None:
+                while not done.is_set():
+                    found = resources.peak_rss(pid)
+                    if found is None:
+                        return
+                    peaks.append(found)
+                    done.wait(0.5)
+            threading.Thread(target=sample, daemon=True, name=f"peak-{pid}").start()
+
+        try:
+            result = await self.pipe._command(self.run, step, index, on_pid=watch)
+        finally:
+            done.set()
+        if kind is not None and peaks:
+            resources.record(self.run.root, self.key, kind, max(peaks),
+                             result.duration_seconds)
+        return result
+
     async def _surface(self, case: str) -> None:
         """The boundary surface of cases/<case>/ (surface.py), or stop."""
         run = self.run
@@ -451,7 +579,7 @@ class ImportRun:
         surface.prepare(folder, zones, _converter_files())
         log = ""
         for index, step in enumerate(surface.steps(case, zones), start=1):
-            log = _read(Path((await self.pipe._command(run, step, index)).log_path))
+            log = _read(Path((await self._step(step, index, "surface")).log_path))
         if not surface.index(folder, log):
             raise _Stop(f"The boundary surface of the {case} mesh could not be read.", _issue(
                 IssueSeverity.BLOCKING, IssueCategory.EXECUTION, IssueStage.MESH_IMPORT,
@@ -471,7 +599,7 @@ class ImportRun:
             made: list[Path] = []
             if planes:
                 surface.write_cuts(folder, planes)
-                await self.pipe._command(run, surface.cut_step(MERGED_CASE), 3)
+                await self._step(surface.cut_step(MERGED_CASE), 3, "views")
                 made = [surface.surface_dir(folder) / surface.CUTS_RECORD,
                         *(surface.cut_file(folder, name) for name, *_ in planes)]
         except _Stop as stop:
