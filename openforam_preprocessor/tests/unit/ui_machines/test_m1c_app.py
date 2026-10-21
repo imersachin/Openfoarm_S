@@ -52,6 +52,8 @@ class MshUi(MachinesUi):
                     "MACHINES_PROJECTS_DIR": str(self.projects)}
         for key, value in self.env.items():
             monkeypatch.setenv(key, value)
+        # The file picker's WSL root and the app settings (M2a) under the test's folder.
+        monkeypatch.setenv("HOME", str(tmp_path))
         self.runner: dict[str, Any] = {}
 
     def make_service(self, root: Path) -> MachineService:
@@ -79,9 +81,10 @@ def to_import(app: AppTest) -> AppTest:
 
 
 def use_path(app: AppTest, path: Path) -> AppTest:
+    """Give the file's path in the picker (M2a), as a user typing it."""
     go(app, "imported_mesh")
-    app.text_input(key="machines_mesh_path").set_value(str(path)).run()
-    return ok(app.button(key="machines_mesh_use_path").click().run())
+    app.text_input(key="machines_disk_typed").set_value(str(path)).run()
+    return ok(app.button(key="machines_disk_go").click().run())
 
 
 def copy_mesh(msh: MshUi, name: str, folder: Path = BAD_DIR.parent) -> Path:

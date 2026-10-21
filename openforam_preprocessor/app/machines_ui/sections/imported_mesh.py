@@ -1,6 +1,8 @@
 """Imported mesh (M1c): a Fluent or Gmsh .msh file meshed elsewhere.
 
-The file (an upload, or a path inside WSL for a larger file), what was
+The file (an upload up to 200 MB, or a file picked on this computer: a
+Windows drive or WSL, M2a; one on a Windows drive is copied into the project
+first, with its progress shown and its hash checked), what was
 detected (format, converter, the OpenFOAM version that converts it), the
 bounding box and the units confirmed against it, the rotating cell zone, the
 AMI pair, and the names the mesh will use. Suggestions are applied only by a
@@ -9,6 +11,7 @@ button; nothing is converted except by the box button or a run.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -26,10 +29,13 @@ from app.machines_ui.sections.fields import (
     vector_field,
 )
 from core.config.models import LengthUnit
+from machines import disk
 from machines.msh_import.cases import converter, needs_resave
 from machines.msh_import.inspection import MeshInspection
 
 UPLOADED = "machines_mesh_uploaded"  # the file_id of the last stored upload
+FOLDER = "machines_disk_folder"  # the folder the picker shows
+WAITING = "machines_disk_copy"  # the copy whose file is used when it is done
 
 
 def mesh_of(draft: dict[str, Any]) -> dict[str, Any]:
@@ -67,12 +73,144 @@ def file_choice(ctx: state.Context) -> None:
             st.session_state[UPLOADED] = upload.file_id
             choose(ctx, str(stored), ctx.service.inspect_mesh(stored).sha256)
             st.rerun()
-    with st.expander("Or give its path inside WSL (a large file is read where it is)"):
-        given = st.text_input("Mesh file path", key="machines_mesh_path")
-        if st.button("Use this file", key="machines_mesh_use_path", disabled=not given):
-            path = Path(given).expanduser()
-            choose(ctx, str(path), ctx.service.inspect_mesh(path).sha256)
+    with st.expander("Or pick a file on this computer (Windows drives and WSL)",
+                     expanded=not mesh_of(ctx.draft).get("source_path")):
+        picker(ctx)
+    copies(ctx)
+
+
+def use_file(ctx: state.Context, path: Path) -> None:
+    """Use a picked file: one on a Windows drive is copied into the project first
+    (read in place it is 6.5 times slower, E0), any other is used where it is."""
+    if disk.on_windows_drive(path):
+        target, started = ctx.service.start_mesh_copy(path)
+        st.session_state[WAITING] = str(target)
+        if not started:
+            st.info(f"{path.name} is already being copied.")
+        return
+    choose(ctx, str(path), ctx.service.inspect_mesh(path).sha256)
+
+
+def _size(size: int) -> str:
+    return f"{size / 1e6:,.1f} MB" if size < 1e9 else f"{size / 1e9:,.2f} GB"
+
+
+def picker(ctx: state.Context) -> None:
+    roots = ctx.service.mesh_roots()
+    remembered = ctx.service.mesh_folder()
+    current = st.session_state.get(FOLDER) or remembered or str(roots[0].path)
+    columns = st.columns(len(roots) + 1)
+    for column, root in zip(columns, roots, strict=False):
+        if column.button(root.label, key=f"machines_disk_root_{root.label}",
+                         help=str(root.path)):
+            st.session_state[FOLDER] = str(root.path)
             st.rerun()
+    if remembered and columns[-1].button("My mesh folder", key="machines_disk_mine",
+                                         help=remembered):
+        st.session_state[FOLDER] = remembered
+        st.rerun()
+    typed = st.text_input("A folder or a .msh file", key="machines_disk_typed")
+    st.caption(r"For example `E:\Meshes\Francis`, `\\wsl$\Ubuntu-24.04\root\meshes` or "
+               "`/root/meshes`.")
+    if st.button("Go", key="machines_disk_go", disabled=not typed):
+        resolved = disk.to_wsl(typed)
+        if resolved.path is not None and resolved.path.is_file():
+            if disk.inside(resolved.path, roots) is None:
+                st.error(f"{resolved.path} is outside the folders the app may read.")
+            else:
+                use_file(ctx, resolved.path)
+                st.rerun()
+        else:
+            st.session_state[FOLDER] = str(resolved.path) if resolved.path else typed
+            st.rerun()
+    found = ctx.service.list_mesh_folder(current)
+    if found.path is None:
+        st.warning(found.message)
+        return
+    top, up, keep = st.columns([6, 1, 2])
+    top.markdown(f"**{found.root.label if found.root else ''}** `{found.path}`")
+    if found.root is not None and found.path != found.root.path and up.button(
+            "Up", key="machines_disk_up"):
+        st.session_state[FOLDER] = str(found.path.parent)
+        st.rerun()
+    if str(found.path) != remembered and keep.button(
+            "Remember this folder", key="machines_disk_remember",
+            help="Listed first whenever Imported mesh opens (an app setting)."):
+        ctx.service.remember_mesh_folder(found.path)
+        st.rerun()
+    if found.folders:
+        names = [f.name for f in found.folders]
+        chosen = st.selectbox("Folders", names, index=None, key=f"machines_disk_sub_{found.path}",
+                              placeholder=f"{len(names)} folder(s): open one")
+        if chosen:
+            st.session_state[FOLDER] = str(found.path / chosen)
+            st.rerun()
+    if not found.files:
+        st.caption("No .msh file in this folder.")
+        return
+    st.caption(f"{len(found.files)} .msh file(s). The summary reads only the file's "
+               "headers; using a file reads it fully.")
+    for entry in found.files:
+        summary = ctx.service.mesh_summary(entry.path)
+        text, use = st.columns([6, 1])
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(entry.modified))
+        details = (f"{summary.format} ({'binary' if summary.binary else 'ASCII'})"
+                   + (f", {summary.declared_cells:,} cells" if summary.declared_cells else "")
+                   + f", {summary.cell_zones} cell zone(s), {summary.boundary_zones} boundary "
+                   "zone(s)" + (f", **{summary.unnamed} without a name**" if summary.unnamed
+                                else "")
+                   if summary.format else summary.note)
+        text.markdown(f"`{entry.name}` · {_size(entry.size)} · {when}  \n{details}")
+        label = "Copy and use" if disk.on_windows_drive(entry.path) else "Use"
+        if use.button(label, key=f"machines_disk_use_{entry.path}",
+                      disabled=not summary.format):
+            use_file(ctx, entry.path)
+            st.rerun()
+
+
+@st.fragment(run_every=1.0)
+def copies(ctx: state.Context) -> None:
+    """Copies into this project: progress while copying (also after the page is
+    shown again), then the file is used, or the failure said."""
+    for copy in ctx.service.mesh_copies():
+        target = Path(copy["target"])
+        name = target.name
+        state_ = copy["state"]
+        if state_ == "copying":
+            done = copy["copied"] / copy["size"] if copy["size"] else 1.0
+            left = copy.get("remaining_s")
+            st.progress(min(done, 1.0), text=(
+                f"Copying {name} into the project: {copy['copied'] / 1e6:,.0f} of "
+                f"{copy['size'] / 1e6:,.0f} MB, {copy['rate'] / 1e6:,.0f} MB/s"
+                + (f", about {left:,.0f} s left" if left is not None else "")
+                + (f" ({copy['message']})" if copy.get("message") else "")))
+            if st.button("Cancel the copy", key=f"machines_copy_cancel_{name}"):
+                ctx.service.cancel_mesh_copy(target)
+            continue
+        if state_ == "done" and st.session_state.get(WAITING) == str(target):
+            st.session_state.pop(WAITING, None)
+            ctx.service.forget_mesh_copy(target)
+            choose(ctx, str(target), copy["sha256"] or ctx.service.inspect_mesh(target).sha256)
+            st.rerun(scope="app")
+        if state_ == "done":
+            # A copy finished while the page was away (refreshed): offer it.
+            if mesh_of(ctx.draft).get("source_path") != str(target):
+                text, use, drop = st.columns([5, 1, 1])
+                text.caption(f"Copied into the project and checked: `{name}`.")
+                if use.button("Use it", key=f"machines_copy_use_{name}"):
+                    ctx.service.forget_mesh_copy(target)
+                    choose(ctx, str(target), copy["sha256"] or None)
+                    st.rerun(scope="app")
+                if drop.button("Dismiss", key=f"machines_copy_drop_{name}"):
+                    ctx.service.forget_mesh_copy(target)
+                    st.rerun(scope="app")
+            else:
+                ctx.service.forget_mesh_copy(target)
+            continue
+        st.warning(f"{name}: {copy['message']}")
+        if st.button("Dismiss", key=f"machines_copy_dismiss_{name}"):
+            ctx.service.forget_mesh_copy(target)
+            st.rerun(scope="app")
 
 
 def detected(ctx: state.Context, inspection: MeshInspection) -> None:

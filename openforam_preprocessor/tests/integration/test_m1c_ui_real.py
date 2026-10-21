@@ -23,7 +23,8 @@ from tests.fixtures.msh.configs import M1
 from tests.unit.ui_machines.conftest import create, go, ok, open_app, texts
 from vawt.service import RunView
 
-TOOLS = ("gmshToFoam", *ASSEMBLE_EXECUTABLES, *CHECK_EXECUTABLES, "moveDynamicMesh")
+TOOLS = ("gmshToFoam", "topoSet", "surfaceMeshExtract", *ASSEMBLE_EXECUTABLES,
+         *CHECK_EXECUTABLES, "moveDynamicMesh")
 pytestmark = [
     pytest.mark.openfoam,
     pytest.mark.skipif(any(shutil.which(t) is None for t in TOOLS),
@@ -36,6 +37,7 @@ def projects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     root = tmp_path / "projects"
     monkeypatch.setenv("MACHINES_PROJECTS_DIR", str(root))
     monkeypatch.setattr(state, "SERVICE_FACTORY", MachineService)
+    monkeypatch.setenv("HOME", str(tmp_path))  # the picker's WSL root, the app settings
     state._service.clear()
     preview._figure.clear()
     yield root
@@ -51,8 +53,8 @@ def test_an_imported_mesh_through_the_ui(projects: Path, tmp_path: Path) -> None
     go(app, "project")
     ok(app.button(key="machines_mesh_source").click().run())
     go(app, "imported_mesh")
-    app.text_input(key="machines_mesh_path").set_value(str(path)).run()
-    ok(app.button(key="machines_mesh_use_path").click().run())
+    app.text_input(key="machines_disk_typed").set_value(str(path)).run()  # the picker (M2a)
+    ok(app.button(key="machines_disk_go").click().run())
     data = configs.rotating(path)
     data.pop("machine")
     app.session_state["machines_draft"] = {**app.session_state["machines_draft"], **data}

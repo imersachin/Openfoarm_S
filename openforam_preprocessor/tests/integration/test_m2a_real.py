@@ -32,6 +32,7 @@ from machines.service import MachineService
 from tests.fixtures.msh import configs
 from tests.fixtures.msh.configs import M1
 from vawt.service import PreviewView
+from visualization.foam_reader import read_boundary
 
 TOOLS = ("gmshToFoam", "fluent3DMeshToFoam", "transformPoints", "topoSet",
          "surfaceMeshExtract", "createPatch", "foamDictionary", "checkMesh", "postProcess")
@@ -114,6 +115,11 @@ def test_a_large_real_mesh_is_converted_binary_and_measured_from_its_surface(
     assert found is not None
     for patch, expected in radii.items():
         assert radius(scratch, patch) == pytest.approx(expected, abs=5e-4), patch
+    # Every name the detector gives is the converter's, unnamed zones as FaceGroup<id>.
+    names = {p.name for p in read_boundary(scratch / "constant/polyMesh/boundary")}
+    assert set(inspection.info.patches) == names
+    unnamed = [i for i in inspection.issues if i.code == "MSH_UNNAMED_ZONES"]
+    assert len(unnamed) == (1 if any(n.startswith("FaceGroup") for n in names) else 0)
     print(f"\n{name}: inspect {inspected:.1f} s, convert + surface {converted:.1f} s, "
           f"{len(found.offsets) - 1} surface faces, zones {list(found.zones)}")
 

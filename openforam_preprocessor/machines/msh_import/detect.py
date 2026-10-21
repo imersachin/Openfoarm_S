@@ -6,8 +6,11 @@ One streaming pass over the file, never the whole file in memory:
   become patches, volumes cell zones) and, for ASCII, the `$Nodes` box.
 - Fluent: sections in brackets. The dimension `(2 3)`, the declared cell
   count `(12 (0 1 <last> 0))`, the zone names and types `(39 ...)` or
-  `(45 ...)` (written at the end of the file, E0), binary sections
-  (`(20xx`, `(30xx`) and, for ASCII, the node box.
+  `(45 ...)` (written at the end of the file, E0), the face zones and their
+  boundary types from the face section headers `(13 (id first last type
+  ...)` (hex; M2a: a zone with no name is the converter's FaceGroup<id>, as
+  all 25 of the owner's guide-vane passage), binary sections (`(20xx`,
+  `(30xx`) and, for ASCII, the node box.
 
 The extension is never used. Anything else is BLOCKING `MSH_FORMAT_UNKNOWN`:
 the format is never guessed. A file that would crash a converter (missing,
@@ -50,6 +53,15 @@ _FLUENT_CELLS = re.compile(rb"^\(12 \(0 ([0-9a-fA-F]+) ([0-9a-fA-F]+) 0")
 _FLUENT_NODES = re.compile(rb"^\(10 \(([0-9a-fA-F]+) ([0-9a-fA-F]+) ([0-9a-fA-F]+) "
                            rb"([0-9a-fA-F]+)(?: ([0-9a-fA-F]+))?\)")
 _FLUENT_BINARY = re.compile(rb"^\((20|30)(10|12|13|58|59) ")
+# A face section header: (13 (zone first last bc-type face-type), (2013 or (3013 binary.
+_FLUENT_FACES = re.compile(rb"^\((?:13|2013|3013)\s*\(\s*([0-9a-fA-F]+)\s+[0-9a-fA-F]+\s+"
+                           rb"[0-9a-fA-F]+\s+([0-9a-fA-F]+)", re.MULTILINE)
+# Fluent boundary condition types (hex in the file), as the zone sections name them.
+FLUENT_BC = {2: "interior", 3: "wall", 4: "pressure-inlet", 5: "pressure-outlet",
+             7: "symmetry", 8: "periodic-shadow", 9: "pressure-far-field",
+             10: "velocity-inlet", 12: "periodic", 14: "fan", 20: "mass-flow-inlet",
+             24: "interface", 31: "parent", 36: "outflow", 37: "axis"}
+UNNAMED_PREFIX = "FaceGroup"  # fluent3DMeshToFoam's name for a face zone with no name (E0)
 _GMSH_NAME = re.compile(r'^\s*(\d+)\s+(\d+)\s+"([^"]*)"\s*$')
 
 
@@ -242,17 +254,30 @@ def _read_gmsh(path: Path, handle: BinaryIO, size: int) -> MeshFileInfo:
 
 # --- Fluent ---------------------------------------------------------------------------------
 
+def fluent_face_zones(headers: bytes) -> dict[int, str]:
+    """Face zone id -> boundary type, from face section headers (zone 0, the
+    declaration of all faces, left out)."""
+    found: dict[int, str] = {}
+    for match in _FLUENT_FACES.finditer(headers):
+        zone, kind = int(match[1], 16), int(match[2], 16)
+        if zone:
+            found[zone] = FLUENT_BC.get(kind, f"type {kind}")
+    return found
+
+
 def _read_fluent(path: Path, handle: BinaryIO, size: int) -> MeshFileInfo:
     dimension: int | None = None
     declared: int | None = None
     binary = False
     zones: dict[int, tuple[str, str]] = {}
+    faces: dict[int, str] = {}  # face zone id -> boundary type
     unread: list[str] = []  # zone sections that could not be read
     box = _Box()
     lines = iter(handle)
     for line in lines:
         if not line.startswith(b"("):
             continue
+        faces.update(fluent_face_zones(line))
         if _FLUENT_BINARY.match(line):
             binary = True
             continue
@@ -311,9 +336,21 @@ def _read_fluent(path: Path, handle: BinaryIO, size: int) -> MeshFileInfo:
             f"{path.name} is a binary Fluent mesh. Binary Fluent files have not been tested on "
             "real files.", "Check the conversion log and the patch list; export as ASCII if "
             "the conversion fails."))
+    unnamed = {f"{UNNAMED_PREFIX}{z}": k for z, k in sorted(faces.items())
+               if z not in zones and k not in FLUENT_INTERIOR_TYPES}
+    if unnamed and not issues:
+        issues.append(_issue(
+            IssueSeverity.INFO, "MSH_UNNAMED_ZONES",
+            f"{len(unnamed)} boundary zone(s) of {path.name} have no name; they will be "
+            f"called {', '.join(list(unnamed)[:6])}{' ...' if len(unnamed) > 6 else ''}.",
+            "Give each a name and a type in the patch table; the types shown are the "
+            "file's, which may not be final.",
+            "fluent3DMeshToFoam names a face zone without a name FaceGroup<zone id> "
+            "(E0: all 25 boundary zones of the guide-vane passage).",
+            zones=list(unnamed)))
     patches = tuple(n for _, (k, n) in sorted(zones.items())
-                    if k not in FLUENT_CELL_TYPES | FLUENT_INTERIOR_TYPES)
-    kinds = {n: k for k, n in zones.values() if n in patches}
+                    if k not in FLUENT_CELL_TYPES | FLUENT_INTERIOR_TYPES) + tuple(unnamed)
+    kinds = {**{n: k for k, n in zones.values() if n in patches}, **unnamed}
     cells = tuple(n for _, (k, n) in sorted(zones.items()) if k in FLUENT_CELL_TYPES)
     note = ("binary node sections: the box comes from the converted mesh" if binary
             and box.result() is None else "" if box.result() else "no node section was read")

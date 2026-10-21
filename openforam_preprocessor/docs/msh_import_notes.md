@@ -852,3 +852,48 @@ area (830 of 36000 faces) below 0.95, at r 0.175 to 0.1752 m, z -0.1908 to
 -0.1907 m (its outer (largest-radius) edge); the side spans r 0.04136 to
 0.1752 m ..."; "RU_DT_dt: 0.044 % ... at r 0.04135 to 0.04154 m (its inner
 (smallest-radius) edge)".
+
+### 13.4 The file picker, the copy into WSL, the launcher (commit 3)
+
+`machines/disk.py`. Roots: the WSL home and each Windows drive in
+`/proc/mounts` (9p/drvfs under `/mnt`). A folder or file is used only when it
+resolves (links followed) inside a root; an entry that is a link out of a
+root is not listed. Pasted paths: `E:\Meshes\Francis` -> `/mnt/e/Meshes/Francis`,
+`\\wsl$\Ubuntu-24.04\root\meshes` (or `\\wsl.localhost\...`) -> `/root/meshes`
+(another distribution is refused with the reason), Linux paths as given.
+The remembered mesh folder is an app setting (`~/.machines/settings.json`,
+`MACHINES_SETTINGS` for another file), listed when the section opens.
+
+A folder lists its sub-folders and `.msh` files with size, date and a
+summary from the headers only (`machines/msh_import/scan.py`: grep of the
+lines starting with "("; the owner's four files 0.01-0.04 s in WSL, the GV
+file 0.14 s on C:): format, ASCII/binary, declared cells, cell zones,
+boundary zones and how many have no name. "Use" takes a file in WSL where it
+is; "Copy and use" copies a file on a Windows drive into
+`<project>/inputs/mesh/` first: 8 MB chunks, sha256 while copying, `.part`
+renamed only after its size and hash are read back and match, a free-space
+check (size + 5 %) first. The copy runs on a thread of the app with a status
+file beside the target, so the page shows its progress (MB, MB/s, time left)
+and a Cancel button, also after a refresh; a copy finished while the page
+was away is offered with "Use it"; one left "copying" by a stopped app shows
+as interrupted. Uploads up to 200 MB stay, with the owner's note.
+
+Fluent face zones without a name (`detect.py`): the face section headers
+`(13 (id first last type ...)` give each face zone's id and boundary type
+(hex; the name sections' ids are decimal: RU `(39 (17 outflow r1_outflow_1)`
+is header zone `11`). A non-interior zone without a name is listed as the
+converter names it, `FaceGroup<decimal id>`, with its type, and an INFO
+MSH_UNNAMED_ZONES says so (GV: 25 FaceGroups, 0 patches before; RU: 6).
+On the owner's four files the detector's patch names equal the converted
+mesh's (opt-in test). An INFO MSH_TYPE_FROM_FILE names patches whose name
+says inlet or outlet (words inlet, outlet, inflow, outflow) while the file
+types them wall (SC-Inlet, SV-Outlet, DT_INLET): the file's types are not
+final.
+
+Launcher: `scripts/run_machines_app.sh` finds the Python with the app's
+packages (VAWT_PYTHON, the remembered one, `~/venvs/*/bin/python`, `~/.venv`,
+the app's `.venv`, python3), remembers it, and opens the browser once
+`/_stcore/health` answers (wslview, else cmd.exe start; MACHINES_NO_BROWSER=1
+to not). Tested with nothing set: it found `/root/venvs/ofpp/bin/python` and
+answered in 2 s. `scripts/make_desktop_shortcut.cmd` puts a "Rotating
+Machines" shortcut to `run_machines_app.cmd` on the desktop.

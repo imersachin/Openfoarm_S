@@ -14,6 +14,7 @@ which configuration fields each owns; section status follows it.
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import math
 import os
@@ -46,6 +47,7 @@ from core.config.validation import issues_from_validation_error
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage, has_stopping_issue
 from core.workflow.run_lock import RunLock
 from core.workflow.run_records import list_run_records
+from machines import disk
 from machines.config import (
     CylinderZone,
     ImportedDomain,
@@ -81,6 +83,7 @@ from machines.msh_import.revolution import (
     mesh_hash,
     unavailable,
 )
+from machines.msh_import.scan import Summary, summarize
 from machines.msh_import.validation import read_mesh_file
 from machines.operations import MACHINE_EXECUTABLES, operations_for
 from machines.pipeline import (
@@ -544,6 +547,55 @@ class MachineService(RunControl):
         if config is None or unavailable(config, self.root) is not None:
             return False
         return report.get("check_sha256") == check_key(self.root, config)
+
+    # --- mesh files on disk (M2a) --------------------------------------------------------
+
+    def mesh_roots(self) -> tuple[disk.Root, ...]:
+        """Where the file picker may look: the WSL home and each Windows drive."""
+        return disk.roots()
+
+    def mesh_folder(self) -> str | None:
+        """The remembered mesh folder (an app setting, not a project's)."""
+        found = disk.read_settings().get("mesh_folder")
+        return found if isinstance(found, str) and found else None
+
+    def remember_mesh_folder(self, folder: Path) -> None:
+        disk.write_setting("mesh_folder", str(folder))
+
+    def list_mesh_folder(self, where: str | Path) -> disk.Listing:
+        """A folder's sub-folders and .msh files (a Windows or WSL-share path is
+        converted); refused outside the roots."""
+        return disk.listing(where, self.mesh_roots())
+
+    def mesh_summary(self, path: Path) -> Summary:
+        """A quick summary of a .msh file for the listing (no node is read),
+        read once per version of the file."""
+        stat = path.stat()
+        return _summary(str(path), stat.st_size, stat.st_mtime_ns)
+
+    def mesh_copy_target(self, source: Path) -> Path:
+        return self.root / "inputs" / "mesh" / source.name
+
+    def start_mesh_copy(self, source: Path) -> tuple[Path, bool]:
+        """Copy a file from a Windows drive into the project in the background
+        (disk.copy_file); (target, started). Not started when one is running."""
+        target = self.mesh_copy_target(source)
+        return target, disk.JOBS.start(source, target)
+
+    def mesh_copies(self) -> list[dict[str, Any]]:
+        """Every copy into this project the status files know of, newest first."""
+        folder = self.root / "inputs" / "mesh"
+        found = [disk.status_view(p.with_name(p.name.removesuffix(disk.COPY_STATUS)))
+                 for p in folder.glob(f"*{disk.COPY_STATUS}")] if folder.is_dir() else []
+        return sorted((f for f in found if f is not None), key=lambda f: -f["started"])
+
+    def cancel_mesh_copy(self, target: Path) -> bool:
+        return disk.JOBS.cancel(target)
+
+    def forget_mesh_copy(self, target: Path) -> None:
+        """Remove a finished copy's status (the copied file stays)."""
+        if not disk.JOBS.running(target):
+            disk.status_path(target).unlink(missing_ok=True)
 
     def mesh_patch_geometry(self, names: Sequence[str],
                             sha256: str) -> dict[str, PatchGeometry]:
@@ -1232,6 +1284,11 @@ class MachineService(RunControl):
 
 
 _CHECKS = _CheckCache()
+
+
+@functools.lru_cache(maxsize=64)
+def _summary(path: str, size: int, modified: int) -> Summary:
+    return summarize(Path(path))
 
 
 def machines_projects_root(env: Mapping[str, str] | None = None) -> Path:

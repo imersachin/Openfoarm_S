@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from core.issues import Issue
+from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage
 from machines.config import PatchType
 from machines.msh_import import surface
 from machines.msh_import.detect import MeshFileInfo, Point
@@ -29,6 +29,8 @@ BOX_FROM_CONVERSION = "from the converted mesh"
 _FLUENT_TYPES = {"wall": PatchType.WALL, "velocity-inlet": PatchType.INLET,
                  "mass-flow-inlet": PatchType.INLET, "outflow": PatchType.OUTLET,
                  "symmetry": PatchType.SLIP}
+# Words of a patch name that say inlet or outlet (type_notes): "SC-Inlet", "DT_INLET".
+_FLOW_WORDS = frozenset({"inlet", "outlet", "inflow", "outflow"})
 # Name pairs that suggest an AMI pair: <base><a> / <base><b>.
 _PAIR_ENDINGS = (("_stat", "_rot"), ("_stationary", "_rotating"), ("1", "2"), ("_a", "_b"),
                  ("-stat", "-rot"))
@@ -70,6 +72,24 @@ def suggest_pairs(info: MeshFileInfo) -> tuple[tuple[str, str, str], ...]:
     return tuple(found)
 
 
+def type_notes(info: MeshFileInfo) -> tuple[Issue, ...]:
+    """INFO when a patch's name says inlet or outlet and the file types it wall
+    (owner, M2a: the Francis casing's SC-Inlet and SV-Outlet are walls in the
+    file): the file's types are not final."""
+    odd = [n for n in info.patches if info.patch_kinds.get(n) == "wall"
+           and _FLOW_WORDS & set(re.split(r"[^a-z0-9]+", n.lower()))]
+    if not odd:
+        return ()
+    return (Issue(
+        category=IssueCategory.INPUT, severity=IssueSeverity.INFO,
+        stage=IssueStage.MESH_IMPORT, code="MSH_TYPE_FROM_FILE",
+        message=f"{', '.join(odd)}: the name says inlet or outlet, the file types "
+                f"{'it' if len(odd) == 1 else 'them'} wall.",
+        suggested_action="Choose each patch's type in the patch table; a type from the "
+                         "file is never final (Fluent exports often type every zone wall).",
+        details={"patches": odd}),)
+
+
 def inspect(path: Path, scratch_box: tuple[Point, Point] | None = None) -> MeshInspection:
     """The file as read, with suggestions. `scratch_box`: the box of a scratch
     conversion of this file, used when the file's own box cannot be read."""
@@ -79,7 +99,7 @@ def inspect(path: Path, scratch_box: tuple[Point, Point] | None = None) -> MeshI
     if not info.readable:
         return MeshInspection(info, digest, box, source, issues=info.issues)
     return MeshInspection(info, digest, box, source, suggest_types(info), suggest_pairs(info),
-                          info.issues)
+                          (*info.issues, *type_notes(info)))
 
 
 @dataclass(frozen=True)
