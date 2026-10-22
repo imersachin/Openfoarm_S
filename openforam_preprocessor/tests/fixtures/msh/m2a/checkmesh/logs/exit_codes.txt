@@ -6,3 +6,5 @@ flipface_checkMesh                       exit=0     0s  checkMesh -case <work>/M
 openboundary_checkMesh                   exit=0     0s  checkMesh -case <work>/M2a_checkmesh/openboundary -allTopology -meshQuality -writeSets vtk -writeFields (nonOrthoAngle skewness faceWeight aspectRatio)
 nonortho_checkMesh                       exit=0     0s  checkMesh -case <work>/M2a_checkmesh/nonortho -allTopology -meshQuality -writeSets vtk -writeFields (nonOrthoAngle skewness faceWeight aspectRatio)
 aspect_checkMesh                         exit=0     0s  checkMesh -case <work>/M2a_checkmesh/aspect -allTopology -meshQuality -writeSets vtk -writeFields (nonOrthoAngle skewness faceWeight aspectRatio)
+aspect_zero_checkMesh                    exit=0     0s  checkMesh -case <work>/M2a_checkmesh/aspect_zero -meshQuality
+pushpoint_zero_checkMesh                 exit=0     0s  checkMesh -case <work>/M2a_checkmesh/pushpoint_zero -meshQuality

@@ -194,3 +194,57 @@ def test_the_revolution_check_runs_in_the_background_on_real_openfoam(
     report = read_report(service.root)
     assert report is not None and report["when"] == "over one revolution (8 x 45 deg)"
     assert report["steps"] == 8 and not (tmp_path / "heavy.lock").exists()
+
+
+# file: faces at or below 0 in (tet quality, determinant); None: no second pass
+# needed (the table has no face in error). Owner, after M2a: a determinant at or
+# below 0 is BLOCKING; tet quality at or below 0 a WARNING (the solver test below).
+AT_OR_BELOW_ZERO = {
+    "GV-03-91-AG5-HighRe.msh": (122, 0),
+    "RU-AG5-HighRe.msh": None,
+    "DT-HighRe-uns.msh": None,
+    "SC-SV-HH-HighRe.msh": (575, 0),
+}
+
+
+@pytest.mark.skipif(not E0_DIR, reason="MACHINES_E0_DIR is not set (large real meshes)")
+@pytest.mark.parametrize("name", sorted(AT_OR_BELOW_ZERO))
+def test_tet_quality_and_determinant_at_or_below_zero_on_a_large_real_mesh(
+        tmp_path: Path, name: str) -> None:
+    """The import's checkMesh, then its second pass (quality.ZERO_QUALITY_DICT)
+    in a case linking the mesh, as the pipeline runs them."""
+    from machines.msh_import import quality
+    from machines.msh_import.cases import import_cases
+    from machines.msh_import.pipeline import _converter_files
+
+    path = Path(str(E0_DIR)) / name
+    if not path.is_file():
+        pytest.skip(f"{name} is not in MACHINES_E0_DIR")
+    service = MachineService(tmp_path / "project")
+    assert service.convert_for_box(path).issues == ()
+    scratch = service.root / "cases" / SCRATCH_CASE
+    shutil.copy(Path(__file__).parents[1] / "fixtures/msh/e0/common/system/meshQualityDict",
+                scratch / "system")
+    service.save(configs.rotating(path))
+    config = service.saved_config()
+    assert config is not None
+    argv = import_cases(config).check_steps(False)[0].argv
+    log = subprocess.run(list(argv), cwd=scratch, capture_output=True, text=True,
+                         check=False).stdout
+    expected = AT_OR_BELOW_ZERO[name]
+    assert quality.needs_zero_pass(log) is (expected is not None)
+    if expected is None:
+        return
+    zero = quality.prepare_zero_case(scratch, _converter_files())
+    start = time.perf_counter()
+    zero_log = subprocess.run(["checkMesh", "-case", ".", "-meshQuality"], cwd=zero,
+                              capture_output=True, text=True, check=False).stdout
+    spent = time.perf_counter() - start
+    counts = quality.zero_counts(zero_log)
+    assert counts == {"tet quality": expected[0], "cell determinant": expected[1]}
+    findings = quality.classify(log, zero_log)
+    assert [(f.level, f.count) for f in findings if f.kind == "tet quality at or below 0"] \
+        == [(quality.WARNING, expected[0])]
+    assert {f.level for f in findings} == {quality.WARNING}  # GV and SC import
+    print(f"\n{name}: second pass {spent:.1f} s, {counts}")
+

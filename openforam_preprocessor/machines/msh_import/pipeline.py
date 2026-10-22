@@ -119,6 +119,7 @@ IMPORT_REPORT = "reports/mesh_import.json"
 STEP_RESOURCES = "reports/step_resources.json"  # each heavy step's estimate (resources.py)
 QUALITY_REPORT = "reports/mesh_quality_zones.json"  # per cell zone (quality.py)
 SETS_DIR = "postProcessing/constant"  # checkMesh -writeSets vtk, in cases/merged/
+ZERO_CASE = MERGED_CASE + quality.ZERO_SUFFIX  # the second quality pass (quality.py)
 AREA_AFTER_IMPORT = "INLET_AREA_AFTER_IMPORT"  # case_setup.validation
 # postProcess AMIWeights reads the mesh as converted: the rotor not turned.
 AT_REST = "at rest (0 deg)"
@@ -504,11 +505,29 @@ class ImportRun:
         merged = run.root / "cases" / MERGED_CASE
         shutil.rmtree(merged / SETS_DIR, ignore_errors=True)
         shutil.rmtree(merged / POLY_MESH / "sets", ignore_errors=True)
+        zero_log = run.root / "logs" / ZERO_CASE / CHECK_MESH_LOG
+        zero_log.unlink(missing_ok=True)  # a pass of an earlier check is not this one's
         steps = plan.cases.check_steps(bool(self.mesh.ami_pairs))
         logs = [Path((await self._step(step, index, "checkMesh" if index == 1
                                        else "amiWeights")).log_path)
                 for index, step in enumerate(steps, start=1)]
+        if quality.needs_zero_pass(_read(logs[0])):
+            logs.append(await self._zero_pass())
         return [*logs, self._zone_quality()]
+
+    async def _zero_pass(self) -> Path:
+        """checkMesh with ZERO_QUALITY_DICT in cases/merged_zero/ (links to the
+        merged mesh): the faces at or below 0 in tet quality and determinant
+        (owner, after M2a). The case is removed after; its log stays."""
+        case = quality.prepare_zero_case(self.run.root / "cases" / MERGED_CASE,
+                                         _converter_files())
+        try:
+            result = await self._step(Step(f"{ZERO_CASE}_checkMesh", "run",
+                                           f"cases/{ZERO_CASE}",
+                                           ("checkMesh", "-case", ".", "-meshQuality")), 1, None)
+        finally:
+            shutil.rmtree(case, ignore_errors=True)
+        return Path(result.log_path)
 
     def _zone_quality(self) -> Path:
         """reports/mesh_quality_zones.json: per cell zone, the cells past each
@@ -701,7 +720,8 @@ class ImportRun:
         ami_text = _read(logs / AMI_WEIGHTS_LOG)
         metrics = CheckMeshParser().parse_text(check_text, logs / CHECK_MESH_LOG)
         report = MeshQualityValidator().assess(metrics, run.config.quality)
-        findings = quality.classify(check_text)
+        findings = quality.classify(check_text, _read(
+            run.root / "logs" / ZERO_CASE / CHECK_MESH_LOG))
         report = self._two_levels(report, findings)
         expected = self._expectation(plan)
         patches, unreadable = read_patches(merged, "merged")

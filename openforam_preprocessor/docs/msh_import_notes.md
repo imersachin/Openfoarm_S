@@ -961,7 +961,7 @@ Use: Import .msh. Your Francis files are in `\\wsl$\Ubuntu-24.04\root\meshes`.
 | # | Do | Expect | Result |
 |---|---|---|---|
 | M1 | Double-click `scripts\make_desktop_shortcut.cmd`, then the new "Rotating Machines" desktop icon | A window starts the app; the browser opens the app within a few seconds (no setting typed) | |
-| M2 | Imported mesh: open "Or pick a file on this computer" | Buttons WSL home, C:, E: (your drives) | |
+| M2 | Imported mesh: open "Browse files on disk" | Buttons WSL home, C:, E: (your drives) | |
 | M3 | Type `\\wsl$\Ubuntu-24.04\root\meshes`, Go | 4 .msh files with size and date; GV "25 boundary zone(s), 25 without a name", RU "55 ..., 6 without a name", SC 3,427,708 cells | |
 | M4 | Remember this folder; press F5; open the picker | The folder is listed again (an app setting) | |
 | M5 | Use GV | Patches FaceGroup13 ... FaceGroup55 with their file types (outflow, wall, periodic, periodic-shadow); INFO "25 boundary zone(s) ... have no name; they will be called FaceGroup13 ..."; no AMI pair suggested from FaceGroup numbers | |
@@ -997,3 +997,67 @@ one at a time.
 - From the browser check: Go was disabled until the path box was left, so
   the first click did nothing; FaceGroup names were offered as AMI pairs
   ("ending in 1 and 2"); both fixed.
+
+### 13.8 Tet quality and determinant by value; the upload note (owner, after M2a)
+
+**Rule** (`machines/msh_import/quality.py`):
+- A cell determinant at or below 0 is BLOCKING.
+- Tet quality at or below 0 is a WARNING. Its message says it "affects particle
+  tracking and point interpolation, not the flow solver used here".
+- Face pyramids stay BLOCKING, as before.
+- Tet quality and determinant above 0 but below their limits stay WARNINGs and
+  say "(minimum above 0)".
+
+The owner first asked for BLOCKING at or below 0 for both. That stopped GV and
+SC, so the owner changed tet quality to a WARNING, subject to this solver
+evidence:
+
+| 10 pimpleFoam steps, v2512, k-omega SST, water, static mesh, Δt 1e-5 s | Faces with tet quality ≤ 0 | Max Courant | Last continuity (local) | Result |
+|---|---|---|---|---|
+| SC, the usual case setup | 575 | 4.18 | 4.3e-11 | clean, 181 s |
+| GV, the usual case setup (0 non-orthogonal correctors, nCorrectors 1) | 122 | 0.05, then 14, 47, 515 … 9e17 | 1e12 | diverges; pimpleFoam still exits 0 |
+| GV, 2 non-orthogonal correctors, nCorrectors 2 | 122 | 10.1 at the start, then down to 4.8 | 3.7e-9 | clean |
+
+GV's worst non-orthogonality is 81.6 deg (skin zone). The same mesh, all 122
+faces included, runs once the correctors are added, so the divergence comes
+from non-orthogonality, not from tet quality. The owner chose the WARNING and
+brought the correctors item forward from the future list (13.9).
+
+**Evidence (v2512).** checkMesh prints no minimum for either. It counts each
+`-meshQuality` row only over the faces the rows before it left
+(motionSmoother): SC's "determinant < 0.001" row is 380 faces after the other
+rows, and 1,649 with only tet quality before it. A second pass counts the faces
+at or below 0. Its meshQualityDict (`ZERO_QUALITY_DICT`) sets both limits to
+1e-300, which checkMesh prints as "< 0", and turns every other check off.
+
+| Mesh | Import pass (limits 1e-15, 0.001) | Second pass: at or below 0 | Second pass |
+|---|---|---|---|
+| Cube stretched x 5000 | tet 160, determinant 80 | 0, 0: WARNING, "(minimum above 0)" | 0.01 s |
+| Cube, a point pushed through a face | tet 0 (earlier rows took them) | tet 12: WARNING (the cube is BLOCKING for its face pyramids) | 0.01 s |
+| GV | tet 123 | tet 122, determinant 0: WARNING | 1.0 s / 0.25 GB |
+| SC | tet 550, determinant 380 | tet 575, determinant 0: WARNING | 13 s / 2.4 GB (import pass 29 s / 4.3 GB) |
+| RU, DT | table all 0 | not run | — |
+
+**When it runs.** The second pass runs only when the import pass's table has a
+face in error. If no face is in error, every face passed both limits.
+- **Where:** in `cases/merged_zero/`, whose mesh files link to the merged mesh.
+  The case is removed after the pass and its log stays at
+  `logs/merged_zero/checkMesh.log`.
+- **Stale logs:** the log of an earlier pass is deleted before each checkMesh.
+- **No table:** a pass that writes no table is BLOCKING ("unmeasured").
+- **Counting:** the pass's determinant row still follows its tet row, so a face
+  that fails both is counted once, as tet quality.
+- **Not in the preflight:** the second pass is not recorded in the step
+  preflight. It is at most about half of the import pass's time and memory.
+
+Tests: `tests/unit/mesh_import/test_m2a_zero_levels.py`. The v2512 logs are
+`tests/fixtures/msh/m2a/checkmesh/logs/*_zero_checkMesh.log` (run.sh). The
+owner's files are checked opt-in in `tests/integration/test_m2a_real.py`: GV
+122, SC 575, RU and DT not needed.
+
+**Upload note** (owner's wording, `app/components/upload_notes.py`): "Which
+file? Use .stl for geometry only: the app builds the mesh. Use .msh (Fluent or
+Gmsh) for a finished mesh: the app converts and checks it. Large files (over
+200 MB): don't upload. Use Browse files on disk below. The app copies the file
+into WSL for you." The picker is now labelled "Browse files on disk (Windows
+drives and WSL)" to match.

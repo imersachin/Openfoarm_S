@@ -24,5 +24,12 @@ for kind in ok negvol pushpoint flipface openboundary nonortho aspect; do
     step "$LOGS" "${kind}_checkMesh" checkMesh -case "$W/$kind" -allTopology -meshQuality \
         -writeSets vtk -writeFields "(nonOrthoAngle skewness faceWeight aspectRatio)"
 done
+# The second quality pass (machines.msh_import.quality.ZERO_QUALITY_DICT): tet
+# quality and determinant at or below 0, every other check off.
+for kind in aspect pushpoint; do
+    z="$W/${kind}_zero"; rm -rf "$z"; cp -r "$W/$kind" "$z"; rm -rf "$z/constant/polyMesh/sets"
+    py -c "import sys; sys.path.insert(0, '$HERE/../../../../..'); from machines.msh_import.quality import ZERO_QUALITY_DICT as d; open(sys.argv[1], 'w').write(d)" "$z/system/meshQualityDict"
+    step "$LOGS" "${kind}_zero_checkMesh" checkMesh -case "$z" -meshQuality
+done
 keep_logs "$LOGS"
 cat "$LOGS/exit_codes.txt"

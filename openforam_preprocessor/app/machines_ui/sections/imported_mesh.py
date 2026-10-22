@@ -73,7 +73,7 @@ def file_choice(ctx: state.Context) -> None:
             st.session_state[UPLOADED] = upload.file_id
             choose(ctx, str(stored), ctx.service.inspect_mesh(stored).sha256)
             st.rerun()
-    with st.expander("Or pick a file on this computer (Windows drives and WSL)",
+    with st.expander("Browse files on disk (Windows drives and WSL)",
                      expanded=not mesh_of(ctx.draft).get("source_path")):
         picker(ctx)
     copies(ctx)

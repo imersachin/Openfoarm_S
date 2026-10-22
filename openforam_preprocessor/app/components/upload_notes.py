@@ -8,11 +8,9 @@ from __future__ import annotations
 
 # Machines app, the Imported mesh uploader.
 MSH_UPLOAD_NOTE = (
-    "Which file? Use .stl for geometry only (rotor, runner, casing): the app builds the "
-    "mesh for you. Choose Build from STL. Use .msh (Fluent or Gmsh) when you already have "
-    "a finished mesh: the app converts it to OpenFOAM, checks it, and sets up the case. "
-    "Choose Import .msh. Files over 200 MB: don't upload. Copy them into WSL (for example "
-    r"`\\wsl$\Ubuntu-24.04\root\meshes`) and enter the path below."
+    "Which file? Use .stl for geometry only: the app builds the mesh. Use .msh (Fluent or "
+    "Gmsh) for a finished mesh: the app converts and checks it. Large files (over 200 MB): "
+    "don't upload. Use Browse files on disk below. The app copies the file into WSL for you."
 )
 
 # Machines app, every STL uploader.
