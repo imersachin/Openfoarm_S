@@ -7,7 +7,12 @@ import streamlit as st
 
 from app.components.widgets import get_path
 from app.machines_ui import state
-from app.machines_ui.sections.common import apply_form, section_header, section_issues
+from app.machines_ui.sections.common import (
+    COURANT_NOTE,
+    apply_form,
+    section_header,
+    section_issues,
+)
 from app.machines_ui.sections.fields import float_field, select_field
 from case_setup.physics import revolution_time, rpm_to_rad_s, step_for_degrees
 
@@ -30,6 +35,7 @@ def render(ctx: state.Context) -> None:
         float_field(ctx.draft, "physics.time.write_interval", "Write interval", min_value=0.0)
         select_field(ctx.draft, "physics.time.write_unit", "Write interval unit",
                      list(UNIT_LABELS), UNIT_LABELS)
+    st.caption(COURANT_NOTE)
     rotation = ctx.draft["physics"].get("rotation") or {}
     rpm = next((get_path(r, "speed.rpm") for r in rotation.values()
                 if isinstance(r, dict) and get_path(r, "speed.kind") == "RPM"), None)

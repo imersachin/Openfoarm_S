@@ -14,7 +14,7 @@ import streamlit as st
 
 from app.components.widgets import render_issues
 from app.machines_ui import state
-from app.machines_ui.sections.common import apply_form
+from app.machines_ui.sections.common import apply_form, zone_html
 from app.machines_ui.sections.fields import bool_field, float_field, int_field
 from core.issues import Issue
 from vawt.config import StrictMeshQualityLimits
@@ -94,15 +94,17 @@ def zone_quality_view(report: dict[str, Any]) -> None:
     """An imported mesh (M2a): per cell zone, the cells past each quality limit
     (checkMesh's cell fields), and where checkMesh wrote the sets for ParaView."""
     by_zone = report.get("quality_by_zone") or {}
-    rows = [{"check": kind, "cell zone": row["zone"], "cells": f"{row['cells']:,}",
-             "past the limit": f"{row['cells_past_limit']:,}", "%": f"{row['percent']:.3g}",
-             "worst": f"{row['worst']:.4g}"}
+    rows = [f"| {kind} | {zone_html(str(row['zone']))} | {row['cells']:,} | "
+            f"{row['cells_past_limit']:,} | {row['percent']:.3g} | {row['worst']:.4g} |"
             for kind, found in sorted(by_zone.items()) for row in found]
     if not rows:
         return
     st.markdown("**Quality by cell zone** (cells whose checkMesh field is past the "
-                "meshQualityDict limit; a cell takes the worst of its faces)")
-    st.dataframe(rows, hide_index=True, width="stretch")
+                "meshQualityDict limit; a cell takes the worst of its faces; a long zone "
+                "name is shortened, its full name on hover)")
+    st.markdown("| check | cell zone | cells | past the limit | % | worst |\n"
+                "|---|---|---:|---:|---:|---:|\n" + "\n".join(rows),
+                unsafe_allow_html=True)
     if report.get("quality_sets"):
         st.caption(f"The bad faces and cells for ParaView: `{report['quality_sets']}`")
 

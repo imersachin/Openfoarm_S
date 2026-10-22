@@ -946,7 +946,7 @@ mesh, in the background, the lock released afterwards.
   23 M assembly's checkMesh without -allTopology (31.9 GB), baffles counted
   by mergeOrSplitBaffles -detectOnly instead (8 s / 9.2 GB).
 - M2c: a decimation grid per part; the zone colours and the cut plane.
-- Case setup reads the per-zone quality and, above 70 deg non-orthogonality,
+- Done in 13.9 (correctors; the schemes were already limited): case setup reads the per-zone quality and, above 70 deg non-orthogonality,
   sets non-orthogonal correctors and limited schemes, each labelled with the
   reason ("max non-orthogonality 81.6 deg in GV").
 - The heavy-step lock for STL runs (snappyHexMesh) too.
@@ -1061,3 +1061,59 @@ Gmsh) for a finished mesh: the app converts and checks it. Large files (over
 200 MB): don't upload. Use Browse files on disk below. The app copies the file
 into WSL for you." The picker is now labelled "Browse files on disk (Windows
 drives and WSL)" to match.
+
+### 13.9 Correctors above 70 deg of non-orthogonality (owner, after M2a)
+
+This item is brought forward from the future list (13.6), after the GV solver
+evidence in 13.8.
+
+**What case setup writes.** When the assembled mesh's max non-orthogonality is
+above 70 deg, `system/fvSolution` gets 2 non-orthogonal correctors and
+nCorrectors 2. The reason is written beside them:
+`// max non-orthogonality 81.6 deg in fluid_GV_flux_1_GV1_skin (above 70 deg):
+2 non-orthogonal correctors, nCorrectors 2`.
+
+The same reason appears in two more places:
+- `reports/case_setup.json`, under `non_orthogonality`;
+- an INFO, CASE_NON_ORTHOGONAL_CORRECTORS.
+
+**Where the numbers come from** (`case_setup.setup.non_orthogonality`):
+- the value: the merged mesh's checkMesh log;
+- the zone: an imported mesh's per-zone report. An STL mesh has no zone.
+
+**At or below 70 deg** every case file stays byte-identical and the report has
+no new key. The schemes were already limited (`limited corrected 0.33`) and are
+unchanged.
+
+**On v2512** (`tests/integration/test_m2a_real.py`, opt-in), with the case
+built by the app's own writers:
+
+| Mesh | Max non-orthogonality | 10 pimpleFoam steps | Max Courant | Last continuity (local) |
+|---|---|---|---|---|
+| GV | 81.6 deg in fluid_GV_flux_1_GV1_skin | 26.6 s | 10.1 | 3.7e-9 |
+| SC | 84.9 deg in default_zone | 288 s | 3.75 | 5.0e-11 |
+
+The test now also requires a bounded run: max Courant below 50 and continuity
+below 1e-6. Without the correctors, GV also exits 0, after diverging.
+
+Tests: `tests/unit/case_setup/test_m2a_non_orthogonal_correctors.py`. The fake
+checkMesh's non-orthogonality can be set, and stays at 40 deg by default.
+
+**On screen.**
+- **Case setup section:** the "Solution settings" line gives the reason
+  ("max non-orthogonality 81.6 deg in skin (above 70 deg): 2 non-orthogonal
+  correctors, nCorrectors 2 …"). It also says the schemes are limited (limited
+  corrected 0.33) in every case. Without correctors it names the tutorial's
+  settings.
+- **Long zone names:** shown short (the last `_` part, "skin"), with the full
+  name (`fluid_GV_flux_1_GV1_skin`) on hover. This applies here and in the
+  "Quality by cell zone" table. The report, the fvSolution comment and the logs
+  keep the full name.
+- **INFO message:** leaves the zone out, because the INFO list shows text only;
+  the zone stays in the INFO's details.
+- **Courant note:** next to the Courant figures in Case setup and under
+  "Maximum Courant number" in Time: "A max Courant number below 50 keeps a run
+  stable, not accurate: rotor-stator studies usually need a max Courant number
+  around 1-5." The opt-in solver test's bound of 50 is a stability check only.
+
+Tests: `tests/unit/ui_machines/test_m2a_case_labels.py`.

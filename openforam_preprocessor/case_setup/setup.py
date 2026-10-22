@@ -12,6 +12,7 @@ so every patch the solver will see gets a condition, and none is invented.
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -104,6 +105,34 @@ class TimeControls:
     reference_speed: float | None  # m/s; heuristic, as used for the estimate
 
 
+# Above this mesh non-orthogonality (deg), case setup adds correctors (owner, after
+# M2a; docs/msh_import_notes.md 13.9): GV (81.6 deg) diverged in 10 pimpleFoam
+# steps with none and ran cleanly with these.
+NON_ORTHO_LIMIT_DEG = 70.0
+NON_ORTHO_CORRECTORS = 2
+PRESSURE_CORRECTORS = 2
+
+
+@dataclass(frozen=True)
+class NonOrthogonality:
+    """The assembled mesh's max non-orthogonality (checkMesh) and the cell zone
+    holding it, when known."""
+
+    max_deg: float
+    zone: str | None = None
+
+    @property
+    def corrected(self) -> bool:
+        return self.max_deg > NON_ORTHO_LIMIT_DEG
+
+    @property
+    def reason(self) -> str:
+        where = f" in {self.zone}" if self.zone else ""
+        return (f"max non-orthogonality {self.max_deg:.1f} deg{where} (above "
+                f"{NON_ORTHO_LIMIT_DEG:g} deg): {NON_ORTHO_CORRECTORS} non-orthogonal "
+                f"correctors, nCorrectors {PRESSURE_CORRECTORS}")
+
+
 @dataclass(frozen=True)
 class CaseSetup:
     patches: tuple[tuple[str, PatchKind], ...]  # every mesh patch, in boundary order
@@ -114,10 +143,38 @@ class CaseSetup:
     time: TimeControls
     internal_k: float = 0.0
     internal_omega: float = 0.0
+    non_orthogonality: NonOrthogonality | None = None  # None: not measured
 
     @property
     def turbulent(self) -> bool:
         return self.physics.turbulence.model is TurbulenceModel.K_OMEGA_SST
+
+    @property
+    def corrected(self) -> bool:
+        """Whether the solution settings add correctors for non-orthogonality."""
+        return self.non_orthogonality is not None and self.non_orthogonality.corrected
+
+
+_NON_ORTHO = re.compile(r"Mesh non-orthogonality Max:\s*(\S+)")
+
+
+def non_orthogonality(check_mesh_log: str,
+                      by_zone: Mapping[str, Sequence[Mapping[str, object]]] | None = None,
+                      ) -> NonOrthogonality | None:
+    """The max non-orthogonality of a checkMesh log, and the zone of the worst
+    value from an imported mesh's per-zone rows (reports/mesh_quality_zones.json
+    "non-orthogonality"); None when the log has no value."""
+    found = _NON_ORTHO.search(check_mesh_log)
+    if found is None:
+        return None
+    try:
+        value = float(found[1])
+    except ValueError:
+        return None
+    rows = [r for r in (by_zone or {}).get("non-orthogonality", ())
+            if isinstance(r.get("worst"), int | float)]
+    worst = max(rows, key=lambda r: float(r["worst"]), default=None)  # type: ignore[arg-type]
+    return NonOrthogonality(value, str(worst["zone"]) if worst else None)
 
 
 # --- patches ------------------------------------------------------------------------------

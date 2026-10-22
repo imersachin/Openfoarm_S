@@ -207,7 +207,8 @@ class FakeMshRunner(OpenFOAMRunner):
     turned_steps: steps moveDynamicMesh does (default: its controlDict's).
     zero: faces at or below 0 the second quality pass reports
         (cases/merged_zero, quality.ZERO_QUALITY_DICT): (tet quality,
-        determinant); None: that pass writes no table."""
+        determinant); None: that pass writes no table.
+    non_ortho: the max non-orthogonality checkMesh reports (deg)."""
 
     def __init__(self, *, fail: str | None = None,
                  outcome: Mapping[str, RunStatus] | None = None,
@@ -221,9 +222,9 @@ class FakeMshRunner(OpenFOAMRunner):
                  turning: tuple[float, float] = (0.97, 1.04),
                  turned_steps: int | None = None,
                  cancel_after: tuple[str, asyncio.Event] | None = None,
-                 zero: tuple[int, int] | None = (0, 0)) -> None:
+                 zero: tuple[int, int] | None = (0, 0), non_ortho: float = 40.0) -> None:
         super().__init__()
-        self.zero = zero
+        self.zero, self.non_ortho = zero, non_ortho
         self.calls: list[tuple[str, str]] = []
         self.argv: list[tuple[str, ...]] = []
         self.fail, self.outcome = fail, dict(outcome or {})
@@ -407,7 +408,8 @@ class FakeMshRunner(OpenFOAMRunner):
         return ("Mesh stats\n    points:           8\n    faces:            100\n"
                 "    cells:            100\nChecking topology...\n"
                 "   *Number of regions: 2\n" + baffles
-                + "Checking geometry...\n    Mesh non-orthogonality Max: 40.0 average: 5.0\n"
+                + "Checking geometry...\n    Mesh non-orthogonality Max: "
+                + f"{self.non_ortho} average: 5.0\n"
                 + self.check_text + end)
 
     GOOD = {"nonOrthoAngle": 30.0, "skewness": 0.5, "faceWeight": 0.5, "aspectRatio": 2.0}

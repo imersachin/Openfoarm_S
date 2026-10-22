@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -22,6 +23,28 @@ STATE_TEXT = {
     SectionState.ERROR: "Has problems that stop a run.",
 }
 PHYSICS_EMPTY = "Not set: the project is meshed only; set the physics to also set up the case."
+# Next to every Courant number shown (owner, after M2a).
+COURANT_NOTE = ("A max Courant number below 50 keeps a run stable, not accurate: rotor-stator "
+                "studies usually need a max Courant number around 1-5.")
+SHORT_NAME = 16  # longer zone names are shown short, the full name on hover
+
+
+def short_name(name: str) -> str:
+    """A long cell-zone name as its last '_' part (fluid_GV_flux_1_GV1_skin ->
+    skin), else cut; short names as they are."""
+    if len(name) <= SHORT_NAME:
+        return name
+    tail = name.rsplit("_", 1)[-1]
+    return tail if tail and tail != name else name[:SHORT_NAME - 1] + "\u2026"
+
+
+def zone_html(name: str) -> str:
+    """A zone name for st.markdown(unsafe_allow_html=True): the short label, the
+    full name on hover (logs and reports keep the full name)."""
+    short = short_name(name)
+    if short == name:
+        return html.escape(name)
+    return f'<abbr title="{html.escape(name, quote=True)}">{html.escape(short)}</abbr>'
 
 
 def title(ctx: state.Context, key: str) -> str:

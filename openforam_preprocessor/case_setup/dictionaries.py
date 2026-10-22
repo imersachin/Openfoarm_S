@@ -10,7 +10,9 @@ them (notes section 4), and is proven again by the G6 solver runs:
                    .../propeller/system/AMIWeights
     fvSchemes:     .../propeller/system/fvSchemes; div(phi,omega) and wallDist
                    from etc/templates/inflowOutflowRotating/system/fvSchemes
-    fvSolution:    .../propeller/system/fvSolution, omega added to U and k
+    fvSolution:    .../propeller/system/fvSolution, omega added to U and k;
+                   above 70 deg mesh non-orthogonality 2 non-orthogonal
+                   correctors and nCorrectors 2 (owner, after M2a; notes 13.9)
     dynamicMeshDict, transportProperties: .../propeller/constant
     turbulenceProperties: etc/templates/inflowOutflowRotating/constant (k-omega
                    SST); .../laminar/mixerVesselAMI2D/mixerVesselAMI2D/constant
@@ -19,7 +21,7 @@ them (notes section 4), and is proven again by the G6 solver runs:
 
 from __future__ import annotations
 
-from case_setup.setup import CaseSetup
+from case_setup.setup import NON_ORTHO_CORRECTORS, PRESSURE_CORRECTORS, CaseSetup
 from openfoam.dictionary import foam_header, foam_scalar, foam_vector
 
 SOLVER = "pimpleFoam"
@@ -104,7 +106,21 @@ wallDist
 
 
 def fv_solution(setup: CaseSetup) -> str:
-    return foam_header("fvSolution") + """
+    """Above NON_ORTHO_LIMIT_DEG of mesh non-orthogonality the PIMPLE loop gets
+    pressure and non-orthogonal correctors, the reason written beside them;
+    else the tutorial's settings, unchanged."""
+    text = _FV_SOLUTION
+    if setup.corrected:
+        assert setup.non_orthogonality is not None
+        text = text.replace(_PLAIN_CORRECTORS, (
+            f"    // {setup.non_orthogonality.reason}\n"
+            f"    nCorrectors         {PRESSURE_CORRECTORS};\n"
+            f"    nNonOrthogonalCorrectors {NON_ORTHO_CORRECTORS};\n"))
+    return foam_header("fvSolution") + text
+
+
+_PLAIN_CORRECTORS = "    nCorrectors         1;\n    nNonOrthogonalCorrectors 0;\n"
+_FV_SOLUTION = """
 solvers
 {
     "pcorr.*"

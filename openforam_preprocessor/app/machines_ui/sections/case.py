@@ -10,6 +10,7 @@ from typing import Any
 import streamlit as st
 
 from app.machines_ui import state
+from app.machines_ui.sections.common import COURANT_NOTE, zone_html
 from app.machines_ui.sections.mesh import stage_view
 
 REASONS = {
@@ -48,10 +49,28 @@ def values_view(report: dict[str, Any]) -> None:
     if time:
         st.markdown("**Time controls**")
         st.caption(str(time.get("estimates", "")))
+        st.caption(COURANT_NOTE)
         st.json({k: v for k, v in time.items() if k != "estimates"})
+    solution_view(report)
     st.markdown("**Patches as set up**")
     st.dataframe([{"patch": k, "type": v} for k, v in (report.get("patches") or {}).items()],
                  hide_index=True, width="stretch")
+
+
+def solution_view(report: dict[str, Any]) -> None:
+    """The solution settings and why (owner, after M2a): correctors above 70 deg
+    of mesh non-orthogonality; the schemes are limited in every case."""
+    found = report.get("non_orthogonality")
+    if not isinstance(found, dict):
+        st.markdown("**Solution settings:** the tutorial's (nCorrectors 1, no "
+                    "non-orthogonal correctors); schemes limited (limited corrected 0.33).")
+        return
+    zone = found.get("zone")
+    st.markdown(f"**Solution settings:** max non-orthogonality {found['max_deg']:.1f} deg"
+                + (f" in {zone_html(str(zone))}" if zone else "")
+                + " (above 70 deg): 2 non-orthogonal correctors, nCorrectors 2, in "
+                "system/fvSolution with the reason; schemes limited (limited corrected "
+                "0.33), as in every case.", unsafe_allow_html=True)
 
 
 def render(ctx: state.Context) -> None:

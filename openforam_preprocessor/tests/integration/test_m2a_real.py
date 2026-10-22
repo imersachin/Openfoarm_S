@@ -248,3 +248,116 @@ def test_tet_quality_and_determinant_at_or_below_zero_on_a_large_real_mesh(
     assert {f.level for f in findings} == {quality.WARNING}  # GV and SC import
     print(f"\n{name}: second pass {spent:.1f} s, {counts}")
 
+
+# file: (inlet, outlet, flow rate m^3/s or None: 2 m/s through the inlet, the zone
+# of the worst non-orthogonality). GV: the
+# outer ring face in (r 0.3822 m), the inner one out (r 0.3200 m, notes 13.2); SC:
+# its named inlet and outlet. Every other patch is a wall (GV's periodic sides too:
+# a test of the solver on these cells, not of the flow).
+SOLVER_CASES = {
+    "GV-03-91-AG5-HighRe.msh": ("FaceGroup27", "FaceGroup13", None,
+                                "fluid_GV_flux_1_GV1_skin"),
+    "SC-SV-HH-HighRe.msh": ("SC-Inlet", "SV-Outlet", 0.3, None),
+}
+SOLVER_STEPS = 10
+
+
+@pytest.mark.skipif(not E0_DIR, reason="MACHINES_E0_DIR is not set (large real meshes)")
+@pytest.mark.parametrize("name", sorted(SOLVER_CASES))
+def test_ten_solver_steps_run_on_a_real_mesh_with_tet_faces_below_zero(
+        tmp_path: Path, name: str) -> None:
+    """Owner, after M2a: GV (122 tet faces at or below 0) and SC (575) run 10
+    pimpleFoam steps with the usual case setup (case_setup's fields and
+    dictionaries: k-omega SST, water) on the static mesh (no dynamicMeshDict),
+    with a fixed step: so tet quality at or below 0 is a WARNING. Both are above
+    70 deg of non-orthogonality, read from the import's own checkMesh as the
+    pipeline reads it, so the case has the correctors (without them GV
+    diverges: notes 13.8). The zone of the worst value is checked for GV."""
+    from case_setup.dictionaries import dictionaries
+    from case_setup.fields import fields
+    from case_setup.physics import (
+        WATER,
+        PhysicsConfig,
+        TurbulenceConfig,
+        turbulence_k,
+        turbulence_omega,
+    )
+    from case_setup.setup import (
+        CaseSetup,
+        Inlet,
+        PatchKind,
+        Rotation,
+        TimeControls,
+        non_orthogonality,
+    )
+    from machines.msh_import import quality
+    from machines.msh_import.cases import import_cases
+
+    path = Path(str(E0_DIR)) / name
+    if not path.is_file():
+        pytest.skip(f"{name} is not in MACHINES_E0_DIR")
+    service = MachineService(tmp_path / "project")
+    assert service.convert_for_box(path).issues == ()
+    case = service.root / "cases" / SCRATCH_CASE
+    inlet, outlet, flow, worst_zone = SOLVER_CASES[name]
+    names = [p.name for p in read_boundary(case / "constant/polyMesh/boundary")]
+    assert {inlet, outlet} <= set(names)
+    area = surface.patch_areas(case, [inlet])[inlet]
+    flow = flow if flow is not None else 2.0 * area
+    speed, length, step = flow / area, 0.01, 1e-5
+    k = turbulence_k(speed, 5.0)
+    omega = turbulence_omega(k, length)
+    kinds = {inlet: PatchKind.INLET, outlet: PatchKind.OUTLET}
+    # The import's checkMesh and per-zone fields, as the pipeline reads them.
+    shutil.copy(Path(__file__).parents[1] / "fixtures/msh/e0/common/system/meshQualityDict",
+                case / "system")
+    service.save(configs.rotating(path))
+    config = service.saved_config()
+    assert config is not None
+    check = subprocess.run(list(import_cases(config).check_steps(False)[0].argv), cwd=case,
+                           capture_output=True, text=True, check=False).stdout
+    values = dict(re.findall(r"^\s*(\w+)\s+([^;\s]+);", (case / "system/meshQualityDict")
+                             .read_text("utf-8"), re.MULTILINE))
+    rows = quality.zone_quality(case, set(quality.FIELDS), quality.limits_of(values))
+    quality.remove_outputs(case)
+    measured = non_orthogonality(check, {k: [r.as_dict() for r in v] for k, v in rows.items()})
+    assert measured is not None and measured.corrected
+    assert worst_zone is None or measured.zone == worst_zone
+    for patch in names:  # the final types, as the import's assembly sets them
+        subprocess.run(["foamDictionary", "constant/polyMesh/boundary", "-entry",
+                        f"entry0/{patch}/type", "-set", "patch" if patch in kinds else "wall"],
+                       cwd=case, capture_output=True, check=True)
+    setup = CaseSetup(
+        patches=tuple((n, kinds.get(n, PatchKind.WALL)) for n in names),
+        rotation=Rotation("none", (0.0, 0.0, 0.0), (0.0, 0.0, 1.0), 0.0, None),
+        inlets={inlet: Inlet(None, flow, speed, k, omega)}, outlets={outlet: 0.0},
+        physics=PhysicsConfig(fluid=WATER, turbulence=TurbulenceConfig(length_scale=length)),
+        time=TimeControls(step, step, SOLVER_STEPS * step, SOLVER_STEPS * step, 5.0, None,
+                          None, None),
+        internal_k=k, internal_omega=omega, non_orthogonality=measured)
+    files = {**fields(setup), **dictionaries(setup)}
+    files.pop("constant/dynamicMeshDict")  # a static mesh
+    assert "nNonOrthogonalCorrectors 2;" in files["system/fvSolution"]
+    files["system/controlDict"] = files["system/controlDict"].replace(
+        "adjustTimeStep  yes;", "adjustTimeStep  no;")  # exactly SOLVER_STEPS steps
+    for relative, body in files.items():
+        (case / relative).parent.mkdir(parents=True, exist_ok=True)
+        (case / relative).write_text(body, encoding="utf-8")
+    start = time.perf_counter()
+    run = subprocess.run(["pimpleFoam", "-case", "."], cwd=case, capture_output=True,
+                         text=True, check=False)
+    spent = time.perf_counter() - start
+    log = run.stdout + run.stderr
+    (tmp_path / "pimpleFoam.log").write_text(log, encoding="utf-8")
+    steps = len(re.findall(r"^Time = ", log, re.MULTILINE))
+    courant = [float(c) for c in re.findall(r"Courant Number mean: \S+ max: (\S+)", log)]
+    continuity = re.findall(r"continuity errors : sum local = (\S+)", log)
+    print(f"\n{name}: {measured.reason}; {steps} steps in {spent:.1f} s; Q {flow:.4g} "
+          f"m3/s, inlet "
+          f"{speed:.3g} m/s; max Courant {max(courant or [0.0]):.3g}; last continuity "
+          f"(local) {continuity[-1] if continuity else None}; exit {run.returncode}")
+    assert run.returncode == 0, log[-3000:]
+    assert "FOAM FATAL" not in log and not re.search(r"\bnan\b", log, re.IGNORECASE)
+    assert steps == SOLVER_STEPS and re.search(r"^End\s*$", log, re.MULTILINE)
+    # Bounded, not only finished (GV without the correctors also exits 0: notes 13.8).
+    assert max(courant) < 50 and float(continuity[-1].rstrip(",")) < 1e-6

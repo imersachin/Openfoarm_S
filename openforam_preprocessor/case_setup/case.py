@@ -20,11 +20,12 @@ from __future__ import annotations
 import json
 import shutil
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from case_setup.dictionaries import dictionaries
 from case_setup.fields import fields
-from case_setup.setup import CaseSetup, resolve
+from case_setup.setup import CaseSetup, NonOrthogonality, resolve
 from machines.config import MachineProjectConfig
 from machines.domains import SurfaceInfo
 from machines.msh_import import surface
@@ -46,7 +47,8 @@ def mesh_boundary(poly_mesh: Path) -> tuple[tuple[str, str], ...]:
 
 
 def render(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
-           poly_mesh: Path) -> tuple[CaseSetup, dict[str, str]]:
+           poly_mesh: Path, non_orthogonality: NonOrthogonality | None = None,
+           ) -> tuple[CaseSetup, dict[str, str]]:
     """The resolved setup and every generated file (relative path -> text).
     An imported mesh's zone radius is computed from the zone, and its patch
     areas measured, on the surface of the imported mesh this one was assembled
@@ -56,8 +58,8 @@ def render(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
     radius = (surface.config_zone_radius(imported, mesh.zones[0])
               if mesh is not None and mesh.zones else None)
     areas = surface.config_areas(imported, config) if mesh else None
-    setup = resolve(config, surfaces, mesh_boundary(poly_mesh), mesh_radius=radius,
-                    mesh_areas=areas)
+    setup = replace(resolve(config, surfaces, mesh_boundary(poly_mesh), mesh_radius=radius,
+                            mesh_areas=areas), non_orthogonality=non_orthogonality)
     return setup, {**fields(setup), **dictionaries(setup)}
 
 

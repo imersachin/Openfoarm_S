@@ -86,6 +86,7 @@ from machines.pipeline import (
     MESH_REPORT,
     POLY_MESH,
     PREFLIGHT_REPORT,
+    QUALITY_ZONES,
     SUPERSEDED_MESH_REPORT,
     VERIFIED_VERSIONS,
     MachinePipeline,
@@ -117,7 +118,7 @@ STEP_KINDS = {IMPORT: ("convert", "surface"), CHECK_MESH: ("checkMesh", "amiWeig
               MESH_VIEWS: ("views",)}  # resources.py's steps of each operation
 IMPORT_REPORT = "reports/mesh_import.json"
 STEP_RESOURCES = "reports/step_resources.json"  # each heavy step's estimate (resources.py)
-QUALITY_REPORT = "reports/mesh_quality_zones.json"  # per cell zone (quality.py)
+QUALITY_REPORT = QUALITY_ZONES  # per cell zone (quality.py)
 SETS_DIR = "postProcessing/constant"  # checkMesh -writeSets vtk, in cases/merged/
 ZERO_CASE = MERGED_CASE + quality.ZERO_SUFFIX  # the second quality pass (quality.py)
 AREA_AFTER_IMPORT = "INLET_AREA_AFTER_IMPORT"  # case_setup.validation

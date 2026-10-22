@@ -46,7 +46,7 @@ from case_setup.case import (
     write_case,
 )
 from case_setup.physics import TipSpeedRatio
-from case_setup.setup import CaseSetup, CaseSetupError
+from case_setup.setup import CaseSetup, CaseSetupError, NonOrthogonality, non_orthogonality
 from case_setup.validation import CaseSetupThresholds, check_physics
 from core.artifacts import ArtifactStore
 from core.artifacts.hashing import files_under, hash_files, sha256_json
@@ -90,6 +90,8 @@ from vawt.status import RunState, write_status
 PREFLIGHT_REPORT = "reports/resource_preflight.json"
 MESH_REPORT = "reports/mesh_quality_report.json"
 CASE_SETUP_REPORT = "reports/case_setup.json"
+# An imported mesh's quality per cell zone (machines.msh_import.pipeline.QUALITY_REPORT).
+QUALITY_ZONES = "reports/mesh_quality_zones.json"
 SUPERSEDED_MESH_REPORT = "reports/mesh_quality_report.superseded.json"
 POLY_MESH = "constant/polyMesh"
 _EXCLUDED = frozenset({"sets"})  # checkMesh diagnostics, not part of the mesh
@@ -416,7 +418,7 @@ class MachinePipeline:
         files written, so the mesh never re-runs for a physics change."""
         mesh = run.case(MERGED_CASE) / POLY_MESH
         try:
-            setup, files = render(run.config, surfaces, mesh)
+            setup, files = render(run.config, surfaces, mesh, self._non_orthogonality(run))
         except CaseSetupError as error:
             run.case_setup = StageResult(StageStatus.FAILED, "CASE_SETUP_FAILED", str(error))
             raise _Stop("Case setup failed; the mesh is valid and is reused next time.", _issue(
@@ -433,9 +435,33 @@ class MachinePipeline:
             write_case(run.root, files, mesh)
             run.store.record(CASE_SETUP, inputs, case_files(run.root, files))
         clear_stale(run.root)
+        if setup.corrected:
+            assert setup.non_orthogonality is not None
+            run.issues.append(_issue(
+                IssueSeverity.INFO, IssueCategory.CONFIGURATION, IssueStage.CASE_SETUP,
+                "CASE_NON_ORTHOGONAL_CORRECTORS",
+                f"Case setup: {replace(setup.non_orthogonality, zone=None).reason} (in "
+                "system/fvSolution; the zone is in Case setup).",
+                "Nothing to do; improving the mesh there lets the solver run faster.",
+                max_deg=setup.non_orthogonality.max_deg, zone=setup.non_orthogonality.zone))
         run.case_setup = StageResult(StageStatus.SUCCESS,
                                      message=f"The case is set up in {CASE_DIR}/.")
         _write_case_report(run, setup)
+
+    @staticmethod
+    def _non_orthogonality(run: _Run) -> NonOrthogonality | None:
+        """The assembled mesh's max non-orthogonality from its checkMesh log, with
+        the zone of the worst value for an imported mesh (its per-zone report)."""
+        log = run.root / "logs" / MERGED_CASE / CHECK_MESH_LOG
+        try:
+            text = log.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+        try:
+            zones = json.loads((run.root / QUALITY_ZONES).read_text("utf-8"))["by_zone"]
+        except (OSError, ValueError, KeyError, TypeError):
+            zones = None
+        return non_orthogonality(text, zones if isinstance(zones, dict) else None)
 
     def _stopped(self, run: _Run, stop: _Stop) -> None:
         """Outcomes of a run that stopped early, for what it did not reach."""
@@ -700,6 +726,11 @@ def _write_case_report(run: _Run, setup: CaseSetup) -> None:
         "time": {**asdict(time), "estimates": "courant_estimate, smallest_cell and "
                  "reference_speed are heuristic, not the solver's values"},
     }
+    if setup.corrected:  # only then: other reports stay as they were
+        assert setup.non_orthogonality is not None
+        payload["non_orthogonality"] = {
+            **asdict(setup.non_orthogonality), "reason": setup.non_orthogonality.reason,
+            "schemes": "laplacian and snGrad limited corrected 0.33, in every case"}
     speeds = [physics.rotation[n].speed for n in run.config.zone_names()
               if n in physics.rotation]
     radii = [s.radius for s in speeds if isinstance(s, TipSpeedRatio)]
