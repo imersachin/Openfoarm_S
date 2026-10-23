@@ -972,6 +972,12 @@ Use: Import .msh. Your Francis files are in `\\wsl$\Ubuntu-24.04\root\meshes`.
 | M10 | Mesh section | Validity VALID; no table if no quality warning. With the coarse mesh of the real test it is VALID, Quality REVIEW, a "Quality by cell zone" table and the ParaView sets folder | |
 | M11 | Mesh: choose 8 x 45 deg, Check over one revolution; press F5 while it runs | Progress "Checking over one revolution (8 x 45 deg): k of 8 steps"; after F5 still shown; Cancel works; the report says "(8 x 45 deg)" | |
 | M12 | Start a run in another project while M11 runs | That run waits: "Waiting for another heavy step to finish: <project>: AMI weights over one revolution ..., started HH:MM" and starts after it | |
+| M13 | Throughout M1-M18 | No terminal used at any point | |
+| M14 | Browse files on disk: go to E:, then paste a Windows path | Both work; the file is found | |
+| M15 | During a copy into WSL, press F5, then Cancel | The copy stops; no half-copied file is left | |
+| M16 | Start the revolution check, then try a second heavy step | The lock message names the project, the step and the time left | |
+| M17 | Before every heavy step | A memory and time estimate appears | |
+| M18 | Import GV and look at its warnings | They point to zones (down, skin, upStream), short names with the full name on hover | |
 
 The 23 M-cell assembly of your four files is M2b; these checks use your files
 one at a time.
