@@ -24,6 +24,8 @@ import plotly.graph_objects as go
 
 from machines.config import PatchType
 from machines.previews import (
+    AXIS_POINT,
+    BOX_CENTRE,
     CUT,
     DOMAIN,
     INTERFACE,
@@ -57,6 +59,8 @@ KIND_STYLE: dict[str, tuple[str, str, float]] = {
     SEED: ("#52514e", "Mesh seed points", 1.0),
     CUT: ("#8a8984", "Cuts", 1.0),
     PROBLEM: ("#d03b3b", "checkMesh problems", 1.0),
+    AXIS_POINT: ("#4a3aa7", "Proposed axis (not applied)", 1.0),
+    BOX_CENTRE: ("#8a8984", "Bounding-box centre", 1.0),
 }
 ARROW_STYLE = {"axis": "#8a8984", "rotation": "#eda100", "flow": "#2a78d6"}
 _FALLBACK = ("#c8c7c0", "Other", 0.5)
@@ -109,7 +113,9 @@ def scene_figure(scene: Scene, arrows: Sequence[Arrow] = (), title: str = "") ->
             if problem else markers.name,
             legendgroup=markers.kind, legendgrouptitle_text=group,
             hovertemplate=(f"{markers.name}<extra></extra>" if problem
-                           else "%{text}<extra>seed point</extra>")))
+                           else "%{text}<extra>"
+                           + ("seed point" if markers.kind == SEED else group)
+                           + "</extra>")))
     _add_arrows(figure, scene, arrows)
     # The first rotation axis points up on screen: a camera setting only, the
     # coordinates are never transformed (VAWT spec section 15).

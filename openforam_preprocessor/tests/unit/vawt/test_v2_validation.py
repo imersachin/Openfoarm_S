@@ -10,9 +10,12 @@ import pytest
 
 from core.issues import IssueSeverity
 from tests.fixtures.vawt.drafts import preset_draft
+from tests.fixtures.vawt.rotor import RotorSpec
 from vawt.case_generator import RESERVED_NAMES, domain_grid, rotor_grid
 from vawt.config import VawtProjectConfig
 from vawt.validation import ValidationThresholds, validate_vawt
+
+D = RotorSpec().swept_diameter  # the preset's D since U1
 
 
 @pytest.fixture
@@ -100,11 +103,11 @@ def absolute(draft: dict[str, Any], first: float) -> dict[str, Any]:
 
 def test_v0_preset_first_layer_warns(draft: dict[str, Any]) -> None:
     # E3a: D/5000 with 3 layers added 0 % of layers.
-    issue = issues(absolute(draft, 1.04 / 5000))["LAYERS_TOO_THIN_FOR_CELLS"]
+    issue = issues(absolute(draft, D / 5000))["LAYERS_TOO_THIN_FOR_CELLS"]
 
     assert issue.severity is IssueSeverity.WARNING
-    assert issue.details["final_layer_thickness"] == pytest.approx(1.04 / 5000 * 1.44)
-    assert issue.details["finest_blade_cell"] == pytest.approx(1.04 / 22 / 4)
+    assert issue.details["final_layer_thickness"] == pytest.approx(D / 5000 * 1.44)
+    assert issue.details["finest_blade_cell"] == pytest.approx(D / 22 / 4)
 
 
 def test_v0_working_first_layer_does_not_warn(draft: dict[str, Any]) -> None:
@@ -123,7 +126,7 @@ def test_relative_and_disabled_layers_are_not_checked(draft: dict[str, Any]) -> 
 
 
 def test_single_mesh_uses_the_effective_zone_cell_size(draft: dict[str, Any]) -> None:
-    # Finest blade cell: AMI D/22/4 = 11.8 mm; single mesh D/36/4 = 7.2 mm
+    # Finest blade cell: AMI D/22/4 = 12.0 mm; single mesh D/36/4 = 7.4 mm
     # (effective zone cells). A 10 mm first layer fits the first, not the second.
     ami = absolute(draft, 0.010)
     single = copy.deepcopy(ami)
@@ -131,7 +134,7 @@ def test_single_mesh_uses_the_effective_zone_cell_size(draft: dict[str, Any]) ->
 
     assert "ABSOLUTE_LAYER_TOO_THICK" not in issues(ami)
     found = issues(single)["ABSOLUTE_LAYER_TOO_THICK"]
-    assert found.details["finest_blade_cell"] == pytest.approx(1.04 / 36 / 4)
+    assert found.details["finest_blade_cell"] == pytest.approx(D / 36 / 4)
 
 
 def test_layer_fraction_is_configurable(draft: dict[str, Any]) -> None:

@@ -93,6 +93,8 @@ WAKE = "WAKE"
 SEED = "SEED"
 CUT = "CUT"
 PROBLEM = "PROBLEM"
+AXIS_POINT = "AXIS_POINT"  # the proposed rotor axis point and its swept circle (U1)
+BOX_CENTRE = "BOX_CENTRE"  # the rotor's bounding-box centre, when off the axis
 
 _FOAM_KINDS = {"cyclicAMI": INTERFACE, "wall": PatchType.WALL.value}
 
@@ -347,6 +349,44 @@ def cylinder_wireframe(axis: Axis, centre_u: float, centre_v: float, axis_min: f
             low[axis.position], high[axis.position] = axis_min, axis_max
             paths.append(np.vstack([low, high]))
     return _polylines(paths)
+
+
+# --- the proposed rotor axis (U1), before a preset is applied ----------------------------
+
+def axis_scene(mesh: trimesh.Trimesh, axis: Axis, point: Sequence[float], diameter: float,
+               box_centre: Sequence[float], limits: PreviewLimits | None = None,
+               ) -> tuple[Scene, tuple[Arrow, ...]]:
+    """The rotor as it will be meshed, the axis through the proposed point, the
+    swept circle about it (diameter) and, when apart from it, the bounding-box
+    centre. Display only: nothing is applied until the preset button."""
+    limits = limits or PreviewLimits()
+    vertices = np.asarray(mesh.vertices, dtype=float)
+    a = axis.position
+    lo, hi = float(vertices[:, a].min()), float(vertices[:, a].max())
+    p = np.asarray(point, dtype=float)
+    rings = _polylines(_ring(p, axis, diameter / 2.0, along) for along in (lo, (lo + hi) / 2, hi))
+    e = unit(axis)
+    reach = 0.5 * (hi - lo) + 0.3 * diameter
+    tail, tip = p - e * reach, p + e * reach
+    label = f"({p[0]:.4g}, {p[1]:.4g}, {p[2]:.4g}) m"
+    markers = [Markers(f"proposed axis point {label}", AXIS_POINT, p[None].astype(np.float32),
+                       (f"axis point {label}",))]
+    box = np.asarray(box_centre, dtype=float)
+    box[a] = p[a]
+    offset = float(np.linalg.norm(box - p))
+    if offset > 1e-6 * diameter:
+        markers.append(Markers(f"bounding-box centre, {offset:.4g} m off the axis", BOX_CENTRE,
+                               box[None].astype(np.float32),
+                               (f"bounding-box centre ({offset:.4g} m off the axis)",)))
+    scene = Scene(
+        "axis", "", surfaces=(_surface("rotor", ROTATING_BODY, mesh, limits.max_faces),),
+        lines=(Lines(f"swept circle about the proposed axis, D {diameter:.4g} m", AXIS_POINT,
+                     rings),),
+        markers=tuple(markers),
+        bounds=(_t(np.minimum(vertices.min(0), tail)), _t(np.maximum(vertices.max(0), tip))))
+    arrow = Arrow("proposed rotation axis", "axis", np.vstack([tail, tip]), _t(tip), _t(e),
+                  f"proposed rotation axis +{axis.value} through {label} (not applied)")
+    return scene, (arrow,)
 
 
 # --- zones ----------------------------------------------------------------------------------

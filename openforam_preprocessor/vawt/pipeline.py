@@ -287,7 +287,7 @@ class VawtPipeline:
         run.issues.extend(geometry_issues)
         if mesh is None:
             raise _Stop("Geometry could not be used; no OpenFOAM command was started.")
-        metrics = compute_rotor_metrics(mesh.vertices, config.rotor.axis)
+        metrics = compute_rotor_metrics(mesh.vertices, config.rotor.axis, faces=mesh.faces)
         run.issues.extend(check_config(config, mesh, metrics, self.thresholds))
         if has_stopping_issue(run.issues):
             raise _Stop("Validation found problems that stop the run; no OpenFOAM "

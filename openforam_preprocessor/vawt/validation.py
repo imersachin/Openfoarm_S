@@ -208,7 +208,7 @@ def validate_vawt(
     mesh, geometry_issues = load_rotor(config)
     if mesh is None:
         return VawtValidationResult(config, None, geometry_issues)
-    metrics = compute_rotor_metrics(mesh.vertices, config.rotor.axis)
+    metrics = compute_rotor_metrics(mesh.vertices, config.rotor.axis, faces=mesh.faces)
     checks = check_config(config, mesh, metrics, thresholds or ValidationThresholds())
     return VawtValidationResult(config, metrics, (*geometry_issues, *checks))
 

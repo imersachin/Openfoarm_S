@@ -4,6 +4,7 @@ preset drafts the zone, domain and patches. Custom: any number of bodies."""
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import streamlit as st
@@ -20,6 +21,7 @@ from app.machines_ui.sections.common import (
 )
 from app.machines_ui.sections.fields import (
     axis_field,
+    float_field,
     new_stl,
     select_field,
     stl_fields,
@@ -27,9 +29,12 @@ from app.machines_ui.sections.fields import (
 )
 from machines.config import Motion
 from machines.profiles import PresetKind
-from vawt.config import Axis
+from vawt.config import Axis, plane_axes
 
 ROTOR = "machines_rotor_inputs"  # the preset's inputs before the draft has a rotor
+AXIS_POINT_NOTE = ("Default: the area-weighted centroid of the rotor surface, on the axis "
+                   "for 2 or more identical blades evenly spaced. Check it in the 3D pane "
+                   "(Rotor axis); the preset uses it only when you press the preset button.")
 MOTION_LABELS = {"STATIONARY": "Stationary", "ROTATING": "Rotating",
                  "SPLIT": "Split (the part inside its zone rotates)"}
 
@@ -45,6 +50,51 @@ def _rotor_inputs(ctx: state.Context) -> dict[str, Any]:
     if not inputs.get("flow_axis") and ctx.draft.get("flow_axis"):
         inputs["flow_axis"] = ctx.draft["flow_axis"]
     return inputs
+
+
+def axis_point(inputs: dict[str, Any]) -> dict[str, float] | None:
+    """The axis point entered for the chosen axis (None: the surface centroid)."""
+    point = inputs.get("axis_point")
+    if not isinstance(point, dict) or point.get("axis") != inputs.get("axis"):
+        return None
+    if point.get("u") is None or point.get("v") is None:
+        return None
+    return {"u": float(point["u"]), "v": float(point["v"])}
+
+
+def axis_point_box(inputs: dict[str, Any], info: Any, axis: Axis) -> None:
+    """Where the axis passes (U1): the surface centroid unless another point is
+    entered; shown in the 3D pane, applied only by the preset button."""
+    u, v = plane_axes(axis)
+    entered = axis_point(inputs)
+    point = (entered["u"], entered["v"]) if entered else info.centroid
+    st.markdown(f"**Axis point** (the rotation axis passes through it): {u.value} = "
+                f"{point[0]:.6g} m, {v.value} = {point[1]:.6g} m, "
+                + ("entered." if entered else "the surface centroid."))
+    st.caption(AXIS_POINT_NOTE)
+    box = info.metrics.centre
+    offset = math.hypot(box[u.position] - point[0], box[v.position] - point[1])
+    if info.diameter and offset > 1e-6 * info.diameter:
+        st.caption(f"The bounding-box centre is {offset:.4g} m from this point (an odd "
+                   "number of blades puts it off the axis); it is not used.")
+    if (inputs.get("axis_point") or {}).get("axis") != axis.value:
+        inputs["axis_point"] = {"axis": axis.value}
+    def complete() -> None:  # one coordinate changed: the other is the one shown
+        entry = inputs["axis_point"]
+        if "u" in entry or "v" in entry:
+            entry.setdefault("u", point[0])
+            entry.setdefault("v", point[1])
+
+    with apply_form("axis_point", complete):
+        cols = st.columns(2)
+        with cols[0]:
+            float_field(inputs, "axis_point.u", f"Axis point {u.value} (m)", default=point[0])
+        with cols[1]:
+            float_field(inputs, "axis_point.v", f"Axis point {v.value} (m)", default=point[1])
+    if entered and st.button("Use the surface centroid", key="machines_axis_centroid"):
+        inputs["axis_point"] = {"axis": axis.value}
+        state.bump_generation()
+        st.rerun()
 
 
 def preset_box(ctx: state.Context) -> None:
@@ -79,7 +129,7 @@ def preset_box(ctx: state.Context) -> None:
     if not source.get("source_units"):
         return
     axis = Axis(inputs["axis"]) if inputs.get("axis") else None
-    info, issues = ctx.service.rotor_info(source, axis)
+    info, issues = ctx.service.rotor_info(source, axis, axis_point(inputs))
     if info is None:
         render_issues(issues)
         return
@@ -88,9 +138,12 @@ def preset_box(ctx: state.Context) -> None:
         "Suggested axis": metrics.suggested_axis.value if metrics.suggested_axis else "none",
         "Note": metrics.suggestion_note,
         "Extents (m)": [round(e, 6) for e in metrics.extents],
-        f"Swept diameter about +{axis.value} (m)" if axis else "Swept diameter":
-            round(info.diameter, 6) if info.diameter else "confirm the axis first",
+        f"Swept diameter about +{axis.value} through the axis point (m)" if axis
+        else "Swept diameter": round(info.diameter, 6) if info.diameter
+        else "confirm the axis first",
     })
+    if axis is not None:
+        axis_point_box(inputs, info, axis)
     ready = axis is not None and (not vawt or bool(inputs.get("flow_axis")))
     replaces = bool(ctx.draft.get("rotating_zones"))
     label = f"{'Redo' if replaces else 'Apply'} the {ctx.profile.label} preset"
@@ -99,7 +152,7 @@ def preset_box(ctx: state.Context) -> None:
                    "physics settings are kept.")
     if st.button(label, key="machines_apply_preset", type="primary", disabled=not ready):
         base = {"project_name": ctx.draft.get("project_name") or ctx.service.root.name,
-                "source": source, "axis": inputs["axis"]}
+                "source": source, "axis": inputs["axis"], "axis_point": axis_point(inputs)}
         if vawt:
             base["flow_axis"] = inputs["flow_axis"]
         result = ctx.service.draft_from_preset(ctx.profile, base)

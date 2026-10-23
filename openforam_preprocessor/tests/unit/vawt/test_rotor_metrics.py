@@ -24,7 +24,7 @@ def test_exact_metrics_and_suggestion_in_each_orientation(axis: str) -> None:
 
     assert metrics.suggested_axis is Axis(axis)
     assert metrics.axis is Axis(axis)
-    assert metrics.diameter == pytest.approx(spec.diameter, rel=1e-12)
+    assert metrics.diameter == pytest.approx(spec.swept_diameter, rel=1e-12)  # swept (U1)
     assert metrics.span == pytest.approx(spec.span, rel=1e-12)
     assert metrics.centre == pytest.approx(spec.centre, abs=1e-12)
     # Farthest point in plane: a blade corner at radius r + t/2, chord offset c/2.
@@ -40,7 +40,7 @@ def test_metrics_from_file_match_within_float32(tmp_path: Path) -> None:
     assert mesh is not None
     metrics = compute_rotor_metrics(mesh.vertices, Axis.Z)
 
-    assert metrics.diameter == pytest.approx(RotorSpec().diameter, abs=FLOAT32)
+    assert metrics.diameter == pytest.approx(RotorSpec().swept_diameter, abs=FLOAT32)
     assert metrics.span == pytest.approx(RotorSpec().span, abs=FLOAT32)
 
 
@@ -53,7 +53,7 @@ def test_centimetre_copy_gives_same_metrics_after_unit_conversion(tmp_path: Path
     converted = GeometryTransform.from_config(geometry).apply_to_mesh(mesh)
     metrics = compute_rotor_metrics(converted.vertices, Axis.Z)
 
-    assert metrics.diameter == pytest.approx(RotorSpec().diameter, abs=FLOAT32)
+    assert metrics.diameter == pytest.approx(RotorSpec().swept_diameter, abs=FLOAT32)
     assert metrics.span == pytest.approx(RotorSpec().span, abs=FLOAT32)
 
 

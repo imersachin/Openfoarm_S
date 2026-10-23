@@ -12,16 +12,20 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from geometry.importer import import_stl
 from mesh.parser import CheckMeshMetrics, CheckMeshParser
 from tests.fixtures.vawt.drafts import preset_draft
-from tests.fixtures.vawt.rotor import write_rotor
+from tests.fixtures.vawt.rotor import RotorSpec, write_rotor
 from vawt.case_generator import AMI_PATCHES, VawtCaseGenerator
-from vawt.config import VawtProjectConfig
+from vawt.config import Axis, VawtProjectConfig
+from vawt.presets import PresetKind, draft_from_preset
+from vawt.rotor_metrics import compute_rotor_metrics
 
 TOOLS = ("blockMesh", "snappyHexMesh", "surfaceFeatureExtract", "checkMesh", "mergeMeshes",
          "createPatch", "topoSet", "foamDictionary")
@@ -37,8 +41,17 @@ GEN = VawtCaseGenerator()
 
 
 def e1_config(tmp_path: Path) -> VawtProjectConfig:
-    """The E1 settings: SIMPLE preset for the fixture rotor, features, relative layers."""
-    draft = preset_draft(tmp_path)
+    """The E1 settings: SIMPLE preset for the fixture rotor, features, relative layers,
+    with V0's inputs: the box centre and D the extent 1.04 m (since U1 the preset uses
+    the surface centroid, here 1e-17 m off it, and the swept 1.0591 m)."""
+    path = write_rotor(tmp_path / "rotor_z.stl")
+    mesh = import_stl(path).mesh
+    assert mesh is not None
+    measured = compute_rotor_metrics(mesh.vertices, Axis.Z)
+    metrics = replace(measured, axis_point=measured.centre, diameter=RotorSpec().diameter)
+    draft = draft_from_preset(
+        {"project_name": "Fixture", "geometry": {"source_path": str(path), "source_units": "m"}},
+        metrics, Axis.X, PresetKind.SIMPLE)
     draft["refinement"]["extract_features"] = True
     draft["layers"]["enabled"] = True
     return VawtProjectConfig.model_validate(draft)

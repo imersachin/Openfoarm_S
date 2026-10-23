@@ -106,7 +106,10 @@ from machines.presets.francis import francis_draft, slots_base, specific_speed
 from machines.presets.hawt import hawt_draft, hawt_rotor
 from machines.presets.vawt import vawt_draft
 from machines.previews import (
+    Arrow,
     PreviewLimits,
+    Scene,
+    axis_scene,
     cut_planes,
     flow_arrows,
     imported_mesh_preview,
@@ -134,9 +137,9 @@ from machines.tip_radius import MeasuredRadius, differs, radial_max
 from machines.validation import CheckedConfig, MachineThresholds, check_all, parse_config
 from mesh.estimator import CellEstimate, ResourceAssessment, ResourceEstimator, SystemResources
 from openfoam.environment import tool_identity, validate_environment
-from vawt.config import Axis, RotorGeometryConfig
+from vawt.config import Axis, RotorGeometryConfig, plane_axes
 from vawt.presets import PresetKind as VawtPresetKind
-from vawt.rotor_metrics import RotorMetrics, compute_rotor_metrics
+from vawt.rotor_metrics import RotorMetrics, compute_rotor_metrics, surface_centroid
 from vawt.runtime import REGISTRY, RunRegistry
 from vawt.service import (
     GEOMETRY_CACHE,
@@ -217,9 +220,10 @@ class MachineAnalysis:
 class RotorInfo:
     """A rotor STL after units and transform, for the preset boxes."""
 
-    metrics: RotorMetrics  # extents, axis suggestion (VAWT)
-    diameter: float | None  # swept diameter about the confirmed axis (HAWT measure)
+    metrics: RotorMetrics  # extents, axis suggestion; axis point for a confirmed axis
+    diameter: float | None  # swept diameter about the confirmed axis and its point
     issues: tuple[Issue, ...] = ()
+    centroid: tuple[float, float] | None = None  # surface centroid (u, v): the default point
 
 
 @dataclass(frozen=True)
@@ -933,9 +937,11 @@ class MachineService(RunControl):
     # --- presets ----------------------------------------------------------------------
 
     def rotor_info(self, source: Mapping[str, Any], axis: Axis | None = None,
+                   axis_point: Mapping[str, Any] | None = None,
                    ) -> tuple[RotorInfo | None, tuple[Issue, ...]]:
         """A rotor STL after units and transform: extents, the axis suggestion and,
-        for a confirmed axis, the swept diameter about it."""
+        for a confirmed axis, the axis point (axis_point {u, v} when given, else
+        the surface centroid) and the swept diameter about it (U1)."""
         try:
             stl = StlSource.model_validate(source)
         except ValidationError as exc:
@@ -943,9 +949,41 @@ class MachineService(RunControl):
         mesh, issues = self.geometry.get(_rotor_geometry(stl))
         if mesh is None:
             return None, issues
-        metrics = compute_rotor_metrics(mesh.vertices, axis)
-        diameter = hawt_rotor(mesh, axis).diameter if axis is not None else None
-        return RotorInfo(metrics, diameter, issues), issues
+        metrics = compute_rotor_metrics(mesh.vertices, axis, faces=mesh.faces,
+                                        centre_uv=_centre_uv(axis_point))
+        centroid: tuple[float, float] | None = None
+        if axis is not None:
+            u, v = plane_axes(axis)
+            found = surface_centroid(np.asarray(mesh.vertices), np.asarray(mesh.faces))
+            centroid = (float(found[u.position]), float(found[v.position]))
+        return RotorInfo(metrics, metrics.diameter, issues, centroid), issues
+
+    def axis_preview(self, source: Mapping[str, Any], axis: Axis,
+                     axis_point: Mapping[str, Any] | None = None,
+                     ) -> tuple[Scene | None, tuple[Arrow, ...], tuple[Issue, ...]]:
+        """The 3D pane's proposed rotor axis (U1): the rotor, the axis through
+        its point and the swept circle, before the preset is applied."""
+        info, issues = self.rotor_info(source, axis, axis_point)
+        if info is None or info.metrics.axis_point is None or info.diameter is None:
+            return None, (), issues
+        stl = StlSource.model_validate(source)
+        mesh, _ = self.geometry.get(_rotor_geometry(stl))
+        if mesh is None:
+            return None, (), issues
+        scene, arrows = axis_scene(mesh, axis, info.metrics.axis_point, info.diameter,
+                                   info.metrics.centre, self.preview_limits)
+        return scene, arrows, issues
+
+    def axis_preview_key(self, inputs: Mapping[str, Any]) -> str:
+        """The identity of axis_preview's figure: the inputs, the STL's stat and
+        the display caps (no content read)."""
+        path = Path(str((inputs.get("source") or {}).get("source_path", "")))
+        try:
+            found = path.stat()
+            stat: list[Any] = [found.st_size, found.st_mtime_ns]
+        except OSError:
+            stat = []
+        return sha256_json([dict(inputs), stat, self.preview_limits.__dict__])
 
     def draft_from_preset(self, profile: MachineProfile,
                           inputs: Mapping[str, Any]) -> DraftResult:
@@ -953,6 +991,8 @@ class MachineService(RunControl):
 
         VAWT: project_name, source (StlSource data), axis, flow_axis.
         HAWT: project_name, source, axis.
+        VAWT and HAWT, optional: axis_point {u, v}, the confirmed point the axis
+        passes through, in the plane normal to it (default: the surface centroid).
         FRANCIS: project_name, axis, origin {x, y, z}, diameter (runner outlet D,
         confirmed), slots {slot key: StlSource data}."""
         try:
@@ -983,14 +1023,16 @@ class MachineService(RunControl):
 
     def _hawt(self, inputs: Mapping[str, Any]) -> DraftResult:
         mesh, axis, stl = self._rotor(inputs)
+        rotor = hawt_rotor(mesh, axis, _centre_uv(inputs.get("axis_point")))
         config = hawt_draft({"project_name": inputs["project_name"],
-                             "source": stl.model_dump(mode="json")}, hawt_rotor(mesh, axis))
+                             "source": stl.model_dump(mode="json")}, rotor)
         return DraftResult(config.model_dump(mode="json"), notes=(PRESET_NOTE,))
 
     def _vawt(self, inputs: Mapping[str, Any]) -> DraftResult:
         mesh, axis, stl = self._rotor(inputs)
         flow = Axis(str(inputs["flow_axis"]))
-        metrics = compute_rotor_metrics(mesh.vertices, axis)
+        metrics = compute_rotor_metrics(mesh.vertices, axis, faces=mesh.faces,
+                                        centre_uv=_centre_uv(inputs.get("axis_point")))
         geometry = _rotor_geometry(stl).model_dump(mode="json")
         config = vawt_draft({"project_name": inputs["project_name"], "geometry": geometry},
                             metrics, flow, VawtPresetKind.SIMPLE)
@@ -1435,6 +1477,13 @@ def list_machine_projects(root: Path) -> list[Path]:
     if not root.is_dir():
         return []
     return sorted(p for p in root.iterdir() if p.is_dir() and (p / CONFIG_PATH).is_file())
+
+
+def _centre_uv(point: Mapping[str, Any] | None) -> tuple[float, float] | None:
+    """A confirmed axis point {u, v} (None: the surface centroid is used)."""
+    if not point or point.get("u") is None or point.get("v") is None:
+        return None
+    return float(point["u"]), float(point["v"])
 
 
 def _rotor_geometry(stl: StlSource) -> RotorGeometryConfig:

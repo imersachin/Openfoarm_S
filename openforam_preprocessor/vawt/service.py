@@ -549,7 +549,7 @@ class VawtService(RunControl):
         mesh, geometry_issues = self.geometry.get(config.geometry)
         if mesh is None:
             return ValidationOutcome(config, None, (*geometry_issues, *generation), size)
-        metrics = compute_rotor_metrics(mesh.vertices, config.rotor.axis)
+        metrics = compute_rotor_metrics(mesh.vertices, config.rotor.axis, faces=mesh.faces)
         checks = check_config(config, mesh, metrics, self.thresholds)
         return ValidationOutcome(config, metrics,
                                  _unique((*geometry_issues, *checks, *generation)), size)
@@ -580,7 +580,7 @@ class VawtService(RunControl):
         mesh, issues = self.geometry.get(parsed)
         if mesh is None:
             return None, issues
-        return compute_rotor_metrics(mesh.vertices, axis), issues
+        return compute_rotor_metrics(mesh.vertices, axis, faces=mesh.faces), issues
 
     def draft_from_preset(self, base: Mapping[str, Any], axis: Axis, flow_axis: Axis,
                           kind: PresetKind = PresetKind.SIMPLE, *,

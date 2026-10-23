@@ -4,6 +4,8 @@ Built along z, then turned onto the requested axis by a cyclic permutation of
 coordinates (a proper rotation, so winding is preserved).
 
     D = 2 * blade_radius + blade_thickness     (largest extent normal to the axis)
+    swept D = 2 * sqrt((blade_radius + blade_thickness / 2)^2 + (blade_chord / 2)^2)
+                                               (twice the blade-corner radius; U1)
     H = shaft_length                           (extent along the axis)
 """
 
@@ -32,6 +34,12 @@ class RotorSpec:
     @property
     def diameter(self) -> float:
         return 2 * self.blade_radius + self.blade_thickness
+
+    @property
+    def swept_diameter(self) -> float:
+        """The rotor's D since U1: twice the sweep radius, at the blade corners."""
+        return 2 * float(np.hypot(self.blade_radius + self.blade_thickness / 2,
+                                  self.blade_chord / 2))
 
     @property
     def span(self) -> float:

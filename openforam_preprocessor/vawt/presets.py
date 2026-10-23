@@ -80,14 +80,17 @@ def draft_from_preset(
 
     `base` supplies everything presets do not set (project, geometry, ...).
     """
-    if metrics.axis is None or metrics.diameter is None or metrics.span is None:
+    if (metrics.axis is None or metrics.diameter is None or metrics.span is None
+            or metrics.axis_point is None):
         raise ValueError("Presets need rotor metrics computed for a confirmed axis.")
     axis = metrics.axis
     if flow_axis is axis:
         raise ValueError("flow_axis must differ from the rotor axis.")
     lateral = third_axis(axis, flow_axis)
+    # D swept about the axis point, everything centred on it (U1: the bounding-box
+    # centre is off the axis for an odd blade count, its extent below D).
     d, h = metrics.diameter, metrics.span
-    centre = list(metrics.centre)
+    centre = list(metrics.axis_point)
     a, f, lat = axis.position, flow_axis.position, lateral.position
     rotor_lo, rotor_hi = metrics.bounds_min[a], metrics.bounds_max[a]
     u, v = plane_axes(axis)

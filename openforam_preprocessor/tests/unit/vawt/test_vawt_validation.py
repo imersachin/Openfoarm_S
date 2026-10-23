@@ -43,7 +43,8 @@ def test_preset_draft_passes_every_check(draft: dict[str, Any]) -> None:
 
     assert result.can_run
     assert set(codes(draft)) == {"MULTIPLE_COMPONENTS"}  # INFO from the shared validator
-    assert result.metrics is not None and result.metrics.diameter == pytest.approx(D, abs=1e-6)
+    assert result.metrics is not None and result.metrics.diameter == pytest.approx(
+        RotorSpec().swept_diameter, abs=1e-6)  # swept (U1)
 
 
 def test_units_not_chosen(draft: dict[str, Any]) -> None:

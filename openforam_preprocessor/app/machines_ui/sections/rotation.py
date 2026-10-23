@@ -2,7 +2,9 @@
 ratio (as the machine allows) and the direction, explicit by the right-hand
 rule about the zone's axis, never assumed. Both rad/s and rpm are shown, with
 the tip radius a tip-speed ratio used. The tip radius measured from the rotor
-is offered beside it and set only by its button (M1c)."""
+is offered beside it and set only by its button (M1c), labelled as the outer
+swept radius (blade corners), which can be slightly larger than the blade
+mounting radius a tip-speed ratio usually uses (U1, owner)."""
 
 from __future__ import annotations
 
@@ -20,6 +22,9 @@ from app.machines_ui.sections.fields import float_field, select_field
 from case_setup.physics import rad_s_to_rpm, rpm_to_rad_s, tip_speed_omega
 
 SPEED_LABELS = {"RPM": "Rotation speed (rpm)", "TIP_SPEED_RATIO": "Tip-speed ratio λ"}
+SWEPT_RADIUS = "outer swept radius (blade corners)"
+TSR_RADIUS_NOTE = ("A tip-speed ratio usually uses the blade mounting radius, which may be "
+                   "slightly smaller than the outer swept radius.")
 DIRECTION_LABELS = {
     "POSITIVE": "Positive: counter-clockwise seen from the +axis tip (right-hand rule)",
     "NEGATIVE": "Negative: clockwise seen from the +axis tip",
@@ -104,15 +109,19 @@ def render(ctx: state.Context) -> None:
                 float_field(ctx.draft, f"{path}.speed.radius", "Tip radius R (m)",
                             min_value=0.0)
                 found = measured.get(name)
-                st.caption(f"Measured: {found.radius:.4g} m {found.source}" if found else
-                           "Measured: not available yet (no rotor geometry to measure).")
+                if found:
+                    st.caption(f"Measured: {found.radius:.4g} m {found.source}, the "
+                               f"{SWEPT_RADIUS}. {TSR_RADIUS_NOTE}")
+                else:
+                    st.caption("Measured: not available yet (no rotor geometry to measure).")
                 float_field(ctx.draft, f"{path}.speed.free_stream_speed",
                             "Free-stream speed U (m/s; empty: the velocity inlet's)",
                             min_value=0.0, help="ω = λ U / R.")
             direction_field(ctx, name, axis)
             complete_kind(ctx, name, kinds[name])
     for name, found in measured.items():
-        if found is not None and st.button(f"Use measured R for {name} ({found.radius:.4g} m)",
+        if found is not None and st.button(f"Use measured R for {name}: {SWEPT_RADIUS}, "
+                                           f"{found.radius:.4g} m",
                                            key=f"machines_use_measured_{name}"):
             set_path(ctx.draft, f"physics.rotation.{name}.speed.radius", found.radius)
             state.bump_generation()

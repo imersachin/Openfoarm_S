@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from core.issues import IssueSeverity
 from openfoam.dictionary import OpenFOAMFileWriter
 from tests.fixtures.vawt.drafts import preset_draft
+from tests.fixtures.vawt.rotor import RotorSpec
 from vawt.case_generator import (
     AMI_PATCHES,
     INTERFACE_OUTER,
@@ -218,7 +219,7 @@ def test_single_mesh_zone_and_level_offset(tmp_path: Path) -> None:
 
     k = single_mesh_level_offset(config)
     assert k == 2  # (D/9) / 2^2 = D/36 is the first size <= D/22
-    assert zone_cell_size(config) == pytest.approx(1.04 / 36)
+    assert zone_cell_size(config) == pytest.approx(RotorSpec().swept_diameter / 36)
     assert "faceZone        rotatingZone;" in snappy
     assert "cellZone        rotating;" in snappy
     assert "cellZoneInside  inside;" in snappy

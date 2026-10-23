@@ -25,6 +25,7 @@ from machines.config import MachineProjectConfig
 from machines.patches import draft_cylinder_patches
 from vawt.config import Axis, plane_axes
 from vawt.presets import POINT_OFFSET_CELLS
+from vawt.rotor_metrics import surface_centroid
 
 G0_UNVERIFIED = ("G0 R3 test value (docs/rotating_machinery_notes.md); unverified, "
                  "not a recommendation")
@@ -79,10 +80,7 @@ def hawt_rotor(mesh: trimesh.Trimesh, axis: Axis,
     u, v = plane_axes(axis)
     vertices = np.asarray(mesh.vertices, dtype=float)
     if centre_uv is None:
-        triangles = vertices[np.asarray(mesh.faces)]
-        areas = np.linalg.norm(np.cross(triangles[:, 1] - triangles[:, 0],
-                                        triangles[:, 2] - triangles[:, 0]), axis=1) / 2.0
-        centroid = (triangles.mean(axis=1) * areas[:, None]).sum(axis=0) / areas.sum()
+        centroid = surface_centroid(vertices, np.asarray(mesh.faces))
         centre_uv = (float(centroid[u.position]), float(centroid[v.position]))
     radial = np.hypot(vertices[:, u.position] - centre_uv[0],
                       vertices[:, v.position] - centre_uv[1])

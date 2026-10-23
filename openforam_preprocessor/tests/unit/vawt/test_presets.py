@@ -11,7 +11,7 @@ from vawt.presets import PRESET_NOTE, PresetKind, _clamped_wake, draft_from_pres
 from vawt.rotor_metrics import compute_rotor_metrics
 
 SPEC = RotorSpec()  # axis z, centred at the origin
-D, H = SPEC.diameter, SPEC.span
+D, H = SPEC.swept_diameter, SPEC.span  # D: the swept diameter (U1)
 BASE = {"project_name": "P", "geometry": {"source_path": "rotor.stl", "source_units": "m"}}
 
 

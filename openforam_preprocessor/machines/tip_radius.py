@@ -45,8 +45,11 @@ def differs(zone: str, typed: float, measured: MeasuredRadius, field: str) -> Is
         category=IssueCategory.CONFIGURATION, severity=IssueSeverity.INFO,
         stage=IssueStage.CASE_SETUP, code="TIP_RADIUS_DIFFERS",
         message=f"Zone {zone}: the tip radius R = {typed:g} m is {percent:+.1f} % from the "
-                f"measured {measured.radius:.4g} m ({measured.source}).",
-        suggested_action="Check R: the tip-speed ratio gives the rotation speed from it. "
+                f"measured outer swept radius (blade corners) {measured.radius:.4g} m "
+                f"({measured.source}).",
+        suggested_action="Check R: the tip-speed ratio gives the rotation speed from it, "
+                         "usually with the blade mounting radius, which may be slightly "
+                         "smaller than the measured outer swept radius. "
                          "'Use measured' sets the measured value.",
         details={"field": field, "typed": typed, "measured": measured.radius,
                  "source": measured.source})

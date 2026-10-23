@@ -1486,7 +1486,7 @@ def check_vawt(config: MachineProjectConfig, meshes: Mapping[str, trimesh.Trimes
     mesh = meshes.get(config.bodies[0].name)
     if mesh is None:
         return ()
-    metrics = compute_rotor_metrics(mesh.vertices, vawt.rotor.axis)
+    metrics = compute_rotor_metrics(mesh.vertices, vawt.rotor.axis, faces=mesh.faces)
     limits = (thresholds or MachineThresholds()).vawt
     return tuple(i for i in check_vawt_config(vawt, mesh, metrics, limits)
                  if i.code in VAWT_ONLY_CHECKS)

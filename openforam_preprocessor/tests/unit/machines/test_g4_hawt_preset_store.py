@@ -51,7 +51,9 @@ def test_three_blade_rotor_is_measured_about_its_axis(rotor_path: Path) -> None:
     assert abs(box.centre[1]) > 0.1
     assert rotor.centre == pytest.approx((0.0, 0.0, 0.0), abs=1e-6)
     assert rotor.diameter == pytest.approx(1.0013, abs=1e-3)  # tip r 0.5 plus the chord corner
-    assert box.diameter is not None and box.diameter < rotor.diameter
+    # The box measure's D (its extent normal to the axis) misses the far blade tip.
+    extent = next(c.diameter for c in box.candidates if c.axis is Axis.X)
+    assert extent < rotor.diameter
     assert (rotor.axial_min, rotor.axial_max) == pytest.approx((-0.08, 0.08))  # the hub
 
 
