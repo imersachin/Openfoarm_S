@@ -13,14 +13,26 @@ from __future__ import annotations
 import functools
 import re
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from core.artifacts.hashing import sha256_json
+from core.config.models import LengthUnit
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage
-from machines.config import MachineProjectConfig, MachineType, PatchType, SourceKind
+from machines.config import (
+    ImportedMesh,
+    MachineParts,
+    MachineProjectConfig,
+    MachineType,
+    MeshPart,
+    PatchType,
+    SourceKind,
+)
 from machines.msh_import.checks import no_cell_zone
 from machines.msh_import.detect import MeshFileInfo, file_sha256, inspect_mesh_file
+from machines.msh_import.parts import prefixed
 
 _MESH_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_.:+-]*$")
 # The VAWT workflow's rules (flow axis, presets) need its own geometry.
@@ -195,22 +207,141 @@ def _patch_issues(config: MachineProjectConfig, info: MeshFileInfo) -> list[Issu
     return found
 
 
-def _units_issues(config: MachineProjectConfig, info: MeshFileInfo,
-                  limits: MshThresholds) -> list[Issue]:
-    mesh = config.imported_mesh
-    assert mesh is not None
+def _units_issues(units: LengthUnit, info: MeshFileInfo, limits: MshThresholds,
+                  field: str = "imported_mesh.source_units", what: str = "the mesh",
+                  ) -> list[Issue]:
     if info.box is None:
         return []
-    factor = mesh.source_units.to_metres
-    extent = max(h - lo for lo, h in zip(*info.box, strict=True)) * factor
+    extent = max(h - lo for lo, h in zip(*info.box, strict=True)) * units.to_metres
     if limits.min_extent_m <= extent <= limits.max_extent_m:
         return []
     return [_issue(
         IssueSeverity.WARNING, "MSH_UNITS_SUSPECT",
-        f"In {mesh.source_units.value} the mesh is {extent:.4g} m across, outside "
+        f"In {units.value} {what} is {extent:.4g} m across, outside "
         f"{limits.min_extent_m:g}-{limits.max_extent_m:g} m.",
         "Check the units against the bounding box.", category=IssueCategory.UNITS,
-        field="imported_mesh.source_units", extent_m=extent)]
+        field=field, extent_m=extent)]
+
+
+# --- a machine of several files (M2b) ------------------------------------------------------------
+
+def machine_info(mesh: MachineParts) -> MeshFileInfo:
+    """The files read as the one mesh they make: each part's patches and cell
+    zones under its prefix, its zone <prefix>, the periodic patches left out
+    (stitched away), the declared cells times the passages. The zone, pair and
+    patch checks of a single file run on it unchanged."""
+    return machine_info_of([(p.prefix, p.source_path,
+                             {n for q in p.periodic for n in (q.first, q.second)},
+                             p.passages or 1) for p in mesh.parts])
+
+
+def machine_info_of(parts: Sequence[tuple[str, Path, set[str], int]]) -> MeshFileInfo:
+    """machine_info of (prefix, file, periodic patch names, passages) per part."""
+    first, _ = read_mesh_file(parts[0][1])
+    patches: list[str] = []
+    kinds: dict[str, str] = {}
+    zones: list[str] = []
+    cells: int | None = 0
+    size = 0
+    for prefix, path, periodic, passages in parts:
+        info, _ = read_mesh_file(path)
+        size += info.size
+        for name in info.patches:
+            if name in periodic:
+                continue
+            used = prefixed(prefix, name)
+            patches.append(used)
+            if name in info.patch_kinds:
+                kinds[used] = info.patch_kinds[name]
+        zones += [prefix, *(prefixed(prefix, z) for z in info.cell_zones)]
+        cells = (None if cells is None or info.declared_cells is None
+                 else cells + info.declared_cells * passages)
+    return MeshFileInfo(path=first.path, size=size, format=first.format, patches=tuple(patches),
+                        patch_kinds=kinds, cell_zones=tuple(zones), declared_cells=cells)
+
+
+def mesh_digest(mesh: ImportedMesh | MachineParts) -> str | None:
+    """What the import report's sha256 is of: the file's content, or for a
+    machine of several files the files with their prefixes, units and passages."""
+    if isinstance(mesh, ImportedMesh):
+        return mesh.sha256
+    return sha256_json([[p.prefix, read_mesh_file(p.source_path)[1], p.source_units.value,
+                         p.passages] for p in mesh.parts])
+
+
+def mesh_paths(config: MachineProjectConfig) -> list[Path]:
+    """The .msh files a project reads."""
+    mesh = config.imported_mesh
+    if mesh is None:
+        return []
+    return [p.source_path for p in mesh.parts] if isinstance(mesh, MachineParts) else [
+        mesh.source_path]
+
+
+def _part_issues(index: int, part: MeshPart, limits: MshThresholds,
+                 ) -> tuple[MeshFileInfo, list[Issue]]:
+    field = f"imported_mesh.parts.{index}"
+    info, digest = read_mesh_file(part.source_path)
+    found = [replace(i, message=f"{part.name}: {i.message}") for i in info.issues]
+    if info.format is None or any(i.is_stopping for i in info.issues):
+        return info, found
+    if digest != part.sha256:
+        found.append(_blocking(
+            "MSH_SOURCE_CHANGED", f"{part.name}: {part.source_path.name} has changed since it "
+            "was chosen.", "Choose the file again and confirm its units against the new "
+            "bounding box.", field=f"{field}.sha256", expected=part.sha256, found=digest))
+    found += _units_issues(part.source_units, info, limits, f"{field}.source_units",
+                           f"{part.name} ({part.source_path.name})")
+    if part.passages is None:
+        found.append(_blocking(
+            "PART_PASSAGES_NOT_CONFIRMED", f"{part.name}: the number of passages has not been "
+            "confirmed.", "Read the parts, then confirm the passage count found for it (or "
+            "that it is a whole ring).", "A part meshed as one passage is copied around the "
+            "axis; the count is detected from its periodic patches and confirmed, never "
+            "assumed.", field=f"{field}.passages", part=part.prefix))
+    elif (part.passages > 1) != bool(part.periodic):
+        found.append(_blocking(
+            "PART_PASSAGES_INVALID", f"{part.name}: {part.passages} passage(s) with "
+            f"{len(part.periodic)} periodic pair(s).", "Read the parts again and confirm what "
+            "is found.", "Copies are stitched at the periodic pairs; a whole ring has none.",
+            field=f"{field}.passages", part=part.prefix))
+    for pair in part.periodic:
+        for name in (pair.first, pair.second):
+            if name not in info.patches:
+                found.append(_blocking(
+                    "PART_PERIODIC_UNKNOWN", f"{part.name}: periodic patch '{name}' is not a "
+                    "patch of the file.", "Read the parts again and confirm what is found.",
+                    field=f"{field}.periodic", part=part.prefix, patch=name))
+    return info, found
+
+
+def _parts_issues(config: MachineProjectConfig, mesh: MachineParts,
+                  limits: MshThresholds) -> list[Issue]:
+    found: list[Issue] = []
+    readable = True
+    for index, part in enumerate(mesh.parts):
+        info, issues = _part_issues(index, part, limits)
+        found += issues
+        readable = readable and info.readable
+    counts = Counter(p.prefix for p in mesh.parts)
+    for prefix in sorted(p for p, c in counts.items() if c > 1):
+        found.append(_blocking(
+            "PART_PREFIX_DUPLICATE", f"Two parts have the prefix '{prefix}'.",
+            "Give each part its own short name: it keeps their patches and zones apart.",
+            field="imported_mesh.parts", prefix=prefix))
+    paths = Counter(str(p.source_path) for p in mesh.parts)
+    for path in sorted(p for p, c in paths.items() if c > 1):
+        found.append(_blocking(
+            "PART_FILE_DUPLICATE", f"{Path(path).name} is used by two parts.",
+            "Remove one of them.", field="imported_mesh.parts", path=path))
+    if not readable or any(i.code in ("PART_PREFIX_DUPLICATE", "PART_PERIODIC_UNKNOWN")
+                           for i in found):
+        return found
+    info = machine_info(mesh)
+    found += _zone_issues(config, info)
+    found += _pair_issues(config, info)
+    found += _patch_issues(config, info)
+    return found
 
 
 def check_imported_mesh(config: MachineProjectConfig,
@@ -225,6 +356,8 @@ def check_imported_mesh(config: MachineProjectConfig,
             "MSH_MACHINE_NOT_SUPPORTED", f"A {config.machine.value} project cannot use an "
             "imported mesh.", "To use an imported VAWT mesh, create a Custom project.",
             field="machine"))
+    if isinstance(mesh, MachineParts):
+        return (*found, *_parts_issues(config, mesh, limits))
     info, digest = read_mesh_file(mesh.source_path)
     found.extend(info.issues)
     if info.format is None or any(i.is_stopping for i in info.issues):
@@ -239,5 +372,5 @@ def check_imported_mesh(config: MachineProjectConfig,
     found += _zone_issues(config, info)
     found += _pair_issues(config, info)
     found += _patch_issues(config, info)
-    found += _units_issues(config, info, limits)
+    found += _units_issues(mesh.source_units, info, limits)
     return tuple(found)

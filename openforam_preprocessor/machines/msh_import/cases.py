@@ -49,6 +49,7 @@ MERGED_CASE = "merged"
 SCRATCH_CASE = "imported_scratch"
 RESAVED = "resaved.msh"  # in cases/imported/: the MSH 2.2 copy gmshToFoam reads
 AMI_MATCH_TOLERANCE = "0.0001"
+BAFFLES_LOG = "02_baffles.log"  # mergeOrSplitBaffles -detectOnly, in logs/merged/
 
 
 def binary_control_dict() -> str:
@@ -183,6 +184,10 @@ class ImportCases:
     retype: dict[str, str]
     expected: dict[str, str]
     ami: tuple[tuple[str, str], ...] = ()  # ami_sides
+    # checkMesh -allTopology (M2a). A machine of several files (M2b) checks
+    # without it (23 M: 23.5 GB / 90 s against 31.9 GB / 170 s) and counts the
+    # baffles with mergeOrSplitBaffles -detectOnly instead (9.2 GB / 7.8 s).
+    all_topology: bool = True
 
     def merged_steps(self) -> tuple[Step, ...]:
         root = f"cases/{MERGED_CASE}"
@@ -208,13 +213,27 @@ class ImportCases:
         root = f"cases/{MERGED_CASE}"
         # One pass (M2a evidence 5): the checks, the bad faces and cells as VTK
         # for ParaView, and the cell fields for the per-zone counts (quality.py).
+        topology = ("-allTopology",) if self.all_topology else ()
         steps = [Step("merged_checkMesh", "run", root,
-                      ("checkMesh", "-case", ".", "-allTopology", "-meshQuality",
+                      ("checkMesh", "-case", ".", *topology, "-meshQuality",
                        "-writeSets", "vtk", "-writeFields", WRITE_FIELDS))]
+        if not self.all_topology:  # second, so its log is BAFFLES_LOG
+            steps.append(Step("merged_baffles", "run", root,
+                              ("mergeOrSplitBaffles", "-case", ".", "-detectOnly")))
         if ami:
             steps.append(Step("merged_amiWeights", "run", root, (
                 "postProcess", "-case", ".", "-dict", AMI_WEIGHTS_DICT, "-constant")))
         return tuple(steps)
+
+    def check_kind(self, step: Step) -> str:
+        """The resource model of a check step (resources.py)."""
+        if step.argv[0] == "checkMesh":
+            return "checkMesh" if self.all_topology else "checkMeshTopology"
+        return "baffles" if step.argv[0] == "mergeOrSplitBaffles" else "amiWeights"
+
+    def check_executables(self) -> tuple[str, ...]:
+        return ("checkMesh", "postProcess",
+                *(() if self.all_topology else ("mergeOrSplitBaffles",)))
 
 
 def _set(root: str, name: str, patch: str, key: str, value: str) -> Step:

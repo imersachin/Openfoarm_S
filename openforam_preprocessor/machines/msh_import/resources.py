@@ -18,6 +18,15 @@ E0 (peak RSS and wall time) and the model per step:
 - one step of the revolution check (moveDynamicMesh -checkAMI): 23 M 15.7 GB,
   85 s a step: 0.7 kB and 3.7 us a cell a step
 
+A machine of several files (M2b, the same 23 M machine):
+
+- the assembly (copies, stitches, merges; machines.msh_import.parts): rings GV
+  7.9 M 61 s / 7.5 GB, RU 10.8 M 136 s / 10.2 GB, the merges 133 s / 18.2 GB:
+  0.95 kB and 14.4 us a cell of the machine
+- checkMesh without -allTopology (-meshQuality, sets, fields): 23.5 GB / 90 s:
+  1.05 kB and 3.9 us a cell; mergeOrSplitBaffles -detectOnly in its place for
+  the baffles: 9.2 GB / 7.8 s: 0.4 kB and 0.34 us a cell
+
 Weak evidence, said where it is shown: one machine, four parts and one
 assembly; the cell types alone change the figures about 2 times.
 """
@@ -50,12 +59,17 @@ MODELS = {
     "views": Model((470.0, 470.0), (2.0e-6, 2.0e-6)),
     "amiWeights": Model((400.0, 400.0), (0.4e-6, 0.4e-6)),
     "revolution_step": Model((700.0, 700.0), (3.7e-6, 3.7e-6)),
+    "assembly": Model((950.0, 950.0), (14.4e-6, 14.4e-6)),
+    "checkMeshTopology": Model((1050.0, 1050.0), (3.9e-6, 3.9e-6)),
+    "baffles": Model((400.0, 400.0), (0.34e-6, 0.34e-6)),
 }
 CONVERT_RAM_PER_BYTE = 5.5
 CONVERT_S_PER_MB = 0.013
 LABELS = {"convert": "conversion", "surface": "boundary surface", "checkMesh": "checkMesh",
           "views": "views for the 3D pane", "amiWeights": "AMI weights",
-          "revolution_step": "one step of the revolution check"}
+          "revolution_step": "one step of the revolution check",
+          "assembly": "assembly of the parts", "checkMeshTopology": "checkMesh",
+          "baffles": "baffle count"}
 
 
 @dataclass(frozen=True)

@@ -33,7 +33,8 @@ from visualization.foam_reader import FoamReadError, read_boundary
 DEFAULT_FACES = "defaultFaces"  # gmshToFoam's patch for faces in no group (E0)
 UNGROUPED = "GMSH_UNGROUPED_FACES"
 _COUNTS = re.compile(r"nCells:\s*(\d+)")
-_BAFFLES = re.compile(r"identical duplicate faces \(baffle faces\):\s*(\d+)")
+_BAFFLES = re.compile(r"identical duplicate faces \(baffle faces\):\s*(\d+)"
+                      r"|Writing\s+(\d+)\s+duplicate faces")  # mergeOrSplitBaffles
 # The names are text in a binary cellZones file too (its labels are not; M2a).
 _ZONE_NAME = re.compile(r"^\s*(\S+)\s*\n\s*\{\s*type\s+cellZone;", re.MULTILINE)
 Point = tuple[float, float, float]
@@ -161,9 +162,9 @@ def no_cell_zone(info: MeshFileInfo, name: str | None, found: Sequence[str]) -> 
 def check_baffles(check_mesh_log: str) -> tuple[Issue, ...]:
     """Wall baffles found by checkMesh (kept as two walls; not an interface)."""
     match = _BAFFLES.search(check_mesh_log)
-    if not match or int(match[1]) == 0:
+    count = int(match[1] or match[2]) if match else 0
+    if not count:
         return ()
-    count = int(match[1])
     return (_issue(
         IssueSeverity.WARNING, "MSH_BAFFLE_PAIR",
         f"The mesh has {count} baffle faces: two wall patches on the same faces (a Fluent "

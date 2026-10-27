@@ -1,5 +1,5 @@
-"""Project: name, machine type (its profile), mesh source (M1c), OpenFOAM,
-environment."""
+"""Project: name, machine type (its profile), mesh source (M1c; several .msh
+files, M2b), OpenFOAM, environment."""
 
 from __future__ import annotations
 
@@ -15,7 +15,8 @@ from app.machines_ui.sections.common import (
 )
 from app.machines_ui.sections.fields import text_field
 
-SOURCES = {"STL": "Build from STL", "MSH": "Import .msh (Fluent or Gmsh)"}
+SOURCES = {"STL": "Build from STL", "MSH": "Import .msh (Fluent or Gmsh)",
+           "PARTS": "Import several .msh files (a machine in parts)"}
 # What a mesh built from STL is made of; an imported mesh replaces all of it.
 STL_KEYS = ("bodies", "rotating_zones", "domain", "joints", "wake")
 
@@ -23,11 +24,12 @@ STL_KEYS = ("bodies", "rotating_zones", "domain", "joints", "wake")
 def set_source(draft: dict[str, object], source: str) -> None:
     """Switch the draft's mesh source. The patches of the other source cannot
     be kept (their sources differ); the saved revision changes only on Save."""
-    if source == "MSH":
+    if source in ("MSH", "PARTS"):
         for key in STL_KEYS:
             draft.pop(key, None)
         draft["rotating_zones"] = []
-        draft["imported_mesh"] = {"zones": [], "ami_pairs": []}
+        draft["imported_mesh"] = ({"zones": [], "ami_pairs": []} if source == "MSH" else
+                                  {"parts": [], "zones": [], "ami_pairs": []})
     else:
         draft.pop("imported_mesh", None)
         draft.update({"bodies": [], "rotating_zones": [], "joints": []})
@@ -40,22 +42,38 @@ def mesh_source(ctx: state.Context) -> None:
         st.caption("Mesh source: built from STL. To use an imported VAWT mesh, create a "
                    "Custom project.")
         return
-    current = "MSH" if ctx.draft.get("imported_mesh") is not None else "STL"
-    other = "STL" if current == "MSH" else "MSH"
+    current = source_of(ctx.draft)
     st.markdown(f"**Mesh source:** {SOURCES[current]}")
     mesh = ctx.draft.get("imported_mesh")
     filled = any(ctx.draft.get(k) for k in (*STL_KEYS, "patches")) or bool(
-        isinstance(mesh, dict) and mesh.get("source_path"))
-    if not filled:
-        if st.button(f"Use: {SOURCES[other]}", key="machines_mesh_source"):
-            set_source(ctx.draft, other)
-            st.rerun()
-        return
-    confirm("mesh_source", f"Switching to '{SOURCES[other]}' removes the "
-            + ("bodies, zones, domain" if current == "STL" else "imported mesh settings")
-            + " and the patch table from the draft. Revert brings them back until you save.",
-            f"Switch to: {SOURCES[other]}", lambda: set_source(ctx.draft, other),
-            button_label=f"Use: {SOURCES[other]}")
+        isinstance(mesh, dict) and (mesh.get("source_path") or mesh.get("parts")))
+    for other in (s for s in SOURCES if s != current):
+        if not filled:
+            if st.button(f"Use: {SOURCES[other]}",
+                         key=_key("machines_mesh_source", other, current)):
+                set_source(ctx.draft, other)
+                st.rerun()
+            continue
+        confirm(_key("mesh_source", other, current), f"Switching to '{SOURCES[other]}' removes the "
+                + ("bodies, zones, domain" if current == "STL" else "imported mesh settings")
+                + " and the patch table from the draft. Revert brings them back until you "
+                "save.", f"Switch to: {SOURCES[other]}",
+                lambda other=other: set_source(ctx.draft, other),  # type: ignore[misc]
+                button_label=f"Use: {SOURCES[other]}")
+
+
+def _key(base: str, source: str, current: str) -> str:
+    """A widget key per source; the switch between STL and one file keeps its
+    M1c key."""
+    return base if "PARTS" not in (source, current) else f"{base}_{source}"
+
+
+def source_of(draft: dict[str, object]) -> str:
+    """STL, MSH (one file) or PARTS (several files) for a draft."""
+    mesh = draft.get("imported_mesh")
+    if mesh is None:
+        return "STL"
+    return "PARTS" if isinstance(mesh, dict) and "parts" in mesh else "MSH"
 
 
 def render(ctx: state.Context) -> None:

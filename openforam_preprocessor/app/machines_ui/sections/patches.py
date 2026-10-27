@@ -24,11 +24,18 @@ SOURCE_KINDS = [k.value for k in SourceKind]
 
 def mesh_candidates(ctx: state.Context, mesh: dict[str, Any],
                     listed: set[Any]) -> list[dict[str, Any]]:
-    """An imported mesh's patches not listed yet and not in an AMI pair."""
+    """An imported mesh's patches not listed yet and not in an AMI pair (a
+    machine of several files: its parts' patches under their prefixes, M2b)."""
     path = mesh.get("source_path")
-    if not path:
+    if "parts" in mesh:
+        found = ctx.service.machine_inspection(ctx.draft)
+        if found is None:
+            return []
+        inspection = found
+    elif path:
+        inspection = ctx.service.inspect_mesh(Path(str(path)))
+    else:
         return []
-    inspection = ctx.service.inspect_mesh(Path(str(path)))
     paired = {n for p in mesh.get("ami_pairs") or [] for n in (p.get("first"), p.get("second"))}
     return [{"name": n, "kind": "MESH_PATCH", "ref": n,
              "suggested": inspection.suggested_types[n].value

@@ -20,6 +20,7 @@ import streamlit as st
 from app.components.upload_notes import MSH_UPLOAD_NOTE
 from app.components.widgets import render_issues
 from app.machines_ui import state
+from app.machines_ui.sections import machine_parts
 from app.machines_ui.sections.common import apply_form, list_at, section_header, section_issues
 from app.machines_ui.sections.fields import (
     UNIT_LABELS,
@@ -36,6 +37,7 @@ from machines.msh_import.inspection import MeshInspection
 UPLOADED = "machines_mesh_uploaded"  # the file_id of the last stored upload
 FOLDER = "machines_disk_folder"  # the folder the picker shows
 WAITING = "machines_disk_copy"  # the copy whose file is used when it is done
+WAITING_PARTS = "machines_disk_copy_parts"  # copies added as parts when done (M2b)
 
 
 def mesh_of(draft: dict[str, Any]) -> dict[str, Any]:
@@ -79,15 +81,27 @@ def file_choice(ctx: state.Context) -> None:
     copies(ctx)
 
 
+def take(ctx: state.Context, path: str, sha256: str | None) -> None:
+    """Use the file, or add it as a part of a machine of several files (M2b)."""
+    if machine_parts.is_parts(ctx.draft):
+        machine_parts.add_part(ctx, path, sha256)
+    else:
+        choose(ctx, path, sha256)
+
+
 def use_file(ctx: state.Context, path: Path) -> None:
     """Use a picked file: one on a Windows drive is copied into the project first
     (read in place it is 6.5 times slower, E0), any other is used where it is."""
     if disk.on_windows_drive(path):
         # Not started again when this same file is being copied: its progress shows.
         target, _ = ctx.service.start_mesh_copy(path)
-        st.session_state[WAITING] = str(target)
+        if machine_parts.is_parts(ctx.draft):  # several copies may run; each is added
+            waiting = st.session_state.get(WAITING_PARTS) or []
+            st.session_state[WAITING_PARTS] = [*waiting, str(target)]
+        else:
+            st.session_state[WAITING] = str(target)
         return
-    choose(ctx, str(path), ctx.service.inspect_mesh(path).sha256)
+    take(ctx, str(path), ctx.service.inspect_mesh(path).sha256)
 
 
 def _size(size: int) -> str:
@@ -153,6 +167,13 @@ def picker(ctx: state.Context) -> None:
         return
     st.caption(f"{len(found.files)} .msh file(s). The summary reads only the file's "
                "headers; using a file reads it fully.")
+    parts = machine_parts.is_parts(ctx.draft)
+    if parts and len(found.files) > 1 and st.button(
+            f"Add all {len(found.files)} files as parts", key="machines_disk_add_all"):
+        for entry in found.files:
+            if ctx.service.mesh_summary(entry.path).format:
+                use_file(ctx, entry.path)
+        st.rerun()
     for entry in found.files:
         summary = ctx.service.mesh_summary(entry.path)
         text, use = st.columns([6, 1])
@@ -164,7 +185,8 @@ def picker(ctx: state.Context) -> None:
                                 else "")
                    if summary.format else summary.note)
         text.markdown(f"`{entry.name}` · {_size(entry.size)} · {when}  \n{details}")
-        label = "Copy and use" if disk.on_windows_drive(entry.path) else "Use"
+        label = (("Copy and add" if disk.on_windows_drive(entry.path) else "Add") if parts
+                 else "Copy and use" if disk.on_windows_drive(entry.path) else "Use")
         if use.button(label, key=f"machines_disk_use_{entry.path}",
                       disabled=not summary.format):
             use_file(ctx, entry.path)
@@ -195,6 +217,12 @@ def copies(ctx: state.Context) -> None:
             ctx.service.forget_mesh_copy(target)
             choose(ctx, str(target), copy["sha256"] or ctx.service.inspect_mesh(target).sha256)
             st.rerun(scope="app")
+        waiting = st.session_state.get(WAITING_PARTS) or []
+        if state_ == "done" and str(target) in waiting:
+            st.session_state[WAITING_PARTS] = [w for w in waiting if w != str(target)]
+            ctx.service.forget_mesh_copy(target)
+            take(ctx, str(target), copy["sha256"] or ctx.service.inspect_mesh(target).sha256)
+            st.rerun(scope="app")
         if state_ == "done":
             # A copy finished while the page was away (refreshed): offer it.
             if mesh_of(ctx.draft).get("source_path") != str(target):
@@ -202,7 +230,7 @@ def copies(ctx: state.Context) -> None:
                 text.caption(f"Copied into the project and checked: `{name}`.")
                 if use.button("Use it", key=f"machines_copy_use_{name}"):
                     ctx.service.forget_mesh_copy(target)
-                    choose(ctx, str(target), copy["sha256"] or None)
+                    take(ctx, str(target), copy["sha256"] or None)
                     st.rerun(scope="app")
                 if drop.button("Dismiss", key=f"machines_copy_drop_{name}"):
                     ctx.service.forget_mesh_copy(target)
@@ -348,6 +376,9 @@ def names_used(draft: dict[str, Any], inspection: MeshInspection) -> list[dict[s
 
 
 def render(ctx: state.Context) -> None:
+    if machine_parts.is_parts(ctx.draft):  # several files (M2b)
+        machine_parts.render(ctx, picker, copies, pairs_view, names_used)
+        return
     section_header(ctx, "imported_mesh")
     file_choice(ctx)
     path = mesh_of(ctx.draft).get("source_path")

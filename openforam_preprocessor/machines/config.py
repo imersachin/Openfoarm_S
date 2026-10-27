@@ -23,9 +23,11 @@ from typing import Annotated, Any, Literal
 from pydantic import (
     BaseModel,
     ConfigDict,
+    Discriminator,
     Field,
     SerializationInfo,
     SerializerFunctionWrapHandler,
+    Tag,
     model_serializer,
     model_validator,
 )
@@ -377,6 +379,60 @@ class ImportedMesh(BaseModel):
     ami_pairs: tuple[MeshAmiPair, ...] = ()
 
 
+class MeshPart(BaseModel):
+    """One .msh file of a machine made of several (M2b; docs/m2b_assembly_notes.md):
+    a spiral casing, the guide vanes, the runner or the draft tube, as one
+    passage or the whole ring. Its patches and cell zones are used under
+    `<prefix>_<name>` (owner: always prefixed), and a cell zone `<prefix>`
+    holds all of its cells."""
+
+    model_config = _STRICT
+
+    name: str = Field(min_length=1, max_length=40, pattern=r"^[A-Za-z0-9][A-Za-z0-9 _-]*$")
+    prefix: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9]{0,7}$")
+    source_path: Path
+    source_units: LengthUnit  # required: confirmed against the file's box, never assumed
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    # Copies about the machine axis that make the whole ring: 1 for a part that is
+    # already 360 deg. None until the user confirms the detected count.
+    passages: PositiveInt | None = None
+    # The file's periodic patch pairs (its own names), as detected and confirmed;
+    # stitched after the copies are made. Empty for a whole ring.
+    periodic: tuple[MeshAmiPair, ...] = ()
+
+
+class MachineParts(BaseModel):
+    """A machine meshed elsewhere as several .msh files (M2b): each converted,
+    prefixed, copied around the machine axis and stitched into its ring, then
+    merged into one mesh, which takes the place of a single imported file
+    (cases/imported/). The rotating zone is a part's cell zone `<prefix>`."""
+
+    model_config = _STRICT
+
+    parts: tuple[MeshPart, ...]
+    axis: Axis  # the machine axis (direction); required
+    origin: Vec3  # a point on the machine axis
+    zones: tuple[MeshZone, ...] = ()
+    ami_pairs: tuple[MeshAmiPair, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_parts(self) -> MachineParts:
+        if not self.parts:
+            raise ValueError("A machine of several mesh files needs at least one part.")
+        return self
+
+
+def _mesh_kind(value: Any) -> str:
+    """Which mesh source a raw or built imported_mesh is: several files or one."""
+    if isinstance(value, dict):
+        return "parts" if "parts" in value else "file"
+    return "parts" if isinstance(value, MachineParts) else "file"
+
+
+MeshSource = Annotated[Annotated[ImportedMesh, Tag("file")]
+                       | Annotated[MachineParts, Tag("parts")], Discriminator(_mesh_kind)]
+
+
 class ExportConfig(BaseModel):
     model_config = _STRICT
 
@@ -413,10 +469,11 @@ class MachineProjectConfig(BaseModel):
     # Case setup (section 9; G6). Absent: mesh only. Never a meshing input
     # (invariant 14).
     physics: PhysicsConfig | None = None
-    # A mesh imported from a .msh file (M1-MSH) instead of STL bodies, zones and
-    # a domain (both at once is MSH_WITH_STL). Absent: left out when written, so
-    # an existing project's file and hash stay what they were.
-    imported_mesh: ImportedMesh | None = None
+    # A mesh imported from a .msh file (M1-MSH), or from several (MachineParts,
+    # M2b), instead of STL bodies, zones and a domain (both at once is
+    # MSH_WITH_STL). Absent: left out when written, so an existing project's file
+    # and hash stay what they were.
+    imported_mesh: MeshSource | None = None
 
     @model_serializer(mode="wrap")
     def _leave_out_absent_mesh(self, handler: SerializerFunctionWrapHandler,

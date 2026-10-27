@@ -23,7 +23,7 @@ import time
 import uuid
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +53,7 @@ from machines.config import (
     CylinderZone,
     ImportedDomain,
     ImportedMesh,
+    MachineParts,
     MachineProjectConfig,
     MachineType,
     Motion,
@@ -63,11 +64,12 @@ from machines.config import (
 from machines.heavy_lock import HeavyLock
 from machines.joints import propose_joints
 from machines.mesh_folder import MeshFolderReport, check_mesh_folder
-from machines.msh_import import resources
+from machines.msh_import import part_views, resources
 from machines.msh_import import surface as mesh_surface
 from machines.msh_import.cases import IMPORTED_CASE, MERGED_CASE, SCRATCH_CASE, converter
 from machines.msh_import.inspection import MeshInspection, PatchGeometry, patch_geometry
 from machines.msh_import.inspection import inspect as inspect_mesh_file_view
+from machines.msh_import.parts import convert_case as part_case_convert
 from machines.msh_import.pipeline import (
     IMPORT_REPORT,
     SCRATCH_RECORD,
@@ -90,7 +92,12 @@ from machines.msh_import.revolution import (
     unavailable,
 )
 from machines.msh_import.scan import Summary, summarize
-from machines.msh_import.validation import read_mesh_file
+from machines.msh_import.validation import (
+    machine_info,
+    mesh_digest,
+    mesh_paths,
+    read_mesh_file,
+)
 from machines.operations import MACHINE_EXECUTABLES, operations_for
 from machines.pipeline import (
     CASE_SETUP_REPORT,
@@ -279,7 +286,7 @@ class _CheckCache:
     def get(self, config: MachineProjectConfig,
             thresholds: MachineThresholds) -> CheckedConfig:
         stats = []
-        mesh = [config.imported_mesh.source_path] if config.imported_mesh else []
+        mesh = mesh_paths(config)
         for path in (*stl_paths(config), *mesh):
             try:
                 info = path.stat()
@@ -535,6 +542,59 @@ class MachineService(RunControl):
             heavy.release()
             lock.release()
 
+    def part_views(self, raw: Mapping[str, Any]) -> list[part_views.PartView]:
+        """Each part of a draft machine of several files (M2b): its file, whether
+        it has been read (converted at scale 1) and the passages found."""
+        mesh = raw.get("imported_mesh")
+        if not isinstance(mesh, Mapping):
+            return []
+        return part_views.views(self.root, mesh, self._tool_identity)
+
+    def machine_inspection(self, raw: Mapping[str, Any]) -> MeshInspection | None:
+        """The draft's parts as one mesh: prefixed patches and zones, suggested
+        types (the patch table and AMI pairs of a machine of several files)."""
+        mesh = raw.get("imported_mesh")
+        return part_views.machine_inspection(mesh) if isinstance(mesh, Mapping) else None
+
+    def read_parts(self, raw: Mapping[str, Any]) -> tuple[Issue, ...]:
+        """Convert each part not read yet at scale 1 into cases/part_<P>_convert/
+        with its surface (M2b): its box, and the passage count found about the
+        axis. Under the run lock and the heavy-step lock; a run reuses them."""
+        mesh = raw.get("imported_mesh")
+        pending = (part_views.to_read(self.root, mesh, self._tool_identity)
+                   if isinstance(mesh, Mapping) else [])
+        if not pending:
+            return ()
+        lock = RunLock(self.root)
+        busy = lock.acquire()
+        if busy is not None:
+            return (busy,)
+        heavy = HeavyLock()
+        if heavy.acquire() is not None:
+            lock.release()
+            return (_issue(
+                IssueSeverity.WARNING, "HEAVY_STEP_RUNNING",
+                f"Another heavy step is running: {heavy.holder_text() or 'unknown'}.",
+                "Read the parts when it has finished."),)
+        found: list[Issue] = []
+        try:
+            names = tuple(sorted({converter(info) for _, info, _ in pending}))
+            checked = validate_environment(self._profile(), names, self._env(),
+                                           verified_versions=VERIFIED_VERSIONS)
+            if has_stopping_issue(checked):
+                return tuple(checked)
+            for prefix, info, digest in pending:
+                heavy.describe(self.root, f"reading part {prefix}", None)
+                result = asyncio.run(convert_scratch(
+                    self.root, info, digest, runner=self.pipeline.runner, env=self.env,
+                    tool=self._tool_identity((converter(info),)),
+                    name=part_case_convert(prefix)))
+                found += [replace(i, message=f"{prefix}: {i.message}") for i in result.issues]
+        finally:
+            heavy.release()
+            lock.release()
+        return tuple(found)
+
     def check_ami_revolution(self) -> RevolutionResult:
         """The saved imported mesh's AMI weights over one revolution, the zone
         turned without solving the flow (optional; machines.msh_import.revolution).
@@ -764,10 +824,22 @@ class MachineService(RunControl):
         areas = mesh_surface.patch_areas(folder, sorted(set(refs.values())))
         return {name: areas[ref] * factor**2 for name, ref in refs.items() if ref in areas}
 
-    def _converted_mesh(self, mesh: ImportedMesh) -> tuple[Path, float] | None:
+    def _converted_mesh(self, mesh: ImportedMesh | MachineParts) -> tuple[Path, float] | None:
         """A converted mesh of this same file, with original patch names: the
         imported one, else the scratch conversion; and the length factor from
-        its points to metres in the configured units. None before conversion."""
+        its points to metres in the configured units. None before conversion.
+        A machine of several files (M2b): its assembled mesh, in metres, with
+        the prefixed names the configuration uses."""
+        if isinstance(mesh, MachineParts):
+            folder = self.root / "cases" / IMPORTED_CASE
+            try:
+                found = json.loads((self.root / IMPORT_REPORT).read_text("utf-8"))
+            except (OSError, ValueError):
+                return None
+            if (isinstance(found, dict) and found.get("sha256") == mesh_digest(mesh)
+                    and mesh_surface.load(folder) is not None):
+                return folder, 1.0
+            return None
         records = ((IMPORTED_CASE, self.root / IMPORT_REPORT, "scale_to_metres"),
                    (SCRATCH_CASE, self.root / "cases" / SCRATCH_CASE / SCRATCH_RECORD, "scale"))
         for case, record, key in records:
@@ -888,7 +960,8 @@ class MachineService(RunControl):
             "domain": not raw.get("domain"),
             "zones": not raw.get("rotating_zones"),
             "patches": not raw.get("patches"),
-            "imported_mesh": not (raw.get("imported_mesh") or {}).get("source_path"),
+            "imported_mesh": not ((raw.get("imported_mesh") or {}).get("source_path")
+                                  or (raw.get("imported_mesh") or {}).get("parts")),
             **dict.fromkeys(PHYSICS_SECTIONS, physics is None),
         }
         if physics is not None:
@@ -1125,8 +1198,12 @@ class MachineService(RunControl):
                           else (self.saved_config(), ()))
         if config is None:
             return MachinePreflightView(None, None, issues)
-        if config.imported_mesh is not None:
+        if isinstance(config.imported_mesh, MachineParts):
+            cells, basis = machine_info(config.imported_mesh).declared_cells, (
+                "a file gives no cell count")
+        elif config.imported_mesh is not None:
             cells, basis = preflight_cells(read_mesh_file(config.imported_mesh.source_path)[0])
+        if config.imported_mesh is not None:
             if cells is None:
                 return MachinePreflightView(None, None, (*issues, _issue(
                     IssueSeverity.INFO, "RESOURCE_NOT_ASSESSED", f"Not assessed: {basis}.",
@@ -1450,7 +1527,8 @@ class MachineService(RunControl):
             report = json.loads((self.root / IMPORT_REPORT).read_text("utf-8"))
         except (OSError, ValueError):
             return None
-        if own is None or not isinstance(report, dict) or report.get("sha256") != mesh.sha256:
+        if own is None or not isinstance(report, dict) or report.get("sha256") != mesh_digest(
+                mesh):
             return None
         return mesh_surface.config_zone_radius(self.root / "cases" / IMPORTED_CASE, own)
 

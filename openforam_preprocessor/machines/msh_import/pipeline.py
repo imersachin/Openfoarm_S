@@ -40,6 +40,7 @@ from core.artifacts.hashing import files_under, hash_files, sha256_json
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage, has_stopping_issue
 from machines.assembly import AMI_WEIGHTS_DICT, Step
 from machines.case_generator import _fv_schemes, _fv_solution
+from machines.config import ImportedMesh, MachineParts
 from machines.heavy_lock import HeavyLock
 from machines.mesh_folder import (
     MeshExpectation,
@@ -53,6 +54,7 @@ from machines.mesh_folder import (
 from machines.msh_import import quality, resources, surface
 from machines.msh_import.ami_detail import pair_details
 from machines.msh_import.cases import (
+    BAFFLES_LOG,
     IMPORTED_CASE,
     MERGED_CASE,
     SCRATCH_CASE,
@@ -167,7 +169,7 @@ def _mesh_files(root: Path, case: str) -> list[Path]:
 
 @dataclass(frozen=True)
 class _Plan:
-    info: MeshFileInfo
+    info: MeshFileInfo | None  # None for a machine of several files (parts_run.py)
     digest: str
     factor: float
     cases: ImportCases
@@ -192,7 +194,7 @@ class ImportRun:
         self.pipe, self.run = pipe, run
         mesh = run.config.imported_mesh
         assert mesh is not None
-        self.mesh = mesh
+        self.mesh: ImportedMesh | MachineParts = mesh
         self.heavy = HeavyLock()
         self.key = ""  # the file's content hash, once read (the resources history)
         self.estimates: dict[str, resources.Estimate] = {}
@@ -202,9 +204,37 @@ class ImportRun:
     def _tool(self, names: tuple[str, ...]) -> str:
         return self.pipe._tool(self.run.config, names)
 
+    # --- what a several-file run (parts_run.py) does its own way ---------------------------
+
+    def _plan(self) -> _Plan:
+        mesh = self.mesh
+        assert isinstance(mesh, ImportedMesh)
+        info, digest = read_mesh_file(mesh.source_path)
+        assert digest is not None  # validation: the file is readable and unchanged
+        return _Plan(info, digest, mesh.source_units.to_metres, import_cases(self.run.config))
+
+    def _import_executables(self, plan: _Plan) -> tuple[str, ...]:
+        assert plan.info is not None
+        return import_executables(plan.info, plan.factor)
+
+    def _step_kinds(self, op: str) -> tuple[str, ...]:
+        return STEP_KINDS.get(op, ())
+
+    def _file_bytes(self, plan: _Plan) -> int | None:
+        return plan.info.size if plan.info is not None else None
+
+    def _declared_cells(self, plan: _Plan) -> int | None:
+        assert plan.info is not None
+        return preflight_cells(plan.info)[0]
+
+    def _converter(self, plan: _Plan) -> str:
+        assert plan.info is not None
+        return converter(plan.info)
+
     def _inputs(self, plan: _Plan, op: str) -> dict[str, str]:
         root = self.run.root
         if op == IMPORT:
+            assert plan.info is not None
             dictionaries = [root / "cases" / IMPORTED_CASE / r for r in sorted(plan.cases.imported)]
             return {**hash_files(root, dictionaries), "source": plan.digest,
                     "converter": converter(plan.info), "resave": str(needs_resave(plan.info)),
@@ -251,16 +281,14 @@ class ImportRun:
                         "was started.")
         physics = check_physics(config, (), pipe.case_thresholds)
         run.issues.extend(physics)
-        info, digest = read_mesh_file(self.mesh.source_path)
-        assert digest is not None  # validation: the file is readable and unchanged
-        plan = _Plan(info, digest, self.mesh.source_units.to_metres, import_cases(config))
-        self.key = digest
+        plan = self._plan()
+        self.key = plan.digest
         _write(run.root, IMPORTED_CASE, plan.cases.imported)
         _write(run.root, MERGED_CASE, plan.cases.merged)
 
         ops = (IMPORT, ASSEMBLE, CHECK_MESH, MESH_VIEWS)
-        names = {IMPORT: import_executables(info, plan.factor), ASSEMBLE: ASSEMBLE_EXECUTABLES,
-                 CHECK_MESH: CHECK_EXECUTABLES, MESH_VIEWS: VIEW_EXECUTABLES}
+        names = {IMPORT: self._import_executables(plan), ASSEMBLE: ASSEMBLE_EXECUTABLES,
+                 CHECK_MESH: plan.cases.check_executables(), MESH_VIEWS: VIEW_EXECUTABLES}
         may_run: dict[str, bool] = {}
         for op in ops:
             stale = force or not run.store.check(op, self._inputs(plan, op)).reusable
@@ -280,7 +308,7 @@ class ImportRun:
             if any(may_run.values()):
                 self._step_preflight(plan, [op for op in ops if may_run[op]])
             if may_run[IMPORT]:
-                self._preflight(info, allow_risk)
+                self._preflight(plan, allow_risk)
             if any(may_run.values()):
                 current = run.root / MESH_REPORT
                 if current.is_file():
@@ -350,7 +378,7 @@ class ImportRun:
             run.store.record(op, inputs, outputs)
 
     def _seconds(self, op: str) -> float | None:
-        found = [self.estimates[k].seconds for k in STEP_KINDS.get(op, ())
+        found = [self.estimates[k].seconds for k in self._step_kinds(op)
                  if k in self.estimates]
         return sum(found) if found else None
 
@@ -389,8 +417,7 @@ class ImportRun:
         hexes = re.search(r"^\s*hexahedra:\s+(\d+)", log, re.MULTILINE)
         if cells and int(cells[1]):
             return int(cells[1]), (int(hexes[1]) / int(cells[1]) if hexes else None)
-        found, _ = preflight_cells(plan.info)
-        return found, None
+        return self._declared_cells(plan), None
 
     def _step_preflight(self, plan: _Plan, ops: list[str]) -> None:
         """Each heavy step's RAM and time from the E0 models (resources.py),
@@ -400,9 +427,9 @@ class ImportRun:
         cells, hexes = self._cells(plan)
         free = self.pipe.system_probe(run.root).available_ram_bytes
         history = resources.read_history(run.root)
-        estimates = [resources.estimate(kind, cells or 0, hexes, plan.info.size, history,
-                                        self.key)
-                     for op in ops for kind in STEP_KINDS.get(op, ())
+        estimates = [resources.estimate(kind, cells or 0, hexes, self._file_bytes(plan),
+                                        history, self.key)
+                     for op in ops for kind in self._step_kinds(op)
                      if cells or kind == "convert"]
         rows = [{**e.as_dict(), "label": resources.LABELS[e.step]} for e in estimates]
         path = run.root / STEP_RESOURCES
@@ -439,10 +466,11 @@ class ImportRun:
 
     # --- preflight -----------------------------------------------------------------------
 
-    def _preflight(self, info: MeshFileInfo, allow_risk: bool) -> None:
+    def _preflight(self, plan: _Plan, allow_risk: bool) -> None:
         """The resource check on the file's own cell count (preflight_cells)."""
         run, config = self.run, self.run.config
-        cells, basis = preflight_cells(info)
+        assert plan.info is not None
+        cells, basis = preflight_cells(plan.info)
         path = run.root / PREFLIGHT_REPORT
         path.parent.mkdir(parents=True, exist_ok=True)
         if cells is None:
@@ -509,8 +537,7 @@ class ImportRun:
         zero_log = run.root / "logs" / ZERO_CASE / CHECK_MESH_LOG
         zero_log.unlink(missing_ok=True)  # a pass of an earlier check is not this one's
         steps = plan.cases.check_steps(bool(self.mesh.ami_pairs))
-        logs = [Path((await self._step(step, index, "checkMesh" if index == 1
-                                       else "amiWeights")).log_path)
+        logs = [Path((await self._step(step, index, plan.cases.check_kind(step))).log_path)
                 for index, step in enumerate(steps, start=1)]
         if quality.needs_zero_pass(_read(logs[0])):
             logs.append(await self._zero_pass())
@@ -521,7 +548,7 @@ class ImportRun:
         merged mesh): the faces at or below 0 in tet quality and determinant
         (owner, after M2a). The case is removed after; its log stays."""
         case = quality.prepare_zero_case(self.run.root / "cases" / MERGED_CASE,
-                                         _converter_files())
+                                         converter_files())
         try:
             result = await self._step(Step(f"{ZERO_CASE}_checkMesh", "run",
                                            f"cases/{ZERO_CASE}",
@@ -556,6 +583,7 @@ class ImportRun:
 
     async def _import(self, plan: _Plan, force: bool) -> list[Path]:
         run = self.run
+        assert plan.info is not None and isinstance(self.mesh, ImportedMesh)
         case = run.root / "cases" / IMPORTED_CASE
         shutil.rmtree(case / POLY_MESH, ignore_errors=True)
         (case / "resaved.msh").unlink(missing_ok=True)
@@ -610,7 +638,7 @@ class ImportRun:
         run = self.run
         folder = run.root / "cases" / case
         zones = sorted(mesh_zone_names(folder))
-        surface.prepare(folder, zones, _converter_files())
+        surface.prepare(folder, zones, converter_files())
         log = ""
         for index, step in enumerate(surface.steps(case, zones), start=1):
             log = _read(Path((await self._step(step, index, "surface")).log_path))
@@ -652,6 +680,7 @@ class ImportRun:
         record says it is this file, converted by this tool at scale 1 (owner
         answer 4: no second conversion). It is checked like any conversion."""
         run = self.run
+        assert plan.info is not None
         scratch = run.root / "cases" / SCRATCH_CASE
         expected = scratch_record(plan.info, plan.digest, self._tool(
             (converter(plan.info),)))
@@ -675,6 +704,7 @@ class ImportRun:
         """reports/mesh_import.json: the converter, the OpenFOAM version, the file
         and what the converted mesh holds (owner answer 3)."""
         run = self.run
+        assert plan.info is not None and isinstance(self.mesh, ImportedMesh)
         case = run.root / "cases" / IMPORTED_CASE
         identity = tool_identity(run.config.openfoam_profile,
                                  import_executables(plan.info, plan.factor), self.pipe._env())
@@ -707,6 +737,10 @@ class ImportRun:
 
     # --- mesh validation -----------------------------------------------------------------
 
+    def _expected_regions(self) -> int | None:
+        """How many unconnected regions the mesh should have (None: not checked)."""
+        return None
+
     def _expectation(self, plan: _Plan) -> MeshExpectation:
         return MeshExpectation(
             name="imported", patches=plan.cases.expected,
@@ -734,7 +768,16 @@ class ImportRun:
             extra += [self._ami_detail(i) for i in check_ami_weights(
                 ami_text, expected.ami_pairs, self.pipe.thresholds.imported_ami_weights_range,
                 when=AT_REST)]
-        extra += check_baffles(check_text)
+        extra += check_baffles(check_text) or check_baffles(_read(logs / BAFFLES_LOG))
+        regions, expected_regions = region_count(check_text), self._expected_regions()
+        if expected_regions is not None and regions is not None and regions != expected_regions:
+            extra.append(_issue(
+                IssueSeverity.BLOCKING, IssueCategory.MESHING, IssueStage.MESH_VALIDATION,
+                "MACHINE_REGIONS", f"The assembled mesh has {regions} separate regions; its "
+                f"{expected_regions} part(s) should give {expected_regions}.",
+                f"Read logs/{MERGED_CASE}/{CHECK_MESH_LOG} and each part's checkMesh log "
+                "(logs/part_<prefix>/): a part is in pieces.", found=regions,
+                expected=expected_regions))
         if any(f.level == quality.BLOCKING for f in findings) and \
                 report.validity is not ValidityStatus.INVALID:
             # Never reached: a BLOCKING finding keeps CHECKMESH_FAILURE (owner review).
@@ -750,11 +793,11 @@ class ImportRun:
         payload = report.as_dict()
         payload["run_id"] = run.run_id
         payload["config_sha256"] = sha256_json(run.config.model_dump(mode="json"))
-        payload["regions"] = {"expected": None, "found": region_count(check_text)}
+        payload["regions"] = {"expected": expected_regions, "found": regions}
         payload["ami_weights"] = [asdict(w) for w in parse_ami_weights(ami_text)]
         payload["ami_weights_when"] = AT_REST
         payload["ami_weights_range"] = list(self.pipe.thresholds.imported_ami_weights_range)
-        payload["imported"] = {"report": IMPORT_REPORT, "converter": converter(plan.info)}
+        payload["imported"] = {"report": IMPORT_REPORT, "converter": self._converter(plan)}
         payload["checkmesh_findings"] = [asdict(f) for f in findings]
         payload["quality_by_zone"] = self._by_zone()
         payload["quality_sets"] = f"cases/{MERGED_CASE}/{SETS_DIR}/"
@@ -875,31 +918,32 @@ class ScratchResult:
 
 async def convert_scratch(root: Path, info: MeshFileInfo, digest: str, *,
                           runner: OpenFOAMRunner, env: Mapping[str, str] | None,
-                          tool: str) -> ScratchResult:
-    """Convert at scale 1 into cases/imported_scratch/ and read the box of the
-    converted mesh ("from the converted mesh"). The caller holds the run lock."""
-    case = root / "cases" / SCRATCH_CASE
+                          tool: str, name: str = SCRATCH_CASE) -> ScratchResult:
+    """Convert at scale 1 into cases/<name>/ (imported_scratch, or a part's
+    conversion, M2b) and read the box of the converted mesh ("from the
+    converted mesh"). The caller holds the run lock."""
+    case = root / "cases" / name
     shutil.rmtree(case, ignore_errors=True)
-    for relative, body in _converter_files().items():
+    for relative, body in converter_files().items():
         OpenFOAMFileWriter.write_if_changed(case / relative, body)
-    logs = root / "logs" / SCRATCH_CASE
+    logs = root / "logs" / name
     log: Path | None = None
-    for index, step in enumerate(convert_steps(info, info.path, SCRATCH_CASE), start=1):
+    for index, step in enumerate(convert_steps(info, info.path, name), start=1):
         result = await runner.run_step(
-            _meshing_step(step, index, SCRATCH_CASE), case_root=case, env=env, logs_dir=logs)
+            _meshing_step(step, index, name), case_root=case, env=env, logs_dir=logs)
         log = Path(result.log_path)
         if result.status is not RunStatus.SUCCESS:
             return ScratchResult(None, converter(info), log, (*result.issues, _issue(
                 IssueSeverity.BLOCKING, IssueCategory.EXECUTION, IssueStage.MESH_IMPORT,
                 "MSH_CONVERT_FAILED", f"{step.argv[0]} failed on {info.path.name}.",
-                f"Read logs/{SCRATCH_CASE}/; export the mesh again.",
+                f"Read logs/{name}/; export the mesh again.",
                 log=str(log), tail=list(result.stderr_tail or result.tail)[-20:])))
-    box = await _scratch_surface(root, case, runner=runner, env=env)
+    box = await _scratch_surface(root, case, runner=runner, env=env, name=name)
     if box is None:
         return ScratchResult(None, converter(info), log, (_issue(
             IssueSeverity.BLOCKING, IssueCategory.EXECUTION, IssueStage.MESH_IMPORT,
             "MSH_CONVERT_FAILED", "The converter wrote no mesh whose boundary could be read.",
-            f"Read logs/{SCRATCH_CASE}/ and logs/{surface.surface_case(SCRATCH_CASE)}/; "
+            f"Read logs/{name}/ and logs/{surface.surface_case(name)}/; "
             "export the mesh again.", log=str(log)),))
     low, high = box
     record = {**scratch_record(info, digest, tool), "box": [list(low), list(high)]}
@@ -908,30 +952,34 @@ async def convert_scratch(root: Path, info: MeshFileInfo, digest: str, *,
 
 
 async def _scratch_surface(root: Path, case: Path, *, runner: OpenFOAMRunner,
-                           env: Mapping[str, str] | None) -> Box | None:
+                           env: Mapping[str, str] | None, name: str = SCRATCH_CASE,
+                           ) -> Box | None:
     """The surface of the scratch conversion and the box of its boundary
     points (the mesh's box); None if either cannot be made."""
     if not has_mesh(case):
         return None
     zones = sorted(mesh_zone_names(case))
-    surface.prepare(case, zones, _converter_files())
-    name = surface.surface_case(SCRATCH_CASE)
+    surface.prepare(case, zones, converter_files())
+    made = surface.surface_case(name)
     text = ""
-    for index, step in enumerate(surface.steps(SCRATCH_CASE, zones), start=1):
-        result = await runner.run_step(_meshing_step(step, index, name),
-                                       case_root=root / "cases" / name, env=env,
-                                       logs_dir=root / "logs" / name)
+    for index, step in enumerate(surface.steps(name, zones), start=1):
+        result = await runner.run_step(_meshing_step(step, index, made),
+                                       case_root=root / "cases" / made, env=env,
+                                       logs_dir=root / "logs" / made)
         if result.status is not RunStatus.SUCCESS:
             return None
         text = _read(Path(result.log_path))
     return surface.mesh_box(case) if surface.index(case, text) else None
 
 
-def _converter_files() -> dict[str, str]:
+def converter_files() -> dict[str, str]:
     """controlDict (binary), fvSchemes, fvSolution for the converter and the
     surface cases (no quality settings)."""
     return {"system/controlDict": binary_control_dict(), "system/fvSchemes": _fv_schemes(),
             "system/fvSolution": _fv_solution()}
+
+
+_converter_files = converter_files  # its M2a name (revolution.py, the real tests)
 
 
 def _meshing_step(step: Step, index: int, case: str) -> MeshingStep:

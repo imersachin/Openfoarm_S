@@ -20,6 +20,11 @@ Milestone U1 makes the machines app the one app: a three-step new project
   page and in the 3D pane and are applied only by the preset button (section 4).
 - D2 tunnel options, D3 transient on a static mesh, D4 test changes, port
   8502: as in the U1 plan.
+- **D5, .msh import and the stationary test (owner, 2026-10-27):** .msh import
+  is confirmed for every case type. The blade/airfoil test becomes "Foil /
+  object test (stationary)": any object with no rotating zone (airfoil,
+  hydrofoil, bluff body), air or water presets, STL or .msh, the domain sized
+  from the object.
 
 ## 2. E1: one rotor, both methods (v2512)
 
@@ -146,9 +151,30 @@ Recorded only; not built in U1.
 - Quicker studies of big machines: runner and draft tube only, a single
   passage.
 - trame for the 3D pane if plotly is not enough.
-- CAD import (STEP/IGES), a mesh-independence study, a blade generator from
-  tables, Fluent export (V7), G8 VAWT with pole.
+- A blade generator from tables, G8 VAWT with pole. (CAD import, the
+  mesh-independence study and Fluent export moved to section 6.)
 - The heavy lock for STL runs (docs/msh_import_notes.md 13.6).
+- Prepare a case to run on a cluster: decomposePar, a run script, a README
+  (owner, 2026-10-27, M2b answer 1).
+- "Open in ParaView" (owner, 2026-10-27): ParaView 6.2.0 is installed
+  (`C:\Program Files\ParaView 6.2.0\bin\paraview.exe`). The app finds
+  paraview.exe itself (Program Files, the Start-menu shortcut's target, PATH),
+  saves the path in the app settings, and offers a "locate ParaView" picker
+  when it is not found.
+
+## 6. Next milestone after U1: mesh upgrades
+
+Recorded only (owner, 2026-10-27); planned after U1, with evidence first.
+
+a) Airfoil/hydrofoil generator: NACA 4-digit or a Selig .dat coordinate file
+   to a 2D or extruded C-grid (Gmsh or blockMesh), with layers sized from a
+   target y+.
+b) Boundary-layer coverage report per patch from snappyHexMesh, with a
+   warning and suggested fixes.
+c) CAD import (STEP/IGES) via Gmsh.
+d) Mesh-independence study: 3 meshes at a fixed ratio, GCI.
+e) Export to Fluent .msh (foamMeshToFluent, the V7 item).
+f) cfMesh as a second mesher, if it builds for v2512.
 
 Order (owner): U1-1 (this axis fix) is merged first; then M2b (multi-part
 machine from several mesh files, branch m2b-assembly); then the rest of U1

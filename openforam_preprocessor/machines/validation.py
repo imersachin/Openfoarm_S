@@ -153,7 +153,26 @@ def parse_config(raw: Any) -> tuple[MachineProjectConfig | None, tuple[Issue, ..
     try:
         return MachineProjectConfig.model_validate(raw), ()
     except ValidationError as exc:
-        return None, tuple(_rename(issue) for issue in issues_from_validation_error(exc))
+        return None, tuple(_rename(_untagged(issue))
+                           for issue in issues_from_validation_error(exc))
+
+
+# The tag of the imported_mesh union (machines.config.MeshSource) in an error's
+# location: "imported_mesh.file.source_units" is the field imported_mesh.source_units.
+_MESH_TAG = re.compile(r"'?imported_mesh\.(?:file|parts)(?=[.'])")
+
+
+def _untagged(issue: Issue) -> Issue:
+    field = str(issue.details.get("field", ""))
+    if not _MESH_TAG.match(field):
+        return issue
+
+    def strip(text: str) -> str:
+        return _MESH_TAG.sub(lambda m: m[0].split(".")[0], text)
+
+    return dataclasses.replace(issue, message=strip(issue.message),
+                               suggested_action=strip(issue.suggested_action),
+                               details={**issue.details, "field": strip(field + ".")[:-1]})
 
 
 # (pattern of the field path, code, message, action) for values never assumed.
@@ -193,6 +212,12 @@ def _rename(issue: Issue) -> Issue:
             "UNITS_NOT_CHOSEN", "The units of the mesh file have not been chosen.",
             "Choose them against the bounding box; they are never assumed.",
             category=IssueCategory.UNITS, field=field,
+        )
+    if re.fullmatch(r"imported_mesh\.parts\.\d+\.source_units", field):  # M2b
+        return _blocking(
+            "UNITS_NOT_CHOSEN", f"The units of mesh part {int(field.split('.')[2]) + 1} have "
+            "not been chosen.", "Choose them against the part's bounding box; they are never "
+            "assumed.", category=IssueCategory.UNITS, field=field,
         )
     if field.endswith("source_units"):
         return _blocking(

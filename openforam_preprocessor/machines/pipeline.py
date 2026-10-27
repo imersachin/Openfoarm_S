@@ -56,7 +56,7 @@ from core.workflow.run_lock import RunLock, process_create_time
 from core.workflow.run_records import write_run_record
 from machines.assembly import MERGED_CASE, MachineCaseGenerator, MachineCases, Step, meshing_steps
 from machines.case_generator import CASES_DIR, DomainCase
-from machines.config import InterfaceType, MachineProjectConfig, MachineType
+from machines.config import InterfaceType, MachineParts, MachineProjectConfig, MachineType
 from machines.mesh_checks import (
     cell_zone_names,
     check_assembly,
@@ -305,8 +305,11 @@ class MachinePipeline:
     async def _run(self, run: _Run, force: bool, allow_risk: bool) -> MachineRunResult:
         config = run.config
         if config.imported_mesh is not None:  # a .msh mesh instead of STL (M1-MSH)
-            from machines.msh_import.pipeline import ImportRun  # it imports this module
-            return await ImportRun(self, run).run_all(force, allow_risk)
+            # They import this module.
+            from machines.msh_import.parts_run import PartsRun
+            from machines.msh_import.pipeline import ImportRun
+            kind = PartsRun if isinstance(config.imported_mesh, MachineParts) else ImportRun
+            return await kind(self, run).run_all(force, allow_risk)
 
         # 1. Validation gate: ERROR or BLOCKING stops before any OpenFOAM command.
         run.status(VALIDATE)
