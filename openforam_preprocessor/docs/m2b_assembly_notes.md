@@ -470,3 +470,20 @@ Seen, not changed: checkMesh writes 912,665 nonManifoldPoints for the RU + DT
 mesh (the ACMI couple and its blockage share their faces' points); the flow
 arrow of an imported mesh is not drawn (it reads the setup scene, which an
 imported mesh does not have; as before M2b).
+
+### After the merge (owner's open points)
+
+- Schema version 4 (M2b's new fields), tested as M1's 2 -> 3:
+  tests/unit/mesh_import/test_m2b_schema_version.py (a version 3 project
+  loads and meshes unchanged; on 1b417ad a version 4 project, parts included,
+  is "written by a newer version"). The version assertions of
+  test_g6_case_setup and test_m1_schema_version changed to 4 (owner approved).
+- Non-manifold points: not the ACMI. The runner + draft tube built with plain
+  AMI on RU-DT gives the same 912,665 conflicting points: they are the points
+  of the draft tube file's interior faceZone int_FLUID (2,650,880 internal
+  faces, "multiply connected (shared edge)" in checkMesh's faceZone topology
+  check). The fixture machine (AMI only) has 428, the whole machine 3.85 M.
+  Reported to the owner; then (owner) an INFO, MSH_UNUSED_FACE_ZONE ("an
+  unused interior zone from the file"), which keeps a mesh "passed", and the
+  option to drop the files' faceZones at import (machine parts only).
+- The flow arrow of an imported mesh: on the U1 list.

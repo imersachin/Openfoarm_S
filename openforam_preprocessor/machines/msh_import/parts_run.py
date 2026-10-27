@@ -38,6 +38,7 @@ from machines.msh_import.cases import (
 )
 from machines.msh_import.checks import (
     check_converted,
+    face_zone_names,
     has_mesh,
     mesh_cells,
     mesh_zone_names,
@@ -123,6 +124,18 @@ class PartsRun(ImportRun):
 
     def _converter(self, plan: _Plan) -> str:
         return ", ".join(self._converters())
+
+    DROPS_FACE_ZONES = True
+
+    def _face_zone_owners(self) -> dict[str, str]:
+        """faceZone -> the part file(s) holding it (zones keep their names: two
+        files' zones of one name are one zone after the merge)."""
+        found: dict[str, list[str]] = {}
+        for part, _, _ in self.files:
+            folder = self.run.root / "cases" / parts.convert_case(part.prefix)
+            for zone in face_zone_names(folder):
+                found.setdefault(zone, []).append(f"{part.name} ({part.source_path.name})")
+        return {zone: " and ".join(files) for zone, files in found.items()}
 
     def _expected_regions(self) -> int | None:
         """One per part, less one per stitched interface (it joins two parts)."""
@@ -305,8 +318,9 @@ class PartsRun(ImportRun):
                                             parts.prefix_patch_dict(
                                                 part.prefix,
                                                 [(p.name, p.patch_type) for p in found]))
+        dropped = sorted(face_zone_names(folder)) if self.machine.drop_face_zones else []
         OpenFOAMFileWriter.write_if_changed(folder / "system/topoSetDict", parts.prefix_zone_dict(
-            part.prefix, sorted(mesh_zone_names(folder))))
+            part.prefix, sorted(mesh_zone_names(folder)), dropped))
         OpenFOAMFileWriter.write_if_changed(folder / parts.EMPTY_PATCH_DICT,
                                             empty_patch_dict())
         origin, axis = parts.axis_point(self.machine)

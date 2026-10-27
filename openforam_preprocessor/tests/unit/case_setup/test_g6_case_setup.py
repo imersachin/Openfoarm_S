@@ -341,11 +341,11 @@ def test_flow_rate_needs_a_measurable_inlet(tmp_path: Path) -> None:
 # --- configuration -----------------------------------------------------------------------------
 
 def test_physics_is_optional_and_versioned(hawt: dict[str, Any]) -> None:
-    assert MACHINE_SCHEMA_VERSION == 3  # 3: M1-MSH imported_mesh (owner approved)
+    assert MACHINE_SCHEMA_VERSION == 4  # 3: M1-MSH imported_mesh, 4: M2b parts (owner approved)
     old = {k: v for k, v in hawt.items() if k != "physics"}
     old["schema_version"] = 1  # a G1-G5 project: migrates, no physics
     config = model(old)
-    assert config.schema_version == 3 and config.physics is None
+    assert config.schema_version == 4 and config.physics is None
     round_trip = model(model(hawt).model_dump(mode="json"))
     assert round_trip == model(hawt)
     with pytest.raises(ValueError):

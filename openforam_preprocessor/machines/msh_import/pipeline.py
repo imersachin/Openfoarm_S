@@ -73,9 +73,11 @@ from machines.msh_import.checks import (
     check_baffles,
     check_converted,
     check_zones,
+    face_zone_names,
     has_mesh,
     mesh_cells,
     mesh_zone_names,
+    unused_face_zones,
 )
 from machines.msh_import.detect import MeshFileInfo
 from machines.msh_import.validation import read_mesh_file
@@ -742,6 +744,14 @@ class ImportRun:
         """The cyclicACMI pairs (a machine of several files, M2b-2)."""
         return interfaces.partial(self.mesh) if isinstance(self.mesh, MachineParts) else ()
 
+    DROPS_FACE_ZONES = False  # the option is a machine-parts one (PartsRun)
+
+    def _face_zone_owners(self) -> dict[str, str]:
+        """faceZone -> the file it came from (for the INFO on unused zones)."""
+        name = getattr(self.mesh, "source_path", None)
+        folder = self.run.root / "cases" / IMPORTED_CASE
+        return dict.fromkeys(face_zone_names(folder), Path(name).name if name else "the file")
+
     def _expected_regions(self) -> int | None:
         """How many unconnected regions the mesh should have (None: not checked)."""
         return None
@@ -778,6 +788,8 @@ class ImportRun:
             extra += interfaces.weights_notes(partial, ami_text, AT_REST)
         baffles = _read(run.root / "logs" / IMPORTED_CASE / BAFFLES_LOG)
         extra += check_baffles(check_text) or check_baffles(baffles)
+        extra += unused_face_zones(check_text, self._face_zone_owners(),
+                                   can_drop=self.DROPS_FACE_ZONES)
         regions, expected_regions = region_count(check_text), self._expected_regions()
         if expected_regions is not None and regions is not None and regions != expected_regions:
             extra.append(_issue(
@@ -794,9 +806,11 @@ class ImportRun:
         if any(i.is_stopping for i in extra):
             report = replace(report, validity=ValidityStatus.INVALID, status="failed")
         issues = (*report.issues, *extra)
+        # An unused faceZone takes no part in the case: noted, not a reason to review.
+        to_review = [i for i in issues if i.code != "MSH_UNUSED_FACE_ZONE"]
         report = replace(report, issues=issues, status=(
             "failed" if report.status == "failed" or has_stopping_issue(issues)
-            else "review" if issues else "passed"))
+            else "review" if to_review else "passed"))
         path = run.root / MESH_REPORT
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = report.as_dict()

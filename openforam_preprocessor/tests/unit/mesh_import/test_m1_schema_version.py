@@ -39,7 +39,7 @@ PROJECT = Path(__file__).resolve().parents[3]
 
 
 def test_the_version_is_3() -> None:
-    assert MACHINE_SCHEMA_VERSION == 3 and MAIN_SCHEMA_VERSION == 2
+    assert MACHINE_SCHEMA_VERSION == 4 and MAIN_SCHEMA_VERSION == 2  # 4: M2b
 
 
 # --- a version 2 project under version 3 ------------------------------------------------------
@@ -54,8 +54,8 @@ def test_a_version_2_project_loads_as_version_3(tmp_path: Path) -> None:
     config, issues = parse_config(data)
 
     assert config is not None and issues == ()
-    assert config.schema_version == 3
-    assert config == MachineProjectConfig.model_validate({**data, "schema_version": 3})
+    assert config.schema_version == 4
+    assert config == MachineProjectConfig.model_validate({**data, "schema_version": 4})
 
 
 def as_version_2(path: Path, key: str) -> None:
@@ -82,7 +82,7 @@ def test_a_version_2_project_meshed_before_the_upgrade_is_reused(tmp_path: Path)
     as_version_2(service.root / LAST_MESHED_PATH, "config")
 
     again = service.saved_config()  # opened by the version 3 code
-    assert again is not None and again.schema_version == 3
+    assert again is not None and again.schema_version == 4
     sections = service.analyse({**hawt, "schema_version": 2},
                                default_registry().get("hawt")).sections  # type: ignore[arg-type]
     assert all(not s.stale_because for s in sections.values())
@@ -150,7 +150,7 @@ def test_older_code_says_a_version_3_project_is_from_a_newer_version(
     else:
         data = configs.rotating(mesh_file("rotating_41.msh", tmp_path))
     saved = MachineProjectConfig.model_validate(data).model_dump(mode="json")
-    assert saved["schema_version"] == 3
+    assert saved["schema_version"] == 4
     found = open_on_main(main_tree, saved, tmp_path)
 
     assert found["supported"] == 2 and not found["loaded"]

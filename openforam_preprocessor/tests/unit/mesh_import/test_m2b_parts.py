@@ -348,3 +348,40 @@ def test_a_part_or_the_axis_not_chosen_is_said_plainly() -> None:
         ("PART_NOT_CHOSEN", "Mesh part 3 has no name."),
         ("PART_NOT_CHOSEN", "Mesh part 3 has no prefix (short name)."),
         ("MACHINE_AXIS_NOT_CHOSEN", "A point on the machine axis has not been chosen.")]
+
+
+CHECK_LOG = """Checking faceZone topology for multiply connected surfaces...
+                FaceZone    Faces   Points                  Surface topology
+    RU_r1_per1_5RU_r1_per2_5CutFaceZone   100800   103935  ok (non-closed singly connected)
+               int_FLUID  2650880   912985  multiply connected (shared edge)
+  <<Writing 912665 conflicting points to set nonManifoldPoints
+
+Checking basic cellZone addressing...
+"""
+
+
+def test_an_unused_interior_face_zone_is_an_info() -> None:
+    from machines.msh_import.checks import unused_face_zones
+
+    found = unused_face_zones(CHECK_LOG, {"int_FLUID": "Draft tube (DT-HighRe-uns.msh)"})
+    assert [(i.code, i.severity.value) for i in found] == [("MSH_UNUSED_FACE_ZONE", "INFO")]
+    assert "912,665 non-manifold points" in found[0].message
+    assert "int_FLUID (2,650,880 faces, from Draft tube (DT-HighRe-uns.msh))" in found[0].message
+    assert "Drop the files' own faceZones" in found[0].suggested_action
+    seams_only = CHECK_LOG.replace("int_FLUID  2650880   912985  multiply connected",
+                                   "int_FLUID  2650880   912985  ok (non-closed")
+    assert unused_face_zones(seams_only, {}) == ()
+    # Only the files' own zones are reported; a single-file import has no option.
+    assert unused_face_zones(CHECK_LOG, {}) == ()
+    single = unused_face_zones(CHECK_LOG, {"int_FLUID": "DT-HighRe-uns.msh"}, can_drop=False)
+    assert single[0].suggested_action == "Nothing to do."
+
+
+def test_the_files_face_zones_can_be_dropped_at_import() -> None:
+    text = parts.prefix_zone_dict("DT", ["FLUID"], ["int_FLUID"])
+    assert "{ name int_FLUID; type faceZoneSet; action remove; }" in text
+    assert "faceZoneSet" not in parts.prefix_zone_dict("DT", ["FLUID"])
+    data = machine()
+    data["imported_mesh"]["drop_face_zones"] = True
+    config, _ = parse_config(data)
+    assert config is not None and config.imported_mesh.drop_face_zones  # type: ignore[union-attr]

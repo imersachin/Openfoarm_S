@@ -154,6 +154,9 @@ Recorded only; not built in U1.
 - A blade generator from tables, G8 VAWT with pole. (CAD import, the
   mesh-independence study and Fluent export moved to section 6.)
 - The heavy lock for STL runs (docs/msh_import_notes.md 13.6).
+- Flow arrow for imported meshes (owner, after M2b): the 3D pane draws no
+  flow direction for an imported mesh (it reads the setup scene, which an
+  imported mesh does not have); take it from the inlet patches of the mesh.
 - Prepare a case to run on a cluster: decomposePar, a run script, a README
   (owner, 2026-10-27, M2b answer 1).
 - "Open in ParaView" (owner, 2026-10-27): ParaView 6.2.0 is installed

@@ -351,6 +351,16 @@ def render(ctx: state.Context, picker: Any, copies: Any, pairs_view: Any,
     read_view(ctx, views)
     if views:
         rotating_view(ctx, views)
+        mesh = mesh_of(ctx.draft)
+        drop = st.checkbox(
+            "Drop the files' own faceZones at import", value=bool(mesh.get("drop_face_zones")),
+            key="machines_parts_drop_face_zones",
+            help="A Fluent interior zone is kept as a faceZone that the case does not use "
+                 "(checkMesh reports its points as non-manifold). The stitch seams are kept.")
+        if drop != bool(mesh.get("drop_face_zones")):
+            mesh["drop_face_zones"] = drop
+            state.bump_generation()
+            st.rerun()
     inspection = ctx.service.machine_inspection(ctx.draft)
     if inspection is not None:
         interfaces_view(ctx, inspection)

@@ -37,6 +37,11 @@ _BAFFLES = re.compile(r"identical duplicate faces \(baffle faces\):\s*(\d+)"
                       r"|Writing\s+(\d+)\s+duplicate faces")  # mergeOrSplitBaffles
 # The names are text in a binary cellZones file too (its labels are not; M2a).
 _ZONE_NAME = re.compile(r"^\s*(\S+)\s*\n\s*\{\s*type\s+cellZone;", re.MULTILINE)
+_FACE_ZONE_NAME = re.compile(r"^\s*(\S+)\s*\n\s*\{\s*type\s+faceZone;", re.MULTILINE)
+# checkMesh's faceZone topology table (-allTopology or not) and its set of the
+# points where those surfaces are not manifold.
+_FACE_ZONE_ROW = re.compile(r"^\s*(\S+)\s+(\d+)\s+(\d+)\s+multiply connected", re.MULTILINE)
+_CONFLICTING = re.compile(r"Writing\s+(\d+)\s+conflicting points to set nonManifoldPoints")
 Point = tuple[float, float, float]
 
 
@@ -54,6 +59,46 @@ def mesh_zone_names(folder: Path) -> set[str]:
     if not path.is_file():
         return set()
     return set(_ZONE_NAME.findall(path.read_text(encoding="utf-8", errors="replace")))
+
+
+def face_zone_names(folder: Path) -> set[str]:
+    """faceZone names of a mesh (text in a binary faceZones file too)."""
+    path = poly_mesh_dir(folder) / "faceZones"
+    if not path.is_file():
+        return set()
+    return set(_FACE_ZONE_NAME.findall(path.read_bytes().decode("latin-1")))
+
+
+def unused_face_zones(check_mesh_log: str, owners: dict[str, str],
+                      can_drop: bool = True) -> tuple[Issue, ...]:
+    """INFO for checkMesh's non-manifold points on a faceZone the case does not
+    use (owner, after M2b): a Fluent interior zone kept by the converter
+    (the draft tube's int_FLUID, 2.65 M faces: 912,665 points). `owners`:
+    zone -> the file(s) it came from: only those zones are reported (a stitch
+    seam is the case's own); `can_drop`: the project offers dropping them."""
+    section = check_mesh_log.split("Checking faceZone topology", 1)
+    if len(section) < 2:
+        return ()
+    table = section[1].split("Checking basic cellZone", 1)[0]
+    zones = [(n, int(f)) for n, f, _ in _FACE_ZONE_ROW.findall(table) if n in owners]
+    points = _CONFLICTING.search(table)
+    if not zones or not points:
+        return ()
+    names = ", ".join(f"{n} ({faces:,} faces, from {owners[n]})"
+                      for n, faces in zones)
+    return (Issue(
+        category=IssueCategory.MESHING, severity=IssueSeverity.INFO,
+        stage=IssueStage.MESH_VALIDATION, code="MSH_UNUSED_FACE_ZONE",
+        message=f"checkMesh wrote {int(points[1]):,} non-manifold points (all faceZones): "
+                f"on {names}, an unused interior zone from the file; it takes no part in the "
+                "case.",
+        suggested_action="Nothing to do." + (
+            " To leave such zones out, choose \"Drop the files' own faceZones at import\" "
+            "under the machine's parts and run again." if can_drop else ""),
+        explanation="A converter keeps a Fluent interior zone as a faceZone of every internal "
+                    "face; checkMesh's faceZone topology check reports it as multiply "
+                    "connected (the same with an AMI or an ACMI interface, M2b).",
+        details={"zones": [n for n, _ in zones], "points": int(points[1])}),)
 
 
 def check_zones(folder: Path, zones: Sequence[str], name: str) -> tuple[Issue, ...]:

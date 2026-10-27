@@ -229,12 +229,15 @@ def prefix_patch_dict(prefix: str, patches: Sequence[tuple[str, str]]) -> str:
     return foam_header("createPatchDict") + f"\npointSync false;\n\npatches\n(\n{entries}\n);\n"
 
 
-def prefix_zone_dict(prefix: str, zones: Sequence[str]) -> str:
+def prefix_zone_dict(prefix: str, zones: Sequence[str],
+                     drop_face_zones: Sequence[str] = ()) -> str:
     """topoSet: each cell zone again as <P>_<zone>, the old one removed, the
     sets removed; a file without a cell zone gets <P>_cells of all its cells
     (an empty set inverted). The zone <P> is made after the merge
-    (cases.part_zones_dict)."""
-    actions: list[str] = []
+    (cases.part_zones_dict). `drop_face_zones`: the file's faceZones removed
+    (the owner's option: unused by the case; seams are made later)."""
+    actions: list[str] = [f"{{ name {z}; type faceZoneSet; action remove; }}"
+                          for z in drop_face_zones]
     for zone in zones:
         new = prefixed(prefix, zone)
         actions += [
@@ -355,7 +358,8 @@ def ring_inputs(part: MeshPart, mesh: MachineParts, convert: dict[str, Any],
             "scale": part.source_units.to_metres, "prefix": part.prefix,
             "passages": part.passages,
             "periodic": [[p.first, p.second] for p in part.periodic],
-            "origin": list(origin), "axis": list(axis), "tool": tool}
+            "origin": list(origin), "axis": list(axis), "tool": tool,
+            **({"drop_face_zones": True} if mesh.drop_face_zones else {})}
 
 
 def ring_record(folder: Path) -> dict[str, Any] | None:

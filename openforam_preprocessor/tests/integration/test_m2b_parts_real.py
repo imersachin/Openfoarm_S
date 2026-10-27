@@ -125,6 +125,41 @@ def test_the_machine_is_assembled_from_its_parts(tmp_path: Path) -> None:
     assert again.succeeded and "machine_import_mesh" in again.reused
 
 
+def test_the_files_own_face_zones_are_noted_or_dropped(tmp_path: Path) -> None:
+    """Each fixture file's interior zone (interior-1) is kept by the converter as
+    a faceZone of every internal face: checkMesh's non-manifold points on it
+    are an INFO (the mesh still passes); with drop_face_zones it is removed at
+    import and the stitch seams stay (owner, after M2b)."""
+    from machines.msh_import.checks import face_zone_names
+
+    seams = {"GV_per1GV_per2CutFaceZone", "RU_per_aRU_per_bCutFaceZone"}
+    for drop in (False, True):
+        service = MachineService(tmp_path / f"drop_{drop}")
+        data = unconfirmed()
+        read_and_confirm(service, data)
+        data["imported_mesh"]["drop_face_zones"] = drop
+        service.save(data)
+        config = service.saved_config()
+        assert config is not None
+        result = service.pipeline.run_sync(service.root, config)
+        assert result.succeeded, (result.message, [i.message for i in result.issues])
+        root = service.root
+        assert face_zone_names(root / "cases" / parts.convert_case("GV")) == {"interior-1"}
+        kept = set() if drop else {"interior-1"}
+        for case in ("imported", "merged"):
+            assert face_zone_names(root / "cases" / case) == seams | kept
+        notes = [i for i in result.issues if i.code == "MSH_UNUSED_FACE_ZONE"]
+        assert len(notes) == (0 if drop else 1)
+        if notes:
+            assert notes[0].severity.value == "INFO"
+            assert notes[0].details["zones"] == ["interior-1"]
+            assert "from Casing (casing.msh) and Guide vanes (vanes.msh) and Runner " \
+                   "(runner.msh)" in notes[0].message
+            assert "Drop the files' own faceZones at import" in notes[0].suggested_action
+        mesh = json.loads((root / "reports/mesh_quality_report.json").read_text("utf-8"))
+        assert mesh["status"] == "passed"
+
+
 def test_a_changed_part_rebuilds_its_ring_only(tmp_path: Path) -> None:
     service = MachineService(tmp_path / "project")
     data = unconfirmed()

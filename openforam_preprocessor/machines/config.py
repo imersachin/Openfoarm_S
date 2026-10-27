@@ -53,7 +53,10 @@ from vawt.config import (
 # such a project as written by a newer version instead of naming an unknown
 # field. A version 1 or 2 project loads unchanged and meshes from the same
 # inputs; only the saved number changes (see MachineProjectConfig).
-MACHINE_SCHEMA_VERSION = 3
+# 4 (M2b): the several-file mesh source (imported_mesh.parts, interfaces), so
+# that older code refuses such a project as written by a newer version instead
+# of naming an unknown field; a version 1-3 project loads unchanged.
+MACHINE_SCHEMA_VERSION = 4
 
 _STRICT = ConfigDict(frozen=True, allow_inf_nan=False, extra="forbid")
 # A name OpenFOAM accepts as a patch, zone or region name.
@@ -436,6 +439,9 @@ class MachineParts(BaseModel):
     zones: tuple[MeshZone, ...] = ()
     ami_pairs: tuple[MeshAmiPair, ...] = ()
     interfaces: tuple[MeshInterface, ...] = ()  # between parts (M2b-2)
+    # The files' own faceZones left out at import (owner, after M2b): a Fluent
+    # interior zone the case does not use. The stitch seams are made after.
+    drop_face_zones: bool = False
 
     @model_validator(mode="after")
     def validate_parts(self) -> MachineParts:
