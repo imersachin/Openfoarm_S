@@ -114,3 +114,38 @@ def test_the_patch_table_lists_the_parts_patches_under_their_prefixes(msh: MshUi
     assert {"SC_inlet", "RU_outlet", "GV_vane_in", "RU_bottom", "SC_bottom"} <= set(refs)
     assert "GV_bottom" in refs and len(refs) == len(set(refs)) == 4 + 6 + 6
     assert {p["source"]["kind"] for p in draft(app)["patches"]} == {"MESH_PATCH"}
+
+
+# --- M2b-2: interfaces ---------------------------------------------------------------------------
+
+def with_roles(msh: MshUi) -> AppTest:
+    app, _ = with_parts(msh)
+    for index, role in enumerate(("SC", "RU", "GV")):
+        ok(app.selectbox(key=f"machines_part_role_{index}").set_value(role).run())
+    return app
+
+
+def test_candidates_wait_for_two_parts_read_and_the_axis(msh: MshUi) -> None:
+    app = with_roles(msh)
+    assert "Candidates are shown once two parts are read" in texts(app)
+
+
+def test_an_interface_is_added_by_hand_its_joint_changed_and_removed(msh: MshUi) -> None:
+    app = with_roles(msh)
+    app.text_input(key="machines_iface_name").set_value("GV_RU").run()
+    app.multiselect(key="machines_iface_first").set_value(["GV_vane_out"]).run()
+    app.multiselect(key="machines_iface_second").set_value(["RU_run_in"]).run()
+    app.selectbox(key="machines_iface_joint").set_value("ACMI").run()
+    ok(app.button(key="machines_iface_add").click().run())
+    assert mesh(app)["interfaces"] == [{"name": "GV_RU", "first": ["GV_vane_out"],
+                                        "second": ["RU_run_in"], "joint": "ACMI"}]
+    assert "GV_vane_out" not in app.multiselect(key="machines_iface_first").options
+    ok(app.selectbox(key="machines_interface_joint_0").set_value("AMI").run())
+    assert mesh(app)["interfaces"][0]["joint"] == "AMI"
+    go(app, "patches")
+    ok(app.button(key="machines_add_patches").click().run())
+    refs = {p["source"]["ref"] for p in draft(app)["patches"]}
+    assert "GV_vane_out" not in refs and "RU_run_in" not in refs  # coupled, not typed
+    go(app, "imported_mesh")
+    ok(app.button(key="machines_interface_remove_0").click().run())
+    assert mesh(app)["interfaces"] == []

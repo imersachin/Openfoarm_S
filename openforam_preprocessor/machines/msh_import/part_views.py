@@ -17,7 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from machines.msh_import import parts, surface
+from core.config.models import LengthUnit
+from machines.msh_import import interfaces, parts, surface
 from machines.msh_import.cases import converter
 from machines.msh_import.detect import MeshFileInfo
 from machines.msh_import.inspection import MeshInspection, suggest_types
@@ -31,6 +32,7 @@ _WORDS = {"SC": ("sc", "spiral", "casing", "volute", "sv", "stay"),
           "RU": ("ru", "runner", "rotor", "impeller", "wheel"),
           "DT": ("dt", "draft", "draught", "diffuser")}
 _AXES = {"x": (1.0, 0.0, 0.0), "y": (0.0, 1.0, 0.0), "z": (0.0, 0.0, 1.0)}
+_UNITS = {u.value: u.to_metres for u in LengthUnit}
 
 
 def suggest_role(path: Path) -> str | None:
@@ -53,6 +55,7 @@ class PartView:
     converted: bool  # cases/part_<P>_convert/ is this file, with its surface
     periodicity: parts.Periodicity | None  # None: not converted, or no axis yet
     note: str = ""  # why there is no periodicity
+    folder: Path | None = None  # the conversion, when converted
 
 
 def _axis(mesh: Mapping[str, Any]) -> tuple[parts.Point, parts.Point] | None:
@@ -103,12 +106,43 @@ def views(root: Path, mesh: Mapping[str, Any], tool: Any) -> list[PartView]:
             note = "not read yet"
         elif axis is None:
             note = "the machine axis is not set"
+        elif part.get("source_units") not in _UNITS and any(axis[0]):
+            note = "choose the units first (the axis point is in metres)"
         else:
+            # The conversion is at scale 1, in the file's units: so is the axis point.
+            point = parts.in_file_units(axis[0], _UNITS.get(str(part.get("source_units")),
+                                                            1.0))
             shape = surface.load(folder)
-            periodicity = parts.detect(shape, *axis) if shape is not None else None
+            periodicity = parts.detect(shape, point, axis[1]) if shape is not None else None
         found.append(PartView(index, str(part.get("name") or ""), prefix, path, info, digest,
-                              folder is not None, periodicity, note))
+                              folder is not None, periodicity, note, folder))
     return found
+
+
+def interface_candidates(found: Sequence[PartView], mesh: Mapping[str, Any],
+                         ) -> tuple[interfaces.Candidate, ...] | None:
+    """The interface candidates between the parts read so far, about the
+    machine axis, in metres (each part's units); None before the axis is set
+    or while fewer than two parts are read with their units. A part's periodic
+    patches (confirmed) are left out: they are stitched away."""
+    axis = _axis(mesh)
+    raw = mesh.get("parts") or []
+    entries: list[interfaces.Part] = []
+    for view in found:
+        part = raw[view.index] if view.index < len(raw) else None
+        units = part.get("source_units") if isinstance(part, Mapping) else None
+        if view.folder is None or units not in _UNITS or not isinstance(part, Mapping):
+            continue
+        passages = part.get("passages")
+        periodic = frozenset(str(n) for p in part.get("periodic") or []
+                             if isinstance(p, Mapping) for n in (p.get("first"), p.get("second"))
+                             if n)
+        entries.append((view.folder, view.prefix, _UNITS[str(units)],
+                        passages if isinstance(passages, int) and passages > 0 else 1,
+                        periodic))
+    if axis is None or len(entries) < 2:
+        return None
+    return interfaces.candidates(entries, *axis)
 
 
 def summary(view: PartView) -> str:

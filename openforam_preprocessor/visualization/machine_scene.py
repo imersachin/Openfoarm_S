@@ -12,6 +12,10 @@ Palette (dataviz reference instance; categorical slots for the five types
 checked with its validator, all pairs: hard gates pass, colour-blind
 separation in the warning band, hence the type in every name). Walls are
 neutral; the checkMesh problem colour is the reserved status "critical".
+
+A machine of several files (M2b-3): a legend group and a colour per part (the
+type stays in every name), the interfaces in their own colour wherever they
+are, and the cell zones' surfaces listed but drawn only when clicked.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ from machines.config import PatchType
 from machines.previews import (
     AXIS_POINT,
     BOX_CENTRE,
+    CELL_ZONE,
     CUT,
     DOMAIN,
     INTERFACE,
@@ -61,7 +66,10 @@ KIND_STYLE: dict[str, tuple[str, str, float]] = {
     PROBLEM: ("#d03b3b", "checkMesh problems", 1.0),
     AXIS_POINT: ("#4a3aa7", "Proposed axis (not applied)", 1.0),
     BOX_CENTRE: ("#8a8984", "Bounding-box centre", 1.0),
+    CELL_ZONE: ("#4a3aa7", "Cell zones", 0.25),
 }
+# One colour per part of a machine (categorical; the type is in every name).
+PART_COLOURS = ("#2a78d6", "#1baf7a", "#eda100", "#e87ba4", "#8a8984", "#72b7b2", "#b279a2")
 ARROW_STYLE = {"axis": "#8a8984", "rotation": "#eda100", "flow": "#2a78d6"}
 _FALLBACK = ("#c8c7c0", "Other", 0.5)
 
@@ -83,13 +91,20 @@ def _xyz(points: np.ndarray) -> dict[str, Any]:
 def scene_figure(scene: Scene, arrows: Sequence[Arrow] = (), title: str = "") -> go.Figure:
     """Every surface, line set, marker set and arrow of a scene."""
     figure = go.Figure()
+    parts = list(dict.fromkeys(s.group for s in scene.surfaces if s.group and not s.hidden))
     for surface in scene.surfaces:
         colour, group, opacity = style(surface.kind)
+        legend, group_title = surface.kind, group
+        if surface.group:  # a part of a machine: its group; an interface keeps its colour
+            legend, group_title = surface.group, surface.group
+            if surface.group in parts and surface.kind not in (INTERFACE, PROBLEM):
+                colour = PART_COLOURS[parts.index(surface.group) % len(PART_COLOURS)]
         figure.add_trace(go.Mesh3d(
             **_xyz(surface.vertices), i=surface.triangles[:, 0], j=surface.triangles[:, 1],
             k=surface.triangles[:, 2], color=colour, opacity=opacity, flatshading=True,
             name=_name(surface.name, surface.shown, surface.total, "faces"),
-            legendgroup=surface.kind, legendgrouptitle_text=group, showlegend=True,
+            legendgroup=legend, legendgrouptitle_text=group_title, showlegend=True,
+            visible="legendonly" if surface.hidden else True,
             hovertemplate=f"{surface.name}<br>{group}<extra></extra>"))
     for lines in scene.lines:
         colour, group, _ = style(lines.kind)

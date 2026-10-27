@@ -170,6 +170,17 @@ def test_patches_around_the_whole_axis_are_never_a_pair() -> None:
     assert parts.detect(whole, (0, 0, 0), (0, 0, 1)).whole_ring
 
 
+def test_an_axis_point_in_metres_is_found_in_a_files_own_units() -> None:
+    """A part in mm, its axis through (0.3, -0.2, 1.5) m: the conversion at
+    scale 1 is in mm, so the point is (300, -200, 1500) there."""
+    origin_mm = (300.0, -200.0, 1500.0)
+    surface_mm = sector(24.0, origin_mm)
+    point = parts.in_file_units((0.3, -0.2, 1.5), 0.001)
+    assert point == pytest.approx(origin_mm)
+    assert parts.detect(surface_mm, point, (0, 0, 1)).passages == 15
+    assert parts.detect(surface_mm, (0.3, -0.2, 1.5), (0, 0, 1)).whole_ring  # the old error
+
+
 def test_an_angle_that_does_not_divide_360_is_named() -> None:
     found = parts.detect(sector(25.0), (0, 0, 0), (0, 0, 1))
     assert found.passages is None and "is not a whole number" in found.problem
@@ -226,11 +237,19 @@ def test_every_patch_and_zone_is_prefixed() -> None:
     zones = parts.prefix_zone_dict("RU", ["fluid-1"])
     for action in ("{ name RU_fluid-1; type cellSet; action new; source zoneToCell; "
                    "zones (fluid-1); }",
-                   "{ name fluid-1; type cellZoneSet; action remove; }",
-                   "{ name RU; type cellSet; action invert; }",
-                   "{ name RU; type cellZoneSet; action new; source setToCellZone; set RU; }"):
+                   "{ name fluid-1; type cellZoneSet; action remove; }"):
         assert action in zones
-    assert zones.index("action remove; }") < zones.index("name RU; type cellSet; action new")
+    assert "name RU;" not in zones  # the part's zone is made after the merge
+    none = parts.prefix_zone_dict("RU", [])
+    assert "{ name RU_cells; type cellSet; action invert; }" in none
+
+
+def test_each_part_zone_is_made_from_its_own_zones_after_the_merge() -> None:
+    from machines.msh_import.cases import part_zones_dict
+
+    text = part_zones_dict(["GV", "RU"])
+    assert '{ name GV; type cellSet; action new; source zoneToCell; zones ("GV_.*"); }' in text
+    assert "{ name RU; type cellZoneSet; action new; source setToCellZone; set RU; }" in text
 
 
 def test_seams_are_read_from_a_binary_face_zones_file(tmp_path: Path) -> None:

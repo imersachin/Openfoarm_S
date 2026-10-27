@@ -5,6 +5,7 @@ A whole ring (S 360) shares its first and last vertices: no periodic patch.
     casing  360 deg  r 1.0-1.5  patches inlet (r 1.5), casing_out (r 1.0), walls
     vanes    45 deg  r 0.6-1.0  per1 / per2 (8 passages), vane_in, vane_out, walls
     runner   60 deg  r 0.2-0.6  per_a / per_b (6 passages), run_in, outlet, walls
+    outer   360 deg  r 1.5-2.0  ring_in (r 1.5, the casing's inlet face by face), far, walls
 
 Usage: python make_parts.py <folder>   (writes <folder>/<part>/system/blockMeshDict)
 """
@@ -16,6 +17,7 @@ PARTS = {
     "casing": (1.0, 1.5, 360.0, ("casing_out", "inlet"), None, (3, 4)),
     "vanes": (0.6, 1.0, 45.0, ("vane_out", "vane_in"), ("per1", "per2"), (3, 3)),
     "runner": (0.2, 0.6, 60.0, ("outlet", "run_in"), ("per_a", "per_b"), (3, 4)),
+    "outer": (1.5, 2.0, 360.0, ("ring_in", "far"), None, (2, 4)),
 }
 H, LAYERS = 0.4, 2
 

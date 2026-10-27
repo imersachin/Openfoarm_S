@@ -21,15 +21,18 @@ from typing import Any
 from core.artifacts.hashing import hash_files, sha256_json
 from core.issues import IssueCategory, IssueSeverity, IssueStage
 from machines.assembly import Step
-from machines.config import MachineParts, MeshPart
+from machines.config import InterfaceJoint, MachineParts, MeshPart
 from machines.mesh_folder import read_patches, region_count
 from machines.msh_import import parts, resources, surface
 from machines.msh_import.cases import (
     IMPORTED_CASE,
+    PART_ZONES_DICT,
     convert_steps,
     converter,
+    empty_patch_dict,
     import_cases,
     needs_resave,
+    part_zones_dict,
     scale_step,
     used_names,
 )
@@ -45,6 +48,7 @@ from machines.msh_import.pipeline import (
     IMPORT,
     IMPORT_REPORT,
     PREFLIGHT_REPORT,
+    STEP_RESOURCES,
     SURFACE_EXECUTABLES,
     ImportRun,
     _mesh_files,
@@ -64,7 +68,6 @@ from machines.pipeline import (
     _Run,
     _Stop,
 )
-from mesh.estimator import CellEstimate, ResourceStatus
 from openfoam.dictionary import OpenFOAMFileWriter
 from openfoam.environment import tool_identity
 
@@ -91,8 +94,7 @@ class PartsRun(ImportRun):
             self.files.append((part, info, digest))
         digest = mesh_digest(self.machine)
         assert digest is not None
-        cases = replace(import_cases(self.run.config), all_topology=False)
-        return _Plan(None, digest, 1.0, cases)
+        return _Plan(None, digest, 1.0, import_cases(self.run.config))
 
     def _converters(self) -> tuple[str, ...]:
         return tuple(sorted({converter(info) for _, info, _ in self.files}))
@@ -123,7 +125,9 @@ class PartsRun(ImportRun):
         return ", ".join(self._converters())
 
     def _expected_regions(self) -> int | None:
-        return len(self.machine.parts)
+        """One per part, less one per stitched interface (it joins two parts)."""
+        stitched = sum(i.joint is InterfaceJoint.STITCH for i in self.machine.interfaces)
+        return len(self.machine.parts) - stitched
 
     def _convert_record(self, part: MeshPart, info: MeshFileInfo, digest: str) -> dict[str, Any]:
         return scratch_record(info, digest, self._tool((converter(info),)))
@@ -148,34 +152,18 @@ class PartsRun(ImportRun):
     # --- preflight -----------------------------------------------------------------------
 
     def _preflight(self, plan: _Plan, allow_risk: bool) -> None:
-        """The resource check on the assembled machine's cells: each file's
-        declared count times its passages (M1's check), and the assembly model."""
-        run, config = self.run, self.run.config
+        """The assembled machine's cells (each file's declared count times its
+        passages) for the record. M1's cell check is not used: it models
+        snappyHexMesh (about 2 kB a cell; on the owner's 23 M machine 46 GB,
+        BLOCKED, against the 18 GB the assembly took in E0). Each heavy step is
+        checked against its own measured model instead (_step_preflight)."""
         cells = self._declared_cells(plan)
-        path = run.root / PREFLIGHT_REPORT
+        path = self.run.root / PREFLIGHT_REPORT
         path.parent.mkdir(parents=True, exist_ok=True)
-        if cells is None:
-            path.write_text(json.dumps({"status": "NOT_ASSESSED", "reason": "a file gives no "
-                                        "cell or node count"}, indent=2) + "\n",
-                            encoding="utf-8")
-            return
-        assessment = self.pipe.estimator.assess_cells(
-            CellEstimate(background=cells, surface=0, feature=0, layers=0),
-            self.pipe.system_probe(run.root), config.max_global_cells, peak_cells=cells)
-        path.write_text(json.dumps({**assessment.as_dict(), "estimated_cells": cells,
-                                    "basis": "the files' cells x their passages"}, indent=2)
-                        + "\n", encoding="utf-8")
-        if assessment.status is ResourceStatus.BLOCKED:
-            raise _Stop("Resource preflight BLOCKED the import.", *assessment.issues)
-        if assessment.status is ResourceStatus.HIGH_RESOURCE_RISK and not allow_risk:
-            raise _Stop(
-                "Resource preflight reported HIGH RESOURCE RISK; the import was not started.",
-                *assessment.issues,
-                _issue(IssueSeverity.BLOCKING, IssueCategory.RESOURCE_RISK,
-                       IssueStage.RESOURCE_PREFLIGHT, "HIGH_RESOURCE_RISK_NOT_ACKNOWLEDGED",
-                       "Importing needs explicit acknowledgement of the high resource risk.",
-                       "Start the run with allow_high_resource_risk to proceed anyway."))
-        run.issues.extend(assessment.issues)
+        path.write_text(json.dumps({
+            "status": "PER_STEP" if cells is not None else "NOT_ASSESSED",
+            "estimated_cells": cells, "basis": "the files' cells x their passages",
+            "steps": STEP_RESOURCES}, indent=2) + "\n", encoding="utf-8")
 
     # --- the import ----------------------------------------------------------------------
 
@@ -185,8 +173,24 @@ class PartsRun(ImportRun):
                  for part, info, digest in self.files]
         case = run.root / "cases" / IMPORTED_CASE
         shutil.rmtree(case / POLY_MESH, ignore_errors=True)
-        await self._steps(parts.merge_steps([p.prefix for p, _, _ in self.files],
-                                            IMPORTED_CASE), 1)
+        prefixes = [p.prefix for p, _, _ in self.files]
+        index = await self._steps(parts.merge_steps(prefixes, IMPORTED_CASE), 1)
+        OpenFOAMFileWriter.write_if_changed(case / PART_ZONES_DICT, part_zones_dict(prefixes))
+        await self._step(Step(f"{IMPORTED_CASE}_part_zones", "run", f"cases/{IMPORTED_CASE}",
+                              ("topoSet", "-case", ".", "-dict", PART_ZONES_DICT)), index, None)
+        shutil.rmtree(case / POLY_MESH / "sets", ignore_errors=True)
+        sizes = parts.zone_sizes(case)
+        short = {p: (sizes.get(p, 0), ring) for p, ring in zip(prefixes, rings, strict=True)
+                 if sizes.get(p, 0) != ring}
+        if short:
+            shutil.rmtree(case / POLY_MESH, ignore_errors=True)
+            raise _Stop("A part's cell zone does not hold all of its cells.", _issue(
+                IssueSeverity.BLOCKING, IssueCategory.MESHING, IssueStage.MESH_IMPORT,
+                "PART_ZONE_INCOMPLETE", "; ".join(
+                    f"zone {p} holds {got:,} of the part's {ring:,} cells"
+                    for p, (got, ring) in short.items()) + ".",
+                "The part's cells are not all in its file's cell zones: give every cell a "
+                "zone in the program that wrote the mesh.", zones=short))
         cells = mesh_cells(case)
         if not has_mesh(case) or cells != sum(rings):
             shutil.rmtree(case / POLY_MESH, ignore_errors=True)
@@ -257,7 +261,8 @@ class PartsRun(ImportRun):
         confirmed one (the file or the axis may have changed since)."""
         found = surface.load(folder)
         origin, axis = parts.axis_point(self.machine)
-        detected = parts.detect(found, origin, axis) if found is not None else None
+        local = parts.in_file_units(origin, part.source_units.to_metres)  # at scale 1
+        detected = parts.detect(found, local, axis) if found is not None else None
         confirmed = {frozenset((p.first, p.second)) for p in part.periodic}
         if detected is None or detected.problem or detected.passages != part.passages or \
                 {frozenset((a, b)) for a, b, _ in detected.pairs} != confirmed:
@@ -303,7 +308,7 @@ class PartsRun(ImportRun):
         OpenFOAMFileWriter.write_if_changed(folder / "system/topoSetDict", parts.prefix_zone_dict(
             part.prefix, sorted(mesh_zone_names(folder))))
         OpenFOAMFileWriter.write_if_changed(folder / parts.EMPTY_PATCH_DICT,
-                                            parts.empty_patch_dict())
+                                            empty_patch_dict())
         origin, axis = parts.axis_point(self.machine)
         stitches = parts.stitch_steps(part)
         index = await self._steps((
@@ -322,7 +327,7 @@ class PartsRun(ImportRun):
         return cells
 
     def _prove(self, part: MeshPart, folder: Path) -> None:
-        """One region, no face left on a periodic patch, the zone <P> (E0)."""
+        """One region and no face left on a periodic patch (E0)."""
         name = parts.part_case(part.prefix)
         regions = region_count(_read(self.run.root / "logs" / name / CHECK_MESH_LOG))
         found, _ = read_patches(folder, name)
@@ -330,15 +335,14 @@ class PartsRun(ImportRun):
         left = {n: faces.get(n, 0) for p in part.periodic for n in
                 (parts.prefixed(part.prefix, p.first), parts.prefixed(part.prefix, p.second))
                 if faces.get(n, 0)}
-        zones = mesh_zone_names(folder)
-        if regions == 1 and not left and part.prefix in zones:
+        if regions == 1 and not left:
             return
         raise _Stop(f"The {part.name} ring is not one closed mesh.", _issue(
             IssueSeverity.BLOCKING, IssueCategory.MESHING, IssueStage.MESH_IMPORT,
             "PART_RING_INVALID", f"{part.name}: {regions} region(s)"
             + ("; faces left on periodic patches: "
                + ", ".join(f"{n} {c}" for n, c in left.items()) if left else "")
-            + ("" if part.prefix in zones else f"; no cell zone {part.prefix}") + ".",
+            + ".",
             f"Read logs/{name}/ (stitchMesh and checkMesh). The copies meet at the periodic "
             "patches only when the passage count and the machine axis are right.",
             regions=regions, faces_left=left), )

@@ -4,7 +4,9 @@ The files (picked on this computer, a folder at once, or uploaded), each a
 part with a role and a short prefix, its units confirmed against its box;
 the machine axis; "Read the parts" (each converted once, at scale 1) and the
 passage count found for each, confirmed by a button; which part rotates; the
-AMI pairs; the names the mesh will use. Nothing is applied by itself.
+interfaces between the parts (M2b-2: suggested from where their patches lie
+about the axis, each confirmed, corrected or rejected, or added by hand); the
+names the mesh will use. Nothing is applied by itself.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from app.machines_ui.sections.fields import (
     vector_field,
 )
 from core.config.models import LengthUnit
+from machines.msh_import.interfaces import Candidate, joints
 from machines.msh_import.part_views import (
     ROLES,
     PartView,
@@ -207,6 +210,127 @@ def read_view(ctx: state.Context, views: list[PartView]) -> None:
         st.rerun()
 
 
+JOINT_LABELS = {"AMI": "AMI (cyclicAMI)", "ACMI": "ACMI (cyclicACMI, a wall where they do not "
+                "overlap)", "STITCH": "Stitch (made one; stationary parts, faces one to one)"}
+REJECTED = "machines_interfaces_rejected"  # candidate keys the user said are not interfaces
+
+
+def _key(candidate: Candidate) -> str:
+    return "|".join((*candidate.first, "~", *candidate.second))
+
+
+def _evidence(candidate: Candidate) -> str:
+    (ra, rb), (za, zb) = candidate.radius, candidate.axial
+    return (f"coverage {100 * candidate.coverage[0]:.1f} % / {100 * candidate.coverage[1]:.1f} %"
+            f", full-ring areas {candidate.ring_area[0]:.5g} / {candidate.ring_area[1]:.5g} m2"
+            f" (ratio {candidate.area_ratio:.4f}), faces {candidate.ring_faces[0]:,} / "
+            f"{candidate.ring_faces[1]:,}; radius {ra[0]:.4g}-{ra[1]:.4g} / {rb[0]:.4g}-"
+            f"{rb[1]:.4g} m, along the axis {za[0]:.4g}-{za[1]:.4g} / {zb[0]:.4g}-{zb[1]:.4g} m")
+
+
+def _add(ctx: state.Context, name: str, first: list[str], second: list[str],
+         joint: str) -> None:
+    found = list_at(mesh_of(ctx.draft), "interfaces")
+    taken = {i.get("name") for i in found}
+    unique, n = name, 2
+    while unique in taken:
+        unique, n = f"{name}_{n}", n + 1
+    found.append({"name": unique, "first": first, "second": second, "joint": joint})
+    state.bump_generation()
+
+
+def interfaces_view(ctx: state.Context, inspection: Any) -> None:
+    """The interfaces between parts: the chosen ones (joint, remove), the
+    candidates with their evidence (use, use with changed sides, not an
+    interface), and one added by hand. Nothing is applied by itself."""
+    mesh = mesh_of(ctx.draft)
+    chosen = mesh.get("interfaces") or []
+    zones = mesh.get("zones") or []
+    rotating = zones[0].get("cell_zone") if zones else None
+    st.markdown("**Interfaces between the parts** (each side one or more patches of a part; "
+                "made by createPatch as `<name>_<prefix>`)")
+    for index, interface in enumerate(list(chosen)):
+        left, joint_column, drop = st.columns([5, 2, 1])
+        left.markdown(f"`{interface.get('name')}`: " + " + ".join(
+            f"`{n}`" for n in interface.get("first") or []) + " ~ " + " + ".join(
+            f"`{n}`" for n in interface.get("second") or []))
+        options = list(JOINT_LABELS)
+        current = interface.get("joint")
+        picked = joint_column.selectbox("Joint", options, index=options.index(current)
+                                 if current in options else None,
+                                 format_func=JOINT_LABELS.__getitem__,
+                                 key=f"machines_interface_joint_{index}",
+                                 label_visibility="collapsed")
+        if picked != current:
+            interface["joint"] = picked
+            state.bump_generation()
+            st.rerun()
+        if drop.button("Remove", key=f"machines_interface_remove_{index}"):
+            chosen.pop(index)
+            state.bump_generation()
+            st.rerun()
+    taken = {n for i in chosen for n in (*(i.get("first") or ()), *(i.get("second") or ()))}
+    rejected: list[str] = st.session_state.setdefault(REJECTED, [])
+    found = ctx.service.interface_candidates(ctx.draft)
+    if found is None:
+        st.caption("Candidates are shown once two parts are read, with their units, and the "
+                   "machine axis is set.")
+        found = ()
+    offered = [c for c in found if _key(c) not in rejected
+               and not (set(c.first) | set(c.second)) & taken]
+    for index, candidate in enumerate(offered[:12]):
+        with st.container(border=True):
+            mark = "Suggested" if candidate.suggested else "Overlap (not suggested)"
+            st.markdown(f"**{mark}:** " + " + ".join(f"`{n}`" for n in candidate.first) + " ~ "
+                        + " + ".join(f"`{n}`" for n in candidate.second))
+            st.caption(_evidence(candidate)
+                       + (". One side reaches beyond the other: ACMI fits."
+                          if candidate.partial and candidate.suggested else "."))
+            offers = joints(candidate, rotating)
+            columns = st.columns(len(offers) + 1)
+            for column, offer in zip(columns, offers, strict=False):
+                if column.button(f"Use as {offer.value}",
+                                 key=f"machines_cand_{offer.value}_{index}"):
+                    _add(ctx, candidate.name(), list(candidate.first), list(candidate.second),
+                         offer.value)
+                    st.rerun()
+            if columns[-1].button("Not an interface", key=f"machines_cand_reject_{index}"):
+                rejected.append(_key(candidate))
+                st.rerun()
+            with st.expander("Use with other patches"):
+                patches = list(inspection.info.patches)
+                first = st.multiselect("First side", patches, default=list(candidate.first),
+                                       key=f"machines_cand_first_{index}")
+                second = st.multiselect("Second side", patches, default=list(candidate.second),
+                                        key=f"machines_cand_second_{index}")
+                joint = st.selectbox("Joint", list(JOINT_LABELS),
+                                     format_func=JOINT_LABELS.__getitem__,
+                                     key=f"machines_cand_joint_{index}")
+                if st.button("Use these sides", key=f"machines_cand_fix_{index}",
+                             disabled=not (first and second)):
+                    _add(ctx, candidate.name(), first, second, joint)
+                    st.rerun()
+    if len(offered) > 12:
+        st.caption(f"{len(offered) - 12} weaker overlaps not shown.")
+    if rejected and st.button("Show the candidates marked 'not an interface' again",
+                              key="machines_cand_unreject"):
+        rejected.clear()
+        st.rerun()
+    with st.expander("Add an interface by hand"):
+        patches = [n for n in inspection.info.patches if n not in taken]
+        name = st.text_input("Name", key="machines_iface_name", help="e.g. GV_RU")
+        first = st.multiselect("First side (patches of one part)", patches,
+                               key="machines_iface_first")
+        second = st.multiselect("Second side (patches of another part)", patches,
+                                key="machines_iface_second")
+        joint = st.selectbox("Joint", list(JOINT_LABELS), format_func=JOINT_LABELS.__getitem__,
+                             key="machines_iface_joint")
+        if st.button("Add interface", key="machines_iface_add",
+                     disabled=not (name and first and second)):
+            _add(ctx, name, first, second, joint)
+            st.rerun()
+
+
 def render(ctx: state.Context, picker: Any, copies: Any, pairs_view: Any,
            names_used: Any) -> None:
     section_header(ctx, "imported_mesh")
@@ -226,7 +350,7 @@ def render(ctx: state.Context, picker: Any, copies: Any, pairs_view: Any,
         rotating_view(ctx, views)
     inspection = ctx.service.machine_inspection(ctx.draft)
     if inspection is not None:
-        pairs_view(ctx, inspection)
+        interfaces_view(ctx, inspection)
         st.markdown("**Names in the mesh** (part patch -> name used)")
         st.dataframe(names_used(ctx.draft, inspection), hide_index=True, width="stretch")
     section_issues(ctx, "imported_mesh")

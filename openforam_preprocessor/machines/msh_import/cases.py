@@ -32,13 +32,21 @@ boundary file stays text, and so do the zone names and the headers.
 from __future__ import annotations
 
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from machines.assembly import AMI_WEIGHTS_DICT, CYCLIC_AMI, Step, _ami_weights_dict
 from machines.case_generator import _common, _control_dict
-from machines.config import MachineProjectConfig, PatchType, SourceKind
-from machines.msh_import import resave
+from machines.config import (
+    ImportedMesh,
+    InterfaceJoint,
+    MachineParts,
+    MachineProjectConfig,
+    PatchType,
+    SourceKind,
+)
+from machines.msh_import import interfaces, resave
 from machines.msh_import.detect import DIRECT_GMSH_VERSIONS, MeshFileInfo, MeshFormat
 from machines.msh_import.quality import WRITE_FIELDS
 from machines.patches import openfoam_type
@@ -49,7 +57,9 @@ MERGED_CASE = "merged"
 SCRATCH_CASE = "imported_scratch"
 RESAVED = "resaved.msh"  # in cases/imported/: the MSH 2.2 copy gmshToFoam reads
 AMI_MATCH_TOLERANCE = "0.0001"
-BAFFLES_LOG = "02_baffles.log"  # mergeOrSplitBaffles -detectOnly, in logs/merged/
+EMPTY_PATCH_DICT = "system/createPatchDict.empty"  # removes the patches left empty
+PART_ZONES_DICT = "system/topoSetDict.parts"  # each part's zone <P> (M2b)
+BAFFLES_LOG = "02_baffles.log"  # mergeOrSplitBaffles -detectOnly, in logs/imported/
 
 
 def binary_control_dict() -> str:
@@ -128,11 +138,17 @@ def used_names(config: MachineProjectConfig) -> dict[str, str]:
     assert mesh is not None
     names = {ref: name for ref, (name, _) in _mesh_types(config).items()}
     names.update({n: n for p in mesh.ami_pairs for n in (p.first, p.second)})
+    if isinstance(mesh, MachineParts):  # an interface's patches become its side (M2b-2)
+        for interface in mesh.interfaces:
+            for side, patches in zip(interfaces.sides(interface),
+                                     (interface.first, interface.second), strict=True):
+                names.update(dict.fromkeys(patches, side))
     return dict(sorted(names.items()))
 
 
 def create_patch_dict(config: MachineProjectConfig) -> str | None:
-    """The renamed patches, or None when there is none."""
+    """The renamed patches and a machine's interfaces (M2b-2), or None when
+    there is none."""
     entries: list[str] = []
     for ref, (name, kind) in sorted(_mesh_types(config).items()):
         if name != ref:
@@ -145,6 +161,9 @@ def create_patch_dict(config: MachineProjectConfig) -> str | None:
         constructFrom patches;
         patches ({ref});
     }}""")
+    mesh = config.imported_mesh
+    if isinstance(mesh, MachineParts):
+        entries += interfaces.create_patch_entries(mesh)
     if not entries:
         return None
     return foam_header("createPatchDict") + f"""
@@ -171,6 +190,9 @@ def expected_patches(config: MachineProjectConfig) -> dict[str, str]:
     expected = {name: openfoam_type(kind) for name, kind in _mesh_types(config).values()}
     for patch, _ in ami_sides(config):
         expected[patch] = CYCLIC_AMI
+    mesh = config.imported_mesh
+    if isinstance(mesh, MachineParts):
+        expected.update(interfaces.expected(mesh))
     return expected
 
 
@@ -188,6 +210,7 @@ class ImportCases:
     # without it (23 M: 23.5 GB / 90 s against 31.9 GB / 170 s) and counts the
     # baffles with mergeOrSplitBaffles -detectOnly instead (9.2 GB / 7.8 s).
     all_topology: bool = True
+    stitch: tuple[tuple[str, str], ...] = ()  # interfaces stitched (M2b-2): their sides
 
     def merged_steps(self) -> tuple[Step, ...]:
         root = f"cases/{MERGED_CASE}"
@@ -197,6 +220,15 @@ class ImportCases:
                               ("createPatch", "-overwrite", "-case", ".")))
         for patch, kind in self.retype.items():
             steps.append(_set(root, f"merged_type_{patch}", patch, "type", kind))
+        for first, second in self.stitch:  # then the emptied sides removed
+            steps.append(Step(f"merged_stitch_{first}", "run", root, (
+                "stitchMesh", "-case", ".", "-perfect", "-overwrite", first, second)))
+        if self.stitch:
+            steps.append(Step("merged_drop_empty", "run", root, (
+                "createPatch", "-overwrite", "-case", ".", "-dict", EMPTY_PATCH_DICT)))
+            # The stitch rebuilds the mesh; the part zones are made again.
+            steps.append(Step("merged_part_zones", "run", root, (
+                "topoSet", "-case", ".", "-dict", PART_ZONES_DICT)))
         for patch, neighbour in self.ami:
             for key, value in (("type", CYCLIC_AMI), ("neighbourPatch", neighbour),
                                ("transform", "noOrdering"),
@@ -218,7 +250,10 @@ class ImportCases:
                       ("checkMesh", "-case", ".", *topology, "-meshQuality",
                        "-writeSets", "vtk", "-writeFields", WRITE_FIELDS))]
         if not self.all_topology:  # second, so its log is BAFFLES_LOG
-            steps.append(Step("merged_baffles", "run", root,
+            # On the parts merged, before any interface: an ACMI couple and its
+            # blockage share their faces, and mergeOrSplitBaffles aborts on
+            # them as duplicates (v2512, M2b-2).
+            steps.append(Step("imported_baffles", "run", f"cases/{IMPORTED_CASE}",
                               ("mergeOrSplitBaffles", "-case", ".", "-detectOnly")))
         if ami:
             steps.append(Step("merged_amiWeights", "run", root, (
@@ -252,7 +287,40 @@ def import_cases(config: MachineProjectConfig) -> ImportCases:
         merged["system/createPatchDict"] = patch_dict
     mesh = config.imported_mesh
     assert mesh is not None
-    if mesh.ami_pairs:
+    stitch: tuple[tuple[str, str], ...] = ()
+    if isinstance(mesh, MachineParts):
+        stitch = tuple(interfaces.sides(i) for i in mesh.interfaces
+                       if i.joint is InterfaceJoint.STITCH)
+        if stitch:
+            merged[EMPTY_PATCH_DICT] = empty_patch_dict()
+            merged[PART_ZONES_DICT] = part_zones_dict([p.prefix for p in mesh.parts])
+    if coupled_pairs(mesh):
         merged[AMI_WEIGHTS_DICT] = imported_ami_weights_dict()
     return ImportCases(dict(common), merged, retype(config), expected_patches(config),
-                       ami_sides(config))
+                       ami_sides(config), all_topology=not isinstance(mesh, MachineParts),
+                       stitch=stitch)
+
+
+def part_zones_dict(prefixes: Sequence[str]) -> str:
+    """topoSet making each part's cell zone <P> from its own zones <P>_*. Made
+    after the parts are merged, never before: mergeMeshes keeps one zone per cell
+    (the first), so a zone overlapping the file's zones loses the copies' cells
+    (v2512, M2b: the runner's zone held one passage of 15, the draft tube's none)."""
+    actions = "\n".join(
+        f"    {{ name {p}; type cellSet; action new; source zoneToCell; zones (\"{p}_.*\"); }}\n"
+        f"    {{ name {p}; type cellZoneSet; action new; source setToCellZone; set {p}; }}\n"
+        f"    {{ name {p}; type cellSet; action remove; }}" for p in prefixes)
+    return foam_header("topoSetDict") + f"\nactions\n(\n{actions}\n);\n"
+
+
+def coupled_pairs(mesh: ImportedMesh | MachineParts) -> tuple[tuple[str, str], ...]:
+    """The cyclicAMI and cyclicACMI pairs of the merged mesh."""
+    if isinstance(mesh, MachineParts):
+        return interfaces.coupled(mesh)
+    return tuple((p.first, p.second) for p in mesh.ami_pairs)
+
+
+def empty_patch_dict() -> str:
+    """createPatch with no patch to make: it removes the patches left with no
+    face (stitched ones), keeping the stitch faceZones (v2512)."""
+    return foam_header("createPatchDict") + "\npointSync false;\n\npatches ();\n"

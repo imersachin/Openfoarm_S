@@ -23,6 +23,7 @@ from core.config.models import LengthUnit
 from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage
 from machines.config import (
     ImportedMesh,
+    InterfaceJoint,
     MachineParts,
     MachineProjectConfig,
     MachineType,
@@ -30,8 +31,10 @@ from machines.config import (
     PatchType,
     SourceKind,
 )
+from machines.msh_import.cases import coupled_pairs
 from machines.msh_import.checks import no_cell_zone
 from machines.msh_import.detect import MeshFileInfo, file_sha256, inspect_mesh_file
+from machines.msh_import.interfaces import members, part_of, sides
 from machines.msh_import.parts import prefixed
 
 _MESH_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_.:+-]*$")
@@ -116,7 +119,7 @@ def _pair_issues(config: MachineProjectConfig, info: MeshFileInfo) -> list[Issue
     mesh = config.imported_mesh
     assert mesh is not None
     found: list[Issue] = []
-    if mesh.zones and not mesh.ami_pairs:
+    if mesh.zones and not coupled_pairs(mesh):
         found.append(_blocking(
             "MSH_NO_INTERFACE", "The rotating zone has no interface: no AMI pair is chosen.",
             "Choose the two patches on either side of the rotating zone's boundary as an AMI "
@@ -154,6 +157,8 @@ def _patch_issues(config: MachineProjectConfig, info: MeshFileInfo) -> list[Issu
     found: list[Issue] = []
     known = set(info.patches)
     interfaces = {n for p in mesh.ami_pairs for n in (p.first, p.second)}
+    if isinstance(mesh, MachineParts):  # an interface's patches are coupled, not typed
+        interfaces |= members(mesh)
     for i, patch in enumerate(config.patches):
         field = f"patches.{i}"
         if patch.source.kind is not SourceKind.MESH_PATCH:
@@ -340,7 +345,78 @@ def _parts_issues(config: MachineProjectConfig, mesh: MachineParts,
     info = machine_info(mesh)
     found += _zone_issues(config, info)
     found += _pair_issues(config, info)
+    found += _interface_issues(config, mesh, info)
     found += _patch_issues(config, info)
+    turning = {z.cell_zone for z in mesh.zones}
+    coupled = {part_of(n) for p in mesh.ami_pairs for n in (p.first, p.second)}
+    coupled |= {part_of(side[0]) for i in mesh.interfaces
+                if i.joint is not InterfaceJoint.STITCH for side in (i.first, i.second)}
+    if (coupled or mesh.interfaces) and turning - coupled:
+        found.append(_blocking(
+            "MSH_NO_INTERFACE", f"The rotating part {', '.join(sorted(turning - coupled))} has "
+            "no interface: no AMI or ACMI interface has a side on it.",
+            "Add the interfaces between the rotating part and the parts it meets.",
+            "The rotating cells must meet the stationary ones at a cyclicAMI or cyclicACMI "
+            "pair; joined by plain walls they would turn on their own.",
+            field="imported_mesh.interfaces"))
+    return found
+
+
+def _interface_issues(config: MachineProjectConfig, mesh: MachineParts,
+                      info: MeshFileInfo) -> list[Issue]:
+    """Each interface: two sides of two parts, its patches the machine's, used
+    once and not typed; a stitch never on the rotating part (owner's plan)."""
+    found: list[Issue] = []
+    names = Counter(i.name for i in mesh.interfaces)
+    used = Counter(n for i in mesh.interfaces for n in (*i.first, *i.second))
+    paired = {n for p in mesh.ami_pairs for n in (p.first, p.second)}
+    typed = {p.source.ref for p in config.patches}
+    turning = {z.cell_zone for z in mesh.zones}
+    known = set(info.patches)
+    for index, interface in enumerate(mesh.interfaces):
+        field = f"imported_mesh.interfaces.{index}"
+        label = f"Interface {interface.name}"
+        if names[interface.name] > 1:
+            found.append(_blocking("INTERFACE_NAME_DUPLICATE", f"{label} is named twice.",
+                                   "Give each interface its own name.", field=f"{field}.name"))
+        made = set(sides(interface))
+        if made & known:
+            found.append(_blocking(
+                "INTERFACE_NAME_TAKEN", f"{label} would make "
+                + ", ".join(sorted(made & known)) + ", already a patch of the mesh.",
+                "Choose another interface name.", field=f"{field}.name"))
+        for side in (interface.first, interface.second):
+            own = {part_of(n) for n in side}
+            if len(own) > 1:
+                found.append(_blocking(
+                    "INTERFACE_SIDE_INVALID", f"{label}: one side takes patches of "
+                    f"{', '.join(sorted(own))}.", "Each side is patches of one part.",
+                    field=field))
+        if part_of(interface.first[0]) == part_of(interface.second[0]):
+            found.append(_blocking(
+                "INTERFACE_SIDE_INVALID", f"{label} joins {part_of(interface.first[0])} to "
+                "itself.", "Choose the patches of two parts.", field=field))
+        for name in (*interface.first, *interface.second):
+            if name not in known:
+                found.append(_blocking(
+                    "INTERFACE_PATCH_UNKNOWN", f"{label} takes '{name}', which is not a patch "
+                    "of the parts.", "Choose the parts' patches (<prefix>_<patch>).",
+                    field=field, patch=name))
+            elif used[name] > 1 or name in paired:
+                found.append(_blocking(
+                    "INTERFACE_PATCH_TWICE", f"'{name}' is in more than one interface or "
+                    "pair.", "Use each patch once.", field=field, patch=name))
+            if name in typed:
+                found.append(_blocking(
+                    "MSH_AMI_PATCH_TYPED", f"'{name}' is in {label} and also has a patch type.",
+                    "Remove its row from the patch table: an interface is coupled, not typed.",
+                    field=field, patch=name))
+        touched = {part_of(interface.first[0]), part_of(interface.second[0])}
+        if interface.joint is InterfaceJoint.STITCH and touched & turning:
+            found.append(_blocking(
+                "INTERFACE_STITCH_ROTATING", f"{label} would stitch the rotating part "
+                f"{', '.join(sorted(touched & turning))} to a stationary one.",
+                "Use AMI (or ACMI) for the rotating part.", field=f"{field}.joint"))
     return found
 
 

@@ -289,3 +289,152 @@ diverged after step 4).
   assemble (384 cells, 3 regions, 2 seams, AMI weights 1.0), reuse, a ring
   rebuilt alone, a passage count no longer found; opt-in on the owner's
   files (`MACHINES_E0_DIR`).
+
+### M2b-2: interfaces between the parts
+
+- **Which part rotates** is asked (a select on the parts page); its zone is
+  the part's cell zone `<P>`, turning about the machine axis.
+- **Interfaces** (`imported_mesh.interfaces`): a name, two sides (one or more
+  patches of one part each, machine names) and a joint. createPatch makes
+  `<name>_<P>` of each side in the merged case: AMI (cyclicAMI pair), ACMI
+  (cyclicACMI pair with a wall `<side>_blockage` on the same faces, as the
+  v2512 tutorial TJunctionSwitching_createPatch), or STITCH (stitchMesh
+  -perfect, then the emptied sides removed). A stitch is offered only between
+  stationary parts with as many faces on the whole ring; the rotating part's
+  interfaces are AMI or ACMI (BLOCKING INTERFACE_STITCH_ROTATING otherwise).
+- **Candidates** (suggested, never applied): the coverage of evidence 1.3 made
+  robust. A face is on the other side's trace when its meridional point (the
+  mean of its vertices' radius and axial position: exact on a surface of
+  revolution) lies on one of the other side's face segments within 5 % of the
+  segment's length. The first version (centroid within 1.5 x the face size)
+  joined walls meeting at an edge on the coarse fixtures. Patches lying mostly
+  on one another's trace are grouped into a side. Suggested at >= 80 % both
+  ways and full-ring areas within 2 %; partial coverage suggests ACMI.
+  Each candidate: use as AMI / ACMI / stitch, use with other patches, or
+  "not an interface"; an interface can be added by hand, its joint changed
+  or removed.
+- **Owner's machine** (v2512, read 18 s, candidates 1.7 s): the three
+  suggested are exactly E0's pairs: SV-Outlet ~ FaceGroup27 98.2 / 100 %
+  (areas 0.14127 / 0.14128), FaceGroup13 ~ r1_inflow_1 + _2 100 / 100 %
+  (0.11828 / 0.11828), r1_outflow_1 + _2 ~ DT_INLET 100 / 98.6 % (0.09778 /
+  0.09775, partial: ACMI). Nothing else is listed.
+- **The whole machine through the app** (owner's files, mesh only): read,
+  confirm, these interfaces (RU-DT as ACMI), types: 627 s from the run's start
+  to the mesh report (assembly, merge, surface, createPatch, 62 retypes,
+  checkMesh, baffles, AMI weights, views), 4 regions as expected, status
+  review (the files' own quality: non-orthogonality 84.9, skewness 8.1, as
+  M2a). Measured peaks: checkMesh 21.2 GB / 85 s, surface 11.3 GB, views
+  11.0 GB, AMI weights 10.2 GB, baffles 5.3 GB. Weights at rest: SC-GV
+  0.99969-1.00011, GV-RU 0.999998-1.000004, RU-DT (ACMI) 0.648-1.00008, as
+  E0. An ACMI pair falls below 1 where the sides do not overlap by design, so
+  its weights are an INFO (ACMI_WEIGHTS), not the AMI range WARNING.
+- **v2512 facts found on the way:** mergeOrSplitBaffles aborts on an ACMI
+  mesh (the couple and its blockage share faces: "in same order as face"),
+  so the baffles are counted on cases/imported/ (the parts merged, before any
+  interface). M1's cell preflight (a snappyHexMesh model, about 2 kB a cell)
+  BLOCKED the 23 M import at 46 GB; a several-file import is checked per step
+  on the measured models instead (assembly 27.3 GB, checkMesh 30.2 GB with
+  the margin; a WARNING at 32 GB free), and the preflight report records the
+  cells.
+- **Fixtures** gained `outer.msh` (a ring whose inner face matches the
+  casing's inlet face by face): AMI, ACMI and a stitch made, 3 regions of 4
+  parts, the ACMI walls in 0/ (movingWallVelocity on the runner's side), two
+  pimpleFoam steps.
+
+### M2b-3: 3D for big meshes
+
+- A machine's mesh view: 80 % of the display limit split evenly between the
+  parts, each part's share between its patches by face count, on a finer
+  grid (each level 0.9 x the last, against 0.7: the default stays 0.7, so a
+  single file's view is unchanged); a legend group and a colour per part (the
+  type stays in each name), interfaces in their own colour, the cell zones'
+  surfaces from the other 20 %, listed but drawn only when clicked. ACMI
+  sides are drawn as interfaces.
+- The Mesh page for a machine: each part's file, units, passages, ring cells
+  and seams; the seams listed by name and faces (faceZones, not patches).
+- **Open in ParaView:** a button writes `<project>.foam` beside the checked
+  mesh and shows its path as Windows sees it (`\wsl.localhost\<distro>\...`,
+  or the drive path under /mnt). Finding paraview.exe itself is on the U1
+  future list (owner).
+- trame: not now (future list).
+
+### M2b-4: revolution check and run-time estimate
+
+- **One blade pitch:** when the rotating part is N > 1 copies, the check turns
+  it through 360 / N deg in 12 steps (moveDynamicMesh -checkAMI, endTime the
+  fraction of a turn), labelled "over one blade pitch (24 deg, 12 x 2 deg),
+  equivalent to a full revolution because the Runner mesh repeats every
+  24 deg"; 6 steps offered when 12 are estimated over 10 min. A whole-ring
+  rotating part keeps 36 x 10 deg. Found on the way: whether a check is
+  current was computed for 36 steps whatever was checked (also M2a's coarser
+  sweeps): now for the steps the report says.
+- **Memory and time to solve** (Case page; the app does not run the solver):
+  memory a cell measured on the app's own runner + draft tube case (below),
+  against WSL's free memory; time a step scaled from it by cells per core
+  until the case's own log has steps (then measured: the median, the first
+  step left out). Over the free memory: a WARNING naming .wslconfig as the
+  owner's decision, and a button making the study.
+- **The study:** a new project beside this one (`<folder>-study`) with the
+  rotating part and the outlet's part, the interfaces between them, their
+  patches as typed; the rotating part's sides towards the parts left out
+  become its inlet, a flow-rate inlet split between them by area. Nothing in
+  this project changes.
+
+### Fixed on the way: the part zone `<P>` (found by the M2b-4 solve)
+
+M2b-1 made the zone `<P>` in the single passage, beside the file's own zones,
+before the copies. mergeMeshes keeps one zone a cell (the first), so the
+copies' cells and the merged parts' cells went to the file's zones only: on
+the owner's runner + draft tube the zone RU held 718,720 cells (one passage
+of 15) and DT none. The solver turned one passage; after one step of 1 deg
+the AMI sum(weights) reached 160 and GAMG stopped on a floating-point
+exception (serial moveDynamicMesh the same, AMI or ACMI the same). The zone
+`<P>` is now made after the merge from the part's own zones `<P>_*` (a file
+with no cell zone gets `<P>_cells`), made again after a stitch, and its size
+is checked against the part's cells (BLOCKING PART_ZONE_INCOMPLETE). The
+fixture tests check the sizes now, not only the names; ring.json has a
+version, so rings made before are rebuilt.
+
+### M2b-4 evidence: the runner + draft tube with the app's own case (owner's ask)
+
+The study made through the app from the owner's RU and DT files: read,
+confirmed, RU-DT suggested and used as ACMI (100 / 98.6 %), the runner's two
+inflow patches the inlet (0.17 m3/s split by area), DT OUTLET at 0 Pa, water,
+kOmegaSST, 1000 rpm, 1 deg a step, maxCo 2 (the app's case setup, unchanged).
+Import to case: 297 s, 11,671,680 cells, 2 regions, zones RU 10,780,800 and
+DT 890,880 cells (after the zone fix above). decomposePar (scotch, 16):
+20 s / 7.9 GB. pimpleFoam on 16 ranks: 22.0 GB peak (1.88 kB a cell, against
+2.1 kB on the badly posed case of 1.5), 70 s a step (median of 25 steps,
+63-71 s; the first 83 s). Well posed in the sense the owner asked: it ran
+stably, max Courant 0.9-2.3 after the first step. The first 1 deg step
+reached Courant 82 (the flow starts from rest: U = 0 inside, as the app sets
+every case), so maxCo cut the step to 0.6-4 us, 0.004-0.024 deg at 1000 rpm;
+27 steps were run and the run stopped (10 deg would take about a day). The
+estimate therefore uses the solver's own time step once its log has one:
+for this case 0.0054 deg a step (the median deltaT), about 1,300 h a
+revolution on 16 cores, against about 7 h at the configured 1 deg. Whole machine (23 M cells)
+scaled: about 54 GB with the 1.25 margin (43 GB measured rate), over WSL's
+31 GB: the warning and the study are offered.
+
+The one-pitch check through the app on this study (M2b-4): offered 12 x 2 deg
+and, as 12 steps were estimated at 10.8 min, 6 x 4 deg; 12 x 2 deg took
+437 s (36 s a step); RU-DT (ACMI) sum(weights) 0.647-1.00008 over the pitch
+(E0: 0.6475-0.6499 minimum), an INFO; the turned mesh failed a mesh check at
+1 of 12 steps (a WARNING, as M2a reports it).
+
+### Testing-agent review (before the M2b-2 to M2b-4 commit)
+
+Fixed, each with a test:
+- every 3D figure (STL and single-file too) got a title and a top margin: a
+  loop variable shadowed the figure's `title`;
+- a part's passages were looked for about the axis point in metres on its
+  scale-1 conversion: a part in mm with an axis off the origin read as a
+  whole ring; the point is now taken into the file's units (both places);
+- a single file's revolution check wrote `endTime 1.0;` (main: `1;`), so its
+  finished checks read as stale; written as before;
+- a rotating part with no AMI or ACMI interface of its own was not stopped
+  when another interface existed: BLOCKING MSH_NO_INTERFACE;
+- an interface side (named after the interface, `GV_RU_RU`) was drawn with
+  the first part of its name, not its own part;
+- a solver log older than the case's mesh and controlDict counted as
+  measured; and the step times left out two steps, not one.

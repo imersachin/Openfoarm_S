@@ -10,7 +10,7 @@ PYTHON=${PYTHON:-python3}
 W=$(mktemp -d /tmp/msh_m2b_XXXX)
 E0=$HERE/../e0
 "$PYTHON" "$HERE/make_parts.py" "$W"
-for part in casing vanes runner; do
+for part in casing vanes runner outer; do
     mkdir -p "$W/$part/constant"
     cp "$E0"/common/system/controlDict "$E0"/common/system/fv* "$W/$part/system/"
     blockMesh -case "$W/$part" > "$W/$part.log"

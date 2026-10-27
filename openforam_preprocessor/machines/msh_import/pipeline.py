@@ -51,7 +51,7 @@ from machines.mesh_folder import (
     read_patches,
     region_count,
 )
-from machines.msh_import import quality, resources, surface
+from machines.msh_import import interfaces, quality, resources, surface
 from machines.msh_import.ami_detail import pair_details
 from machines.msh_import.cases import (
     BAFFLES_LOG,
@@ -62,6 +62,7 @@ from machines.msh_import.cases import (
     binary_control_dict,
     convert_steps,
     converter,
+    coupled_pairs,
     import_cases,
     needs_resave,
     scale_step,
@@ -253,7 +254,7 @@ class ImportRun:
                     "planes": sha256_json(self._planes()),
                     "tool": self._tool(VIEW_EXECUTABLES)}
         files = [*_mesh_files(root, MERGED_CASE), merged / "system/meshQualityDict",
-                 *((merged / AMI_WEIGHTS_DICT,) if self.mesh.ami_pairs else ())]
+                 *((merged / AMI_WEIGHTS_DICT,) if coupled_pairs(self.mesh) else ())]
         return {**hash_files(root, files), "tool": self._tool(CHECK_EXECUTABLES)}
 
     def _planes(self) -> list[tuple[str, str, surface.Point, surface.Point]]:
@@ -536,7 +537,7 @@ class ImportRun:
         shutil.rmtree(merged / POLY_MESH / "sets", ignore_errors=True)
         zero_log = run.root / "logs" / ZERO_CASE / CHECK_MESH_LOG
         zero_log.unlink(missing_ok=True)  # a pass of an earlier check is not this one's
-        steps = plan.cases.check_steps(bool(self.mesh.ami_pairs))
+        steps = plan.cases.check_steps(bool(coupled_pairs(self.mesh)))
         logs = [Path((await self._step(step, index, plan.cases.check_kind(step))).log_path)
                 for index, step in enumerate(steps, start=1)]
         if quality.needs_zero_pass(_read(logs[0])):
@@ -737,6 +738,10 @@ class ImportRun:
 
     # --- mesh validation -----------------------------------------------------------------
 
+    def _partial_pairs(self) -> tuple[tuple[str, str], ...]:
+        """The cyclicACMI pairs (a machine of several files, M2b-2)."""
+        return interfaces.partial(self.mesh) if isinstance(self.mesh, MachineParts) else ()
+
     def _expected_regions(self) -> int | None:
         """How many unconnected regions the mesh should have (None: not checked)."""
         return None
@@ -745,7 +750,7 @@ class ImportRun:
         return MeshExpectation(
             name="imported", patches=plan.cases.expected,
             cell_zones=tuple(z.cell_zone for z in self.mesh.zones),
-            ami_pairs=tuple((p.first, p.second) for p in self.mesh.ami_pairs))
+            ami_pairs=coupled_pairs(self.mesh))
 
     def _validate_mesh(self, plan: _Plan) -> tuple[Path, bool, str]:
         run = self.run
@@ -765,10 +770,14 @@ class ImportRun:
         extra += check_zones(merged, expected.cell_zones, expected.name)
         extra += check_ami_pairing(merged)
         if expected.ami_pairs:
+            partial = self._partial_pairs()
+            ranged = tuple(p for p in expected.ami_pairs if p not in partial)
             extra += [self._ami_detail(i) for i in check_ami_weights(
-                ami_text, expected.ami_pairs, self.pipe.thresholds.imported_ami_weights_range,
+                ami_text, ranged, self.pipe.thresholds.imported_ami_weights_range,
                 when=AT_REST)]
-        extra += check_baffles(check_text) or check_baffles(_read(logs / BAFFLES_LOG))
+            extra += interfaces.weights_notes(partial, ami_text, AT_REST)
+        baffles = _read(run.root / "logs" / IMPORTED_CASE / BAFFLES_LOG)
+        extra += check_baffles(check_text) or check_baffles(baffles)
         regions, expected_regions = region_count(check_text), self._expected_regions()
         if expected_regions is not None and regions is not None and regions != expected_regions:
             extra.append(_issue(

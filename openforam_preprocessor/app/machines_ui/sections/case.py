@@ -9,6 +9,7 @@ from typing import Any
 
 import streamlit as st
 
+from app.components.widgets import render_issues
 from app.machines_ui import state
 from app.machines_ui.sections.common import COURANT_NOTE, zone_html
 from app.machines_ui.sections.mesh import stage_view
@@ -73,6 +74,38 @@ def solution_view(report: dict[str, Any]) -> None:
                 "0.33), as in every case.", unsafe_allow_html=True)
 
 
+def solve_view(ctx: state.Context) -> None:
+    """Memory and time to solve this case (M2b-4): a warning when it needs more
+    memory than WSL has free, with the runner + draft tube study offered."""
+    found = ctx.service.solve_estimate()
+    if found is None:
+        return
+    st.markdown("**Solving this case** (an estimate; the app does not run the solver)")
+    free = (f"{found.free_bytes / 1e9:.1f} GB free in WSL now" if found.free_bytes is not None
+            else "free memory unknown")
+    st.caption(f"Memory: about {found.ram_bytes / 1e9:.1f} GB for {found.cells:,} cells "
+               f"(with a 1.25 margin; {free}). Time: about {found.seconds_per_step / 60:.1f} "
+               f"min a step on {found.ranks} cores, about {found.hours_per_revolution:.0f} h a "
+               f"revolution at {found.degrees_per_step:.3g} deg a step"
+               + (", the step the solver took (maxCo) " if found.step_from_log else " ")
+               + 
+               f"({'measured' if found.measured else 'scaled'}: {found.basis}).")
+    if found.fits is not False:
+        return
+    st.warning(f"Solving this case needs about {found.ram_bytes / 1e9:.0f} GB, more than the "
+               f"{(found.free_bytes or 0) / 1e9:.0f} GB WSL has free: it would stop when the "
+               "memory runs out. WSL's memory is set in %UserProfile%\\.wslconfig "
+               "(your decision), or study the runner and the draft tube alone.")
+    kept = ctx.service.study_parts()
+    if kept and st.button(f"Make a study of {', '.join(kept)} (a new project)",
+                          key="machines_make_study"):
+        target, notes, issues = ctx.service.make_study()
+        if target is not None:
+            st.success(f"Made the project {target.name} beside this one; open it from the "
+                       "project list and check it: " + " ".join(notes))
+        render_issues(list(issues))
+
+
 def render(ctx: state.Context) -> None:
     st.subheader("Case setup")
     stage = ctx.service.last_stages()["case_setup"]
@@ -93,6 +126,7 @@ def render(ctx: state.Context) -> None:
     elif report.get("previous"):
         with st.expander("The last successful case setup"):
             values_view(report["previous"])
+    solve_view(ctx)
     files = ctx.service.case_files()
     if files:
         name = st.selectbox("Case file", list(files), key="machines_case_file")

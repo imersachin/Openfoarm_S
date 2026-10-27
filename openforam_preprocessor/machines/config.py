@@ -379,6 +379,27 @@ class ImportedMesh(BaseModel):
     ami_pairs: tuple[MeshAmiPair, ...] = ()
 
 
+class InterfaceJoint(StrEnum):
+    """How two parts meet (M2b-2; machines.msh_import.interfaces)."""
+
+    AMI = "AMI"  # cyclicAMI; always for a rotating part
+    ACMI = "ACMI"  # cyclicACMI with a wall where the sides do not overlap
+    STITCH = "STITCH"  # made one (stitchMesh -perfect); stationary parts, faces one to one
+
+
+class MeshInterface(BaseModel):
+    """Two sides of two parts that meet, each one or more patches of its part
+    (machine names, <prefix>_<patch>), confirmed by the user, never made up.
+    createPatch makes `<name>_<prefix>` of each side."""
+
+    model_config = _STRICT
+
+    name: Name
+    first: tuple[MeshName, ...] = Field(min_length=1)
+    second: tuple[MeshName, ...] = Field(min_length=1)
+    joint: InterfaceJoint
+
+
 class MeshPart(BaseModel):
     """One .msh file of a machine made of several (M2b; docs/m2b_assembly_notes.md):
     a spiral casing, the guide vanes, the runner or the draft tube, as one
@@ -414,6 +435,7 @@ class MachineParts(BaseModel):
     origin: Vec3  # a point on the machine axis
     zones: tuple[MeshZone, ...] = ()
     ami_pairs: tuple[MeshAmiPair, ...] = ()
+    interfaces: tuple[MeshInterface, ...] = ()  # between parts (M2b-2)
 
     @model_validator(mode="after")
     def validate_parts(self) -> MachineParts:

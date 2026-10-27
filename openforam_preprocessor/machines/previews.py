@@ -93,10 +93,18 @@ WAKE = "WAKE"
 SEED = "SEED"
 CUT = "CUT"
 PROBLEM = "PROBLEM"
+CELL_ZONE = "CELL_ZONE"  # a cell zone's outer surface (several files; M2b-3)
 AXIS_POINT = "AXIS_POINT"  # the proposed rotor axis point and its swept circle (U1)
 BOX_CENTRE = "BOX_CENTRE"  # the rotor's bounding-box centre, when off the axis
 
-_FOAM_KINDS = {"cyclicAMI": INTERFACE, "wall": PatchType.WALL.value}
+_FOAM_KINDS = {"cyclicAMI": INTERFACE, "cyclicACMI": INTERFACE, "wall": PatchType.WALL.value}
+# A machine of several files (M2b-3): the display limit is split between the
+# parts, then between each part's patches; the cell zones' surfaces get their
+# own share (shown on request). Evidence 1.6: on the 23 M machine a share per
+# patch left the draft tube 2,633 triangles, and the grid coarsened by 0.7 a
+# level used 47 k of 100 k; a share per part gives each part about 20 k.
+ZONE_SHARE = 0.2
+FINE_STEP = 0.9
 
 
 @dataclass(frozen=True)
@@ -124,6 +132,8 @@ class Surface:
     triangles: np.ndarray  # (m, 3) int32
     shown: int  # faces shown
     total: int  # faces in the source
+    group: str = ""  # a legend group of its own (a machine's part, M2b-3); "": by kind
+    hidden: bool = False  # in the legend, drawn when clicked
 
 
 @dataclass(frozen=True)
@@ -950,7 +960,7 @@ def mesh_hash(poly: Path, kinds: Mapping[str, str], planes: Sequence[Plane],
 
 
 def _patch_kind(name: str, foam_type: str, kinds: Mapping[str, str]) -> str:
-    if foam_type == "cyclicAMI":
+    if foam_type in ("cyclicAMI", "cyclicACMI"):
         return INTERFACE
     return kinds.get(name) or _FOAM_KINDS.get(foam_type, UNASSIGNED)
 
@@ -1102,7 +1112,7 @@ def imported_cut_planes(config: MachineProjectConfig,
                   f"{centre[zone.axis.position]:.4g} m", _t(centre), _t(e)))
 
 
-def cluster(points: np.ndarray, triangles: np.ndarray, cap: int,
+def cluster(points: np.ndarray, triangles: np.ndarray, cap: int, step: float = 0.7,
             ) -> tuple[np.ndarray, np.ndarray]:
     """At most about `cap` triangles: vertex clustering on a grid sized to these
     points, coarsened until it fits (E0: 4.3 M triangles of a 23 M-cell machine
@@ -1128,7 +1138,7 @@ def cluster(points: np.ndarray, triangles: np.ndarray, cap: int,
             sums = np.zeros((int(rep.max()) + 1, 3))
             np.add.at(sums, rep, vertices)
             return sums / np.bincount(rep).astype(float)[:, None], kept
-        cells = max(2, int(cells * 0.7))
+        cells = max(2, min(cells - 1, int(cells * step)))
 
 
 def _fan(surface: Any, faces: np.ndarray) -> np.ndarray:
@@ -1154,19 +1164,24 @@ def imported_view_files(folder: Path) -> list[Path]:
             *vtk_sets(folder)]
 
 
-def _imported_inputs(kinds: Mapping[str, str], limits: PreviewLimits) -> dict[str, Any]:
-    return {"version": PREVIEW_VERSION, "view": "mesh", "source": "imported",
-            "kinds": dict(sorted(kinds.items())), "limits": limits.__dict__}
+def _imported_inputs(kinds: Mapping[str, str], limits: PreviewLimits,
+                     parts: Mapping[str, str] | None = None) -> dict[str, Any]:
+    found = {"version": PREVIEW_VERSION, "view": "mesh", "source": "imported",
+             "kinds": dict(sorted(kinds.items())), "limits": limits.__dict__}
+    if parts:  # only then: a single file's scene keeps its key (M2b-3)
+        found["parts"] = dict(parts)
+    return found
 
 
-def imported_mesh_signature(folder: Path, kinds: Mapping[str, str],
-                            limits: PreviewLimits) -> str:
-    return sha256_json({**_imported_inputs(kinds, limits),
+def imported_mesh_signature(folder: Path, kinds: Mapping[str, str], limits: PreviewLimits,
+                            parts: Mapping[str, str] | None = None) -> str:
+    return sha256_json({**_imported_inputs(kinds, limits, parts),
                         "files": [_stat(p) for p in imported_view_files(folder)]})
 
 
-def imported_mesh_hash(folder: Path, kinds: Mapping[str, str], limits: PreviewLimits) -> str:
-    return sha256_json({**_imported_inputs(kinds, limits),
+def imported_mesh_hash(folder: Path, kinds: Mapping[str, str], limits: PreviewLimits,
+                       parts: Mapping[str, str] | None = None) -> str:
+    return sha256_json({**_imported_inputs(kinds, limits, parts),
                         "files": [[p.name, sha256_file(p) if p.is_file() else None]
                                   for p in imported_view_files(folder)]})
 
@@ -1180,9 +1195,14 @@ def recorded_planes(folder: Path) -> tuple[Plane, ...]:
 
 
 def build_imported_mesh_scene(folder: Path, kinds: Mapping[str, str],
-                              limits: PreviewLimits | None = None, key: str = "") -> Scene:
+                              limits: PreviewLimits | None = None, key: str = "",
+                              parts: Mapping[str, str] | None = None,
+                              owners: Mapping[str, str] | None = None) -> Scene:
     """Boundary by patch and the cuts of the imported mesh in `folder`
-    (cases/merged/), on the planes they were made on."""
+    (cases/merged/), on the planes they were made on. `parts` (prefix -> name,
+    a machine of several files): the limit shared by part, a finer grid, a
+    legend group per part, and the cell zones' surfaces on request. `owners`:
+    interface side -> its part (a side is named after the interface)."""
     from machines.msh_import import surface as extracted
 
     limits = limits or PreviewLimits()
@@ -1200,20 +1220,25 @@ def build_imported_mesh_scene(folder: Path, kinds: Mapping[str, str],
     notes: list[str] = []
     listed = [(p, found.faces(p.name)) for p in patches if p.n_faces]
     listed = [(p, faces) for p, faces in listed if len(faces)]
-    keep = allocate([len(f) for _, f in listed], limits.max_faces,
-                    limits.min_faces_per_patch)
-    surfaces = []
-    for (patch, faces), count in zip(listed, keep, strict=True):
-        vertices, triangles = cluster(found.points, _fan(found, faces), max(count, 1))
-        surfaces.append(Surface(
-            f"{patch.name} ({patch.patch_type})",
-            _patch_kind(patch.name, patch.patch_type, kinds), vertices.astype(np.float32),
-            triangles.astype(np.int32), min(len(triangles), len(faces)), len(faces)))
-    shown, total = sum(s.shown for s in surfaces), sum(s.total for s in surfaces)
+    if parts:
+        surfaces = _part_surfaces(found, listed, kinds, limits, parts, owners or {})
+    else:
+        keep = allocate([len(f) for _, f in listed], limits.max_faces,
+                        limits.min_faces_per_patch)
+        surfaces = []
+        for (patch, faces), count in zip(listed, keep, strict=True):
+            vertices, triangles = cluster(found.points, _fan(found, faces), max(count, 1))
+            surfaces.append(Surface(
+                f"{patch.name} ({patch.patch_type})",
+                _patch_kind(patch.name, patch.patch_type, kinds), vertices.astype(np.float32),
+                triangles.astype(np.int32), min(len(triangles), len(faces)), len(faces)))
+    drawn = [s for s in surfaces if not s.hidden]
+    shown, total = sum(s.shown for s in drawn), sum(s.total for s in drawn)
     if shown < total:
         notes.append(f"The boundary is simplified for display: {shown:,} triangles for "
-                     f"{total:,} faces (display limit {limits.max_faces:,}; each patch "
-                     "simplified on its own grid).")
+                     f"{total:,} faces (display limit {limits.max_faces:,}; "
+                     + ("shared between the parts, then their patches)." if parts else
+                        "each patch simplified on its own grid)."))
     lines = []
     for plane, name in zip(planes, (ALONG, ACROSS), strict=False):
         segments = extracted.cut_segments(extracted.cut_file(folder, name))
@@ -1234,6 +1259,47 @@ def build_imported_mesh_scene(folder: Path, kinds: Mapping[str, str],
     markers = _vtk_markers(folder, limits, notes)
     return Scene("mesh", key, tuple(surfaces), tuple(lines), tuple(markers), (),
                  _bounds([s.vertices for s in surfaces]), tuple(notes))
+
+
+def _part_surfaces(found: Any, listed: Sequence[tuple[Any, np.ndarray]],
+                   kinds: Mapping[str, str], limits: PreviewLimits,
+                   parts: Mapping[str, str], owners: Mapping[str, str]) -> list[Surface]:
+    """A machine's boundary by part: (1 - ZONE_SHARE) of the limit split evenly
+    between the parts (those with patches), each part's share between its
+    patches by face count, on a finer grid; an interface side keeps its
+    colour. Then each cell zone's outer surface (not a part's own zone <P>),
+    hidden until clicked, from the rest of the limit."""
+    def part(name: str) -> str:
+        prefix = owners.get(name.removesuffix("_blockage"), name.split("_", 1)[0])
+        return prefix if prefix in parts else ""
+
+    groups = sorted({part(p.name) for p, _ in listed})
+    budget = int(limits.max_faces * (1 - ZONE_SHARE)) // max(len(groups), 1)
+    surfaces: list[Surface] = []
+    for group in groups:
+        mine = [(p, f) for p, f in listed if part(p.name) == group]
+        keep = allocate([len(f) for _, f in mine], budget,
+                        max(1, limits.min_faces_per_patch // 5))
+        label = f"{group}: {parts[group]}" if group else "Other patches"
+        for (patch, faces), count in zip(mine, keep, strict=True):
+            vertices, triangles = cluster(found.points, _fan(found, faces), max(count, 1),
+                                          FINE_STEP)
+            surfaces.append(Surface(
+                f"{patch.name} ({patch.patch_type})",
+                _patch_kind(patch.name, patch.patch_type, kinds), vertices.astype(np.float32),
+                triangles.astype(np.int32), min(len(triangles), len(faces)), len(faces),
+                label))
+    zones = [z for z in found.zones if z not in parts]
+    keep = allocate([len(found.zone_faces(z)) for z in zones],
+                    int(limits.max_faces * ZONE_SHARE), 1)
+    for zone, count in zip(zones, keep, strict=True):
+        faces = found.zone_faces(zone)
+        vertices, triangles = cluster(found.points, _fan(found, faces), max(count, 1),
+                                      FINE_STEP)
+        surfaces.append(Surface(f"cell zone {zone}", CELL_ZONE, vertices.astype(np.float32),
+                                triangles.astype(np.int32), min(len(triangles), len(faces)),
+                                len(faces), "Cell zones (click to show)", hidden=True))
+    return surfaces
 
 
 def _vtk_markers(folder: Path, limits: PreviewLimits, notes: list[str]) -> list[Markers]:
@@ -1285,7 +1351,8 @@ def _encode(scene: Scene) -> dict[str, np.ndarray]:
     for i, s in enumerate(scene.surfaces):
         arrays[f"s{i}v"], arrays[f"s{i}t"] = s.vertices, s.triangles
         meta["surfaces"].append({"name": s.name, "kind": s.kind, "shown": s.shown,
-                                 "total": s.total})
+                                 "total": s.total,
+                                 **({"group": s.group, "hidden": s.hidden} if s.group else {})})
     for i, ln in enumerate(scene.lines):
         arrays[f"l{i}"] = ln.points
         meta["lines"].append({"name": ln.name, "kind": ln.kind, "shown": ln.shown,
@@ -1306,7 +1373,8 @@ def _decode(data: Mapping[str, np.ndarray]) -> Scene:
     return Scene(
         meta["view"], meta["key"],
         tuple(Surface(s["name"], s["kind"], data[f"s{i}v"], data[f"s{i}t"], s["shown"],
-                      s["total"]) for i, s in enumerate(meta["surfaces"])),
+                      s["total"], str(s.get("group", "")), bool(s.get("hidden", False)))
+              for i, s in enumerate(meta["surfaces"])),
         tuple(Lines(ln["name"], ln["kind"], data[f"l{i}"], ln["shown"], ln["total"])
               for i, ln in enumerate(meta["lines"])),
         tuple(Markers(m["name"], m["kind"], data[f"m{i}"], tuple(m["labels"]), m["shown"],
@@ -1452,12 +1520,35 @@ def mesh_preview(root: Path, poly: Path, kinds: Mapping[str, str], planes: Seque
 
 
 def imported_mesh_preview(root: Path, folder: Path, kinds: Mapping[str, str],
-                          limits: PreviewLimits | None = None) -> StoredPreview:
+                          limits: PreviewLimits | None = None,
+                          parts: Mapping[str, str] | None = None,
+                          owners: Mapping[str, str] | None = None) -> StoredPreview:
     limits = limits or PreviewLimits()
+    keyed = {**(parts or {}), **{f"side:{k}": v for k, v in (owners or {}).items()}}
     return PreviewStore(root).get(
-        "mesh", lambda: imported_mesh_signature(folder, kinds, limits),
-        lambda: imported_mesh_hash(folder, kinds, limits),
-        lambda key: build_imported_mesh_scene(folder, kinds, limits, key))
+        "mesh", lambda: imported_mesh_signature(folder, kinds, limits, keyed or None),
+        lambda: imported_mesh_hash(folder, kinds, limits, keyed or None),
+        lambda key: build_imported_mesh_scene(folder, kinds, limits, key, parts, owners))
+
+
+def side_owners(config: MachineProjectConfig) -> dict[str, str] | None:
+    """Interface side -> the part it is on (a machine of several files)."""
+    from machines.config import MachineParts
+    from machines.msh_import.interfaces import part_of, sides
+
+    mesh = config.imported_mesh
+    if not isinstance(mesh, MachineParts):
+        return None
+    return {side: part_of(patches[0]) for i in mesh.interfaces
+            for side, patches in zip(sides(i), (i.first, i.second), strict=True)}
+
+
+def machine_parts(config: MachineProjectConfig) -> dict[str, str] | None:
+    """prefix -> part name of a machine of several files; None otherwise."""
+    from machines.config import MachineParts
+
+    mesh = config.imported_mesh
+    return {p.prefix: p.name for p in mesh.parts} if isinstance(mesh, MachineParts) else None
 
 
 def patch_kinds(config: MachineProjectConfig) -> dict[str, str]:

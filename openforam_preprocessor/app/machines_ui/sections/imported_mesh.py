@@ -359,12 +359,17 @@ def names_used(draft: dict[str, Any], inspection: MeshInspection) -> list[dict[s
     """Original name -> name used, for every patch of the file."""
     mesh = mesh_of(draft)
     ami = {n for p in mesh.get("ami_pairs") or [] for n in (p.get("first"), p.get("second"))}
+    joined = {n: f"interface {i.get('name')} ({str(i.get('joint')).lower()})"
+              for i in mesh.get("interfaces") or [] if isinstance(i, dict)
+              for n in (*(i.get("first") or ()), *(i.get("second") or ()))}
     renamed = {(p.get("source") or {}).get("ref"): p.get("name")
                for p in draft.get("patches") or []
                if (p.get("source") or {}).get("kind") == "MESH_PATCH"}
     rows = []
     for name in inspection.info.patches:
-        if name in ami:
+        if name in joined:
+            rows.append({"original name": name, "name used": "—", "as": joined[name]})
+        elif name in ami:
             rows.append({"original name": name, "name used": name, "as": "AMI (cyclicAMI)"})
         elif name in renamed:
             used = str(renamed[name])

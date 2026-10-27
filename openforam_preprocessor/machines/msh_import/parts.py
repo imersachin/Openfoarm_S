@@ -42,6 +42,7 @@ import numpy as np
 
 from machines.assembly import Step
 from machines.config import MachineParts, MeshPart
+from machines.msh_import.cases import EMPTY_PATCH_DICT
 from machines.msh_import.surface import BoundarySurface, Point
 from openfoam.dictionary import foam_header
 
@@ -77,6 +78,11 @@ def axis_point(mesh: MachineParts) -> tuple[Point, Point]:
     origin = (mesh.origin.x, mesh.origin.y, mesh.origin.z)
     value = mesh.axis.value
     return origin, (float(value == "x"), float(value == "y"), float(value == "z"))
+
+
+def in_file_units(point: Point, to_metres: float) -> Point:
+    """A point in metres in a file's own units (its conversion is at scale 1)."""
+    return (point[0] / to_metres, point[1] / to_metres, point[2] / to_metres)
 
 
 # --- the passage count -------------------------------------------------------------------------
@@ -224,8 +230,10 @@ def prefix_patch_dict(prefix: str, patches: Sequence[tuple[str, str]]) -> str:
 
 
 def prefix_zone_dict(prefix: str, zones: Sequence[str]) -> str:
-    """topoSet: each cell zone again as <P>_<zone>, the old one removed, then
-    the zone <P> of all cells (an empty set inverted); the sets removed."""
+    """topoSet: each cell zone again as <P>_<zone>, the old one removed, the
+    sets removed; a file without a cell zone gets <P>_cells of all its cells
+    (an empty set inverted). The zone <P> is made after the merge
+    (cases.part_zones_dict)."""
     actions: list[str] = []
     for zone in zones:
         new = prefixed(prefix, zone)
@@ -234,11 +242,13 @@ def prefix_zone_dict(prefix: str, zones: Sequence[str]) -> str:
             f"{{ name {new}; type cellZoneSet; action new; source setToCellZone; set {new}; }}"]
     actions += [f"{{ name {zone}; type cellZoneSet; action remove; }}" for zone in zones]
     actions += [f"{{ name {prefixed(prefix, z)}; type cellSet; action remove; }}" for z in zones]
-    actions += [
-        f"{{ name {prefix}; type cellSet; action new; source labelToCell; value (); }}",
-        f"{{ name {prefix}; type cellSet; action invert; }}",
-        f"{{ name {prefix}; type cellZoneSet; action new; source setToCellZone; set {prefix}; }}",
-        f"{{ name {prefix}; type cellSet; action remove; }}"]
+    if not zones:
+        own = prefixed(prefix, "cells")
+        actions += [
+            f"{{ name {own}; type cellSet; action new; source labelToCell; value (); }}",
+            f"{{ name {own}; type cellSet; action invert; }}",
+            f"{{ name {own}; type cellZoneSet; action new; source setToCellZone; set {own}; }}",
+            f"{{ name {own}; type cellSet; action remove; }}"]
     body = "\n".join(f"    {a}" for a in actions)
     return foam_header("topoSetDict") + f"\nactions\n(\n{body}\n);\n"
 
@@ -302,15 +312,6 @@ def stitch_steps(part: MeshPart) -> tuple[Step, ...]:
         for p in part.periodic)
 
 
-EMPTY_PATCH_DICT = "system/createPatchDict.empty"
-
-
-def empty_patch_dict() -> str:
-    """createPatch with no patch to make: it removes the patches left with no
-    face (the stitched periodic ones), keeping the seams (v2512)."""
-    return foam_header("createPatchDict") + "\npointSync false;\n\npatches ();\n"
-
-
 def drop_empty_step(prefix: str) -> Step:
     ring = part_case(prefix)
     return Step(f"{ring}_drop_empty", "run", f"cases/{ring}",
@@ -332,11 +333,25 @@ def merge_steps(prefixes: Sequence[str], target: str) -> tuple[Step, ...]:
 
 # --- records ------------------------------------------------------------------------------------
 
+def zone_sizes(folder: Path) -> dict[str, int]:
+    """Cells of each cell zone of a mesh (names and list sizes are text in a
+    binary cellZones file too)."""
+    path = folder / "constant" / "polyMesh" / "cellZones"
+    try:
+        text = path.read_bytes().decode("latin-1")
+    except OSError:
+        return {}
+    return {name: int(count) for name, count in re.findall(
+        r"\n\s*(\S+)\s*\n\s*\{\s*type\s+cellZone;\s*cellLabels\s+(?:List<label>\s*)?(\d+)",
+        text)}
+
+
 def ring_inputs(part: MeshPart, mesh: MachineParts, convert: dict[str, Any],
                 tool: str) -> dict[str, Any]:
     """What a ring is made from: a ring whose record has these is reused."""
     origin, axis = axis_point(mesh)
-    return {"convert": convert, "units": part.source_units.value,
+    return {"version": 2,  # 2: the zone <P> is made after the merge, not in the ring
+            "convert": convert, "units": part.source_units.value,
             "scale": part.source_units.to_metres, "prefix": part.prefix,
             "passages": part.passages,
             "periodic": [[p.first, p.second] for p in part.periodic],

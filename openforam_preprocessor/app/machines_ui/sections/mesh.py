@@ -113,9 +113,9 @@ def _duration(seconds: float) -> str:
     return f"{seconds / 60:.0f} min" if seconds >= 90 else f"{seconds:.0f} s"
 
 
-def _sweep_label(steps: int, seconds: float | None) -> str:
-    return f"{steps} x {360 / steps:g} deg" + (f" (about {_duration(seconds)})"
-                                                if seconds is not None else "")
+def _sweep_label(steps: int, seconds: float | None, span: float = 360.0) -> str:
+    return f"{steps} x {span / steps:g} deg" + (f" (about {_duration(seconds)})"
+                                                 if seconds is not None else "")
 
 
 @st.fragment(run_every=2.0)
@@ -140,8 +140,50 @@ def revolution_progress(ctx: state.Context) -> None:
         ctx.service.cancel_revolution()
 
 
+def parts_view(report: dict[str, Any]) -> None:
+    """A machine of several files (M2b): each part's file, units, passages and
+    ring; the seams where the passages were stitched (faceZones, not patches)."""
+    openfoam = report.get("openfoam") or {}
+    st.markdown(f"**Imported** {len(report.get('parts') or [])} parts on OpenFOAM "
+                f"{openfoam.get('version')}, assembled about the {report.get('axis')} axis "
+                f"through ({', '.join(f'{v:g}' for v in report.get('origin') or [])}): "
+                f"{report.get('cells'):,} cells.")
+    st.dataframe([{
+        "part": f"{p.get('name')} ({p.get('prefix')})", "file": Path(str(p.get("source"))).name,
+        "converter": p.get("converter"), "units": p.get("units"),
+        "passages": p.get("passages"),
+        "ring cells": f"{p['ring_cells']:,}" if p.get("ring_cells") else "—",
+        "seams": len(p.get("seams") or [])} for p in report.get("parts") or []],
+        hide_index=True, width="stretch")
+    seams = report.get("seams") or []
+    if seams:
+        st.caption("Seams (where the passages were stitched; faceZones, not patches): "
+                   + "; ".join(f"`{name}` {faces:,} faces" for name, faces in seams))
+
+
+def paraview_view(ctx: state.Context) -> None:
+    """The merged mesh for ParaView on Windows: a .foam file and its path."""
+    with st.expander("Open in ParaView"):
+        if st.button("Make the .foam file", key="machines_paraview"):
+            st.session_state["machines_paraview_path"] = ctx.service.paraview_file()
+        found = st.session_state.get("machines_paraview_path")
+        if found is None:
+            st.caption("Writes an empty <project>.foam beside the checked mesh "
+                       "(cases/merged/) for ParaView's OpenFOAM reader.")
+            return
+        foam, windows = found
+        st.code(windows or str(foam), language=None)
+        st.caption("In ParaView: File > Open, paste the path, choose the OpenFOAM reader, "
+                   "Apply. The mesh is read from WSL (E0: 2.4 GB in about 7 s); ParaView "
+                   "itself needs Windows memory for a large mesh.")
+
+
 def import_view(report: dict[str, Any]) -> None:
     """What the import did: converter, OpenFOAM, cells, names, zone radius, areas."""
+    if report.get("parts") is not None:
+        parts_view(report)
+        _names(report)
+        return
     openfoam = report.get("openfoam") or {}
     st.markdown(f"**Imported** from `{report.get('source')}` ({report.get('format')} "
                 f"{report.get('version') or ''}) with {report.get('converter')} on OpenFOAM "
@@ -151,6 +193,10 @@ def import_view(report: dict[str, Any]) -> None:
                + (f" (the file declares {report['declared_cells']})"
                   if report.get("declared_cells") is not None else "")
                + f" · cell zones: {', '.join(report.get('cell_zones') or []) or 'none'}")
+    _names(report)
+
+
+def _names(report: dict[str, Any]) -> None:
     for zone, radius in (report.get("zone_radius_m") or {}).items():
         if radius is not None:
             st.caption(f"Zone {zone}: radius {radius:.4g} m (computed from the zone)")
@@ -164,22 +210,29 @@ def import_view(report: dict[str, Any]) -> None:
 
 def revolution_view(ctx: state.Context, report: dict[str, Any] | None) -> None:
     """The optional check of the AMI weights over one revolution."""
-    st.markdown("**AMI weights over one revolution** (optional: the zone is turned without "
-                "solving the flow)")
+    pitch = ctx.service.revolution_pitch()
+    st.markdown(("**AMI weights over one revolution**" if pitch is None else
+                 f"**AMI weights over one blade pitch** ({pitch:g} deg: the rotating part's "
+                 "mesh repeats every pitch, so this is a full revolution's check)")
+                + " (optional: the zone is turned without solving the flow)")
     if ctx.service.revolution_state() is not None:
         revolution_progress(ctx)
     else:
         render_issues(ctx.service.revolution_messages())
         options = ctx.service.revolution_sweeps()
+        turn = 360.0 if pitch is None else pitch
         choice = st.radio("Steps", [n for n, _ in options], horizontal=True,
                           key="machines_revolution_steps",
-                          format_func=lambda n: _sweep_label(n, dict(options)[n]))
-        if len(options) > 1:
+                          format_func=lambda n: _sweep_label(n, dict(options)[n], turn))
+        if len(options) > 1 and pitch is None:
             st.caption("36 x 10 deg is estimated over 10 min on this mesh, so coarser sweeps "
                        "are offered: 45 deg steps are preferred to 30 deg (on a 15-blade "
                        "runner they test 8 rotor positions, 30 deg steps only 4).")
+        elif len(options) > 1:
+            st.caption(f"12 x {turn / 12:g} deg is estimated over 10 min on this mesh, so "
+                       f"6 x {turn / 6:g} deg is offered too.")
         steps = int(choice or options[0][0])
-        if st.button(f"Check over one revolution ({steps} x {360 / steps:g} deg)",
+        if st.button(f"Check {ctx.service.revolution_label(steps)}",
                      key="machines_ami_revolution", disabled=ctx.active):
             started = ctx.service.start_revolution(steps)
             state.add_messages(started.issues)
@@ -233,6 +286,7 @@ def render(ctx: state.Context) -> None:
         report_view(report, ctx)
     if imported and report is not None:
         revolution_view(ctx, reports["ami_revolution"])
+        paraview_view(ctx)
     st.markdown("**Acceptance limits** (changing them re-runs validation only)")
     with apply_form("quality"):
         limits_fields(ctx)

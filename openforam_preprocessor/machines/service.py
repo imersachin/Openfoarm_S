@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import psutil
 from pydantic import ValidationError
 
 from case_setup.physics import (
@@ -39,7 +40,7 @@ from case_setup.physics import (
 )
 from case_setup.setup import _unit as axis_unit
 from case_setup.setup import _zone_origin as zone_origin
-from case_setup.setup import inlet_area
+from case_setup.setup import angular_speed, inlet_area
 from case_setup.validation import CaseSetupThresholds, check_physics
 from case_setup.wall_cells import WallEstimate, first_layer_for, y_plus_of
 from core.artifacts.hashing import sha256_json
@@ -64,7 +65,7 @@ from machines.config import (
 from machines.heavy_lock import HeavyLock
 from machines.joints import propose_joints
 from machines.mesh_folder import MeshFolderReport, check_mesh_folder
-from machines.msh_import import part_views, resources
+from machines.msh_import import interfaces, part_views, resources, solve_estimate, study
 from machines.msh_import import surface as mesh_surface
 from machines.msh_import.cases import IMPORTED_CASE, MERGED_CASE, SCRATCH_CASE, converter
 from machines.msh_import.inspection import MeshInspection, PatchGeometry, patch_geometry
@@ -85,9 +86,13 @@ from machines.msh_import.revolution import (
     RevolutionResult,
     check_key,
     check_revolution,
+    default_steps,
     mesh_hash,
     over_revolution,
+    pitch_of,
     progress,
+    sweep_label,
+    sweep_options,
     sweeps,
     unavailable,
 )
@@ -121,12 +126,14 @@ from machines.previews import (
     flow_arrows,
     imported_mesh_preview,
     imported_mesh_signature,
+    machine_parts,
     mesh_preview,
     mesh_signature,
     patch_kinds,
     rotation_arrows,
     setup_preview,
     setup_signature,
+    side_owners,
     stl_paths,
     zone_frames_of,
 )
@@ -550,6 +557,15 @@ class MachineService(RunControl):
             return []
         return part_views.views(self.root, mesh, self._tool_identity)
 
+    def interface_candidates(self, raw: Mapping[str, Any],
+                             ) -> tuple[interfaces.Candidate, ...] | None:
+        """The interfaces between the draft's parts suggested from their surfaces
+        (M2b-2): never applied; None until two parts are read and the axis set."""
+        mesh = raw.get("imported_mesh")
+        if not isinstance(mesh, Mapping):
+            return None
+        return part_views.interface_candidates(self.part_views(raw), mesh)
+
     def machine_inspection(self, raw: Mapping[str, Any]) -> MeshInspection | None:
         """The draft's parts as one mesh: prefixed patches and zones, suggested
         types (the patch table and AMI pairs of a machine of several files)."""
@@ -595,6 +611,75 @@ class MachineService(RunControl):
             lock.release()
         return tuple(found)
 
+    def solve_estimate(self) -> solve_estimate.SolveEstimate | None:
+        """Memory and time to solve the set-up case of an imported mesh (M2b-4):
+        None before a mesh is checked and a case set up."""
+        config = self.saved_config()
+        if config is None or config.imported_mesh is None or config.physics is None:
+            return None
+        try:
+            report = json.loads((self.root / MESH_REPORT).read_text("utf-8"))
+            cells = int(report["metrics"]["cells"])
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+        case = self.root / "case"
+        if not (case / "system" / "controlDict").is_file():
+            return None
+        ranks = psutil.cpu_count(logical=False) or os.cpu_count() or 1
+        zone = config.zone_names()[0] if config.zone_names() else ""
+        rotation = config.physics.rotation.get(zone)
+        rpm = (angular_speed(config.physics, zone) * 30.0 / math.pi
+               if rotation is not None else 0.0)
+        return solve_estimate.estimate(
+            cells, self.system_probe(self.root).available_ram_bytes, ranks,
+            config.physics.time.degrees_per_step, solve_estimate.case_log(case), rpm)
+
+    def study_parts(self) -> tuple[str, ...] | None:
+        """The parts a smaller study keeps (the rotating part and the outlet's),
+        or None (M2b-4)."""
+        config = self.saved_config()
+        return study.study_parts(config) if config is not None else None
+
+    def make_study(self) -> tuple[Path | None, tuple[str, ...], tuple[Issue, ...]]:
+        """A new project beside this one with the runner + draft tube study of the
+        saved project (machines.msh_import.study): its folder, what was decided,
+        and the save's findings. Nothing in this project changes."""
+        config = self.saved_config()
+        mesh = config.imported_mesh if config is not None else None
+        if config is None or not isinstance(mesh, MachineParts):
+            return None, (), ()
+        areas = mesh_surface.patch_areas(self.root / "cases" / IMPORTED_CASE,
+                                         machine_info(mesh).patches)
+        name = f"{config.project_name} study"[:80]
+        found = study.study_draft(config, areas, name)
+        if found is None:
+            return None, (), ()
+        raw, notes = found
+        target = self.root.with_name(f"{self.root.name}-study")
+        suffix = 2
+        while target.exists():
+            target = self.root.with_name(f"{self.root.name}-study-{suffix}")
+            suffix += 1
+        other = MachineService(target, pipeline=self.pipeline, registry=self.registry,
+                               env=self.env, profiles=self.profiles)
+        saved = other.save(raw)
+        if saved.revision is None:
+            return None, tuple(notes), saved.issues
+        other.save_ui_settings(self.ui_settings())
+        return target, tuple(notes), saved.issues
+
+    def paraview_file(self) -> tuple[Path, str | None] | None:
+        """An empty <project>.foam beside the merged mesh, for ParaView's
+        OpenFOAM reader (M2b-3), and its path as Windows sees it; None before a
+        mesh is imported."""
+        merged = self.root / "cases" / MERGED_CASE
+        if not (merged / "constant" / "polyMesh" / "boundary").is_file():
+            return None
+        foam = merged / f"{self.root.name}.foam"
+        if not foam.is_file():
+            foam.write_text("", encoding="utf-8")
+        return foam, disk.to_windows(foam, self.environment().distro)
+
     def check_ami_revolution(self) -> RevolutionResult:
         """The saved imported mesh's AMI weights over one revolution, the zone
         turned without solving the flow (optional; machines.msh_import.revolution).
@@ -617,7 +702,8 @@ class MachineService(RunControl):
                 return RevolutionResult((), 0, 0, digest, tuple(found))
             return asyncio.run(check_revolution(
                 self.root, config, runner=self.pipeline.runner, env=self.env,
-                ami_range=self.thresholds.imported_ami_weights_range))
+                ami_range=self.thresholds.imported_ami_weights_range,
+                steps=default_steps(config)))
         finally:
             lock.release()
 
@@ -629,7 +715,21 @@ class MachineService(RunControl):
         estimate from the mesh's cells and the E0 model, or this mesh's last
         measured step (resources.py)."""
         step = self._revolution_step()
-        return [(n, step * n if step is not None else None) for n in sweeps(step)]
+        config = self.saved_config()
+        counts = sweeps(step) if config is None else sweep_options(config, step)
+        return [(n, step * n if step is not None else None) for n in counts]
+
+    def revolution_pitch(self) -> float | None:
+        """The blade pitch the check turns through (deg), or None for a revolution."""
+        config = self.saved_config()
+        found = pitch_of(config) if config is not None else None
+        return found[0] if found is not None else None
+
+    def revolution_label(self, steps: int) -> str:
+        """What a check of `steps` steps turns: one revolution, or one blade pitch
+        of a rotating part made of copies (M2b-4)."""
+        config = self.saved_config()
+        return over_revolution(steps) if config is None else sweep_label(config, steps)
 
     def _revolution_step(self) -> float | None:
         try:
@@ -659,7 +759,7 @@ class MachineService(RunControl):
         run_id = uuid.uuid4().hex
         estimate = step * steps if step is not None else None
         meta: dict[str, Any] = {"steps": steps, "started": time.time(),
-                                "label": over_revolution(steps), "estimate_s": estimate,
+                                "label": sweep_label(config, steps), "estimate_s": estimate,
                                 "waiting": ""}
 
         async def work(cancel_event: Any) -> Any:
@@ -680,7 +780,8 @@ class MachineService(RunControl):
                         "Start it again when ready.").as_dict()]
                     return RevolutionResult((), 0, 0, mesh_hash(self.root))
                 meta["waiting"], meta["started"] = "", time.time()
-                heavy.describe(self.root, f"AMI weights {over_revolution(steps)}", estimate)
+                heavy.describe(self.root, f"AMI weights {sweep_label(config, steps)}",
+                               estimate)
                 result = await check_revolution(
                     self.root, config, runner=self.pipeline.runner, env=self.env,
                     ami_range=self.thresholds.imported_ami_weights_range, steps=steps,
@@ -729,7 +830,9 @@ class MachineService(RunControl):
         config = self.saved_config()
         if config is None or unavailable(config, self.root) is not None:
             return False
-        return report.get("check_sha256") == check_key(self.root, config)
+        steps = report.get("planned_steps")  # the key depends on the steps checked
+        return report.get("check_sha256") == check_key(
+            self.root, config, *((steps,) if isinstance(steps, int) and steps > 0 else ()))
 
     # --- mesh files on disk (M2a) --------------------------------------------------------
 
@@ -1472,7 +1575,8 @@ class MachineService(RunControl):
         signature = [setup_signature(config, self.preview_limits)]
         if poly is not None and config.imported_mesh is not None:
             signature.append(imported_mesh_signature(self.root / "cases" / MERGED_CASE,
-                                                     patch_kinds(config), self.preview_limits))
+                                                     patch_kinds(config), self.preview_limits,
+                                                     machine_parts(config)))
         elif poly is not None:
             signature.append(mesh_signature(poly, patch_kinds(config), (), self.preview_limits))
         return PreviewKey(view, sha256_json([signature, config.model_dump(mode="json"),
@@ -1493,7 +1597,8 @@ class MachineService(RunControl):
         if poly is not None and config.imported_mesh is not None:
             # Binary and never read whole: the surface and cuts the run made (M2a).
             stored = imported_mesh_preview(self.root, self.root / "cases" / MERGED_CASE,
-                                           patch_kinds(config), self.preview_limits)
+                                           patch_kinds(config), self.preview_limits,
+                                           machine_parts(config), side_owners(config))
         elif poly is not None:
             stored = mesh_preview(self.root, poly, patch_kinds(config),
                                   cut_planes(config, setup.scene), self.preview_limits)

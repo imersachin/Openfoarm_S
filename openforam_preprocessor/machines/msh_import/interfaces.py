@@ -14,8 +14,10 @@ createPatch under its own name, `<name>_<prefix>` per side:
 
 Candidates (suggested, never applied): for each pair of patches of two parts,
 the share of each one's area on the other's meridional trace (radius and
-axial position about the machine axis, within 1.5 x the other's typical face
-size; the turn about the axis does not matter), and the full-ring areas
+position along the machine axis; the turn about the axis does not matter): a
+face is on it when its point (the mean of its vertices' radius and position,
+exact on a surface of revolution) lies on one of the other's face segments,
+within 5 % of its length, so walls meeting at an edge are not; and the full-ring areas
 (a passage's area x its passages). Patches that lie mostly on one another's
 trace are grouped into the two sides; a pair is suggested when both sides
 cover each other at least 80 % and their full-ring areas agree within 2 %.
@@ -27,20 +29,25 @@ from __future__ import annotations
 
 import functools
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
+from core.issues import Issue, IssueCategory, IssueSeverity, IssueStage
 from machines.config import InterfaceJoint, MachineParts, MeshInterface
+from machines.mesh_folder import parse_ami_weights
 from machines.msh_import import surface
 from openfoam.dictionary import foam_header
 
 SUGGEST_COVERAGE = 0.80
 SUGGEST_AREA = 0.02
 GROUP_COVERAGE = 0.5  # a patch lies mostly on another's trace: same side
-TRACE_FACES = 1.5  # within this many of the other's typical face sizes
+ON_TRACE = 0.05  # a face's point within this share of a segment's length lies on it
+NEAREST = 8  # segments looked at per point (by their middle)
+SAMPLE = 400  # faces of a patch looked at first; a pair far below SHOWN_COVERAGE stops there
 SHOWN_COVERAGE = 0.05  # candidates below this both ways are not listed
 BLOCKAGE = "_blockage"
 AMI_TOLERANCE = "0.0001"
@@ -71,6 +78,33 @@ def coupled(mesh: MachineParts) -> tuple[tuple[str, str], ...]:
     pairs and each AMI or ACMI interface's two sides."""
     return (*((p.first, p.second) for p in mesh.ami_pairs),
             *(sides(i) for i in mesh.interfaces if i.joint is not InterfaceJoint.STITCH))
+
+
+def partial(mesh: MachineParts) -> tuple[tuple[str, str], ...]:
+    """The cyclicACMI pairs: their sum(weights) falls short of 1 where the sides do
+    not overlap, by design (the blockage wall takes those faces)."""
+    return tuple(sides(i) for i in mesh.interfaces if i.joint is InterfaceJoint.ACMI)
+
+
+def weights_notes(pairs: tuple[tuple[str, str], ...], log: str, when: str,
+                  every: bool = False) -> list[Issue]:
+    """INFO with an ACMI pair's sum(weights) instead of the AMI range check."""
+    found = {(w.source, w.target): w for w in parse_ami_weights(log, every)}
+    notes = []
+    for first, second in pairs:
+        w = found.get((first, second)) or found.get((second, first))
+        if w is None:
+            continue
+        notes.append(Issue(
+            category=IssueCategory.MESHING, severity=IssueSeverity.INFO,
+            stage=IssueStage.MESH_VALIDATION, code="ACMI_WEIGHTS",
+            message=f"ACMI sum(weights) of {first} / {second} {when}: {w.minimum:.3g}-"
+                    f"{w.maximum:.3g}. Below 1 where the sides do not overlap: the blockage "
+                    "walls take those faces.",
+            suggested_action="Nothing to do; an AMI pair would need both sides to cover each "
+                             "other.", details={"pair": [first, second], "minimum": w.minimum,
+                                                "maximum": w.maximum, "when": when}))
+    return notes
 
 
 def expected(mesh: MachineParts) -> dict[str, str]:
@@ -132,19 +166,6 @@ def empty_patch_dict() -> str:
 # --- candidates ---------------------------------------------------------------------------------
 
 @dataclass(frozen=True)
-class _Trace:
-    """A patch's faces about the axis: (r, axial) of the centroids, the areas."""
-
-    part: str
-    name: str  # the machine name, <prefix>_<patch>
-    meridian: np.ndarray  # (n, 2)
-    areas: np.ndarray
-    size: float  # typical face size (sqrt of the median area)
-    ring_area: float  # area x passages
-    ring_faces: int
-
-
-@dataclass(frozen=True)
 class Candidate:
     """Two sides that lie on one another about the axis (suggested only)."""
 
@@ -185,19 +206,73 @@ class Candidate:
         return f"{a}_{b}"
 
 
-def _coverage(a: _Trace, b: _Trace) -> float:
-    """The share of a's area on b's meridional trace."""
+@dataclass(frozen=True)
+class _Trace:
+    """A patch's faces in the meridional plane (radius, position along the
+    axis): each face's point (the mean of its vertices' radius and position:
+    exact on a surface of revolution, unlike the centroid's radius) and its
+    segment (its two vertices furthest apart there)."""
+
+    part: str
+    name: str  # the machine name, <prefix>_<patch>
+    meridian: np.ndarray  # (n, 2) the faces' points
+    segments: np.ndarray  # (n, 2, 2)
+    areas: np.ndarray
+    ring_area: float  # area x passages
+    ring_faces: int
+    tree: Any = None  # of the segments' middles, built once (_trace)
+    box: tuple[np.ndarray, np.ndarray] | None = None  # of the segments
+
+
+def _trace(part: str, name: str, meridian: np.ndarray, segments: np.ndarray,
+           areas: np.ndarray, ring_area: float, ring_faces: int) -> _Trace:
     from scipy.spatial import cKDTree
 
-    miss, _ = cKDTree(b.meridian).query(a.meridian)
-    return float(a.areas[miss < TRACE_FACES * b.size].sum() / a.areas.sum())
+    flat = segments.reshape(-1, 2)
+    return _Trace(part, name, meridian, segments, areas, ring_area, ring_faces,
+                  cKDTree(segments.mean(axis=1)), (flat.min(axis=0), flat.max(axis=0)))
+
+
+def _apart(a: _Trace, b: _Trace) -> bool:
+    """Their meridional boxes do not meet: neither can lie on the other."""
+    assert a.box is not None and b.box is not None
+    (alo, ahi), (blo, bhi) = a.box, b.box
+    gap = ON_TRACE * max(float((ahi - alo).max()), float((bhi - blo).max()))
+    return bool(np.any(alo > bhi + gap) or np.any(blo > ahi + gap))
+
+
+def _sample(a: _Trace) -> _Trace:
+    """At most SAMPLE of a's faces, evenly spread: a quick first look."""
+    if len(a.meridian) <= SAMPLE:
+        return a
+    keep = np.linspace(0, len(a.meridian) - 1, SAMPLE).astype(int)
+    return _Trace(a.part, a.name, a.meridian[keep], a.segments[keep], a.areas[keep],
+                  a.ring_area, a.ring_faces, a.tree, a.box)
+
+
+def _coverage(a: _Trace, b: _Trace) -> float:
+    """The share of a's area whose faces' points lie on one of b's segments
+    (within ON_TRACE of its length): coincident sides cover each other, walls
+    that only meet at an edge do not."""
+    ends = b.segments
+    count = min(NEAREST, len(ends))
+    _, nearest = b.tree.query(a.meridian, k=count)
+    nearest = nearest.reshape(len(a.meridian), count)
+    start, end = ends[nearest, 0], ends[nearest, 1]  # (n, k, 2)
+    along = end - start
+    length = np.linalg.norm(along, axis=2)
+    t = np.clip(np.einsum("nkd,nkd->nk", a.meridian[:, None] - start, along)
+                / np.maximum(length**2, 1e-300), 0.0, 1.0)
+    miss = np.linalg.norm(start + t[..., None] * along - a.meridian[:, None], axis=2)
+    covered = (miss <= ON_TRACE * length + 1e-12).any(axis=1)
+    return float(a.areas[covered].sum() / a.areas.sum())
 
 
 def _join(traces: Sequence[_Trace]) -> _Trace:
-    meridian = np.concatenate([t.meridian for t in traces])
-    areas = np.concatenate([t.areas for t in traces])
-    return _Trace(traces[0].part, "+".join(t.name for t in traces), meridian, areas,
-                  max(t.size for t in traces), sum(t.ring_area for t in traces),
+    return _trace(traces[0].part, "+".join(t.name for t in traces),
+                  np.concatenate([t.meridian for t in traces]),
+                  np.concatenate([t.segments for t in traces]),
+                  np.concatenate([t.areas for t in traces]), sum(t.ring_area for t in traces),
                   sum(t.ring_faces for t in traces))
 
 
@@ -206,6 +281,9 @@ def _traces(folder: Path, prefix: str, factor: float, passages: int, skip: set[s
     found = surface.load(folder)
     if found is None:
         return []
+    relative = found.points * factor - origin
+    along = relative @ axis
+    plane = np.c_[np.linalg.norm(relative - np.outer(along, axis), axis=1), along]
     traces = []
     for name in found.patches:
         if name in skip:
@@ -213,14 +291,19 @@ def _traces(folder: Path, prefix: str, factor: float, passages: int, skip: set[s
         faces = found.faces(name)
         if not len(faces):
             continue
-        areas, centroids = found.area_vectors(faces)
-        relative = centroids * factor - origin
-        along = relative @ axis
-        radial = np.linalg.norm(relative - np.outer(along, axis), axis=1)
-        areas = areas * factor**2
-        traces.append(_Trace(prefix, f"{prefix}_{name}", np.c_[radial, along], areas,
-                             float(np.sqrt(np.median(areas))), float(areas.sum()) * passages,
-                             len(faces) * passages))
+        areas = found.area_vectors(faces)[0] * factor**2
+        meridian = np.zeros((len(faces), 2))
+        segments = np.zeros((len(faces), 2, 2))
+        for where, labels in found._by_size(faces):
+            corners = plane[labels]  # (k, size, 2)
+            meridian[where] = corners.mean(axis=1)
+            gaps = np.linalg.norm(corners[:, :, None] - corners[:, None], axis=3)
+            far = gaps.reshape(len(corners), -1).argmax(axis=1)
+            i, j = np.divmod(far, corners.shape[1])
+            rows = np.arange(len(corners))
+            segments[where] = np.stack([corners[rows, i], corners[rows, j]], axis=1)
+        traces.append(_trace(prefix, f"{prefix}_{name}", meridian, segments, areas,
+                             float(areas.sum()) * passages, len(faces) * passages))
     return traces
 
 
@@ -263,6 +346,9 @@ def _between(left: Sequence[_Trace], right: Sequence[_Trace]) -> list[Candidate]
     edges: dict[tuple[int, int], tuple[float, float]] = {}
     for i, a in enumerate(left):
         for j, b in enumerate(right):
+            if _apart(a, b) or max(_coverage(_sample(a), b),
+                                   _coverage(_sample(b), a)) < SHOWN_COVERAGE / 2:
+                continue
             ab, ba = _coverage(a, b), _coverage(b, a)
             if max(ab, ba) >= SHOWN_COVERAGE:
                 edges[(i, j)] = (ab, ba)
@@ -282,10 +368,12 @@ def _between(left: Sequence[_Trace], right: Sequence[_Trace]) -> list[Candidate]
     groups += [({i}, {j}) for (i, j) in edges if (i, j) not in used]
     found = []
     for lefts, rights in groups:
-        a = _join([left[i] for i in sorted(lefts)])
-        b = _join([right[j] for j in sorted(rights)])
+        lefts_ = sorted(lefts, key=lambda i: left[i].name)  # by name, as shown
+        rights_ = sorted(rights, key=lambda j: right[j].name)
+        a = _join([left[i] for i in lefts_])
+        b = _join([right[j] for j in rights_])
         found.append(Candidate(
-            tuple(left[i].name for i in sorted(lefts)), tuple(right[j].name for j in sorted(rights)),
+            tuple(left[i].name for i in lefts_), tuple(right[j].name for j in rights_),
             (_coverage(a, b), _coverage(b, a)), (a.ring_area, b.ring_area),
             (a.ring_faces, b.ring_faces),
             ((float(a.meridian[:, 0].min()), float(a.meridian[:, 0].max())),
@@ -308,10 +396,3 @@ def joints(candidate: Candidate, rotating: str | None) -> tuple[InterfaceJoint, 
         offered.append(InterfaceJoint.STITCH)
     return tuple(offered)
 
-
-def interface_of(mesh: Mapping[str, object], name: str) -> int | None:
-    """The index of the interface with this name in a draft, or None."""
-    for index, found in enumerate(mesh.get("interfaces") or []):  # type: ignore[union-attr]
-        if isinstance(found, Mapping) and found.get("name") == name:
-            return index
-    return None

@@ -91,6 +91,20 @@ def to_wsl(text: str, distro: str | None = None) -> Resolved:
                           "a \\\\wsl$ share or /.")
 
 
+def to_windows(path: Path, distro: str | None) -> str | None:
+    """A path in this WSL distribution as Windows sees it: a drive path for
+    /mnt/<drive>/..., else the \\wsl.localhost share (M2b-3: ParaView on
+    Windows opens the case there; E0: 364 MB/s). None without a distribution
+    name for a path inside WSL."""
+    parts = Path(path).parts
+    if len(parts) > 2 and parts[1] == "mnt" and re.fullmatch(r"[a-z]", parts[2]):
+        return "\\".join([f"{parts[2].upper()}:", *parts[3:]]) if len(parts) > 3 else (
+            f"{parts[2].upper()}:\\")
+    if not distro:
+        return None
+    return "\\\\wsl.localhost\\" + "\\".join([distro, *parts[1:]])
+
+
 def inside(path: Path, places: Sequence[Root]) -> Root | None:
     """The root the path resolves into (symlinks followed), if any."""
     try:

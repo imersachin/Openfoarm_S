@@ -42,6 +42,8 @@ from machines.config import (
     CylinderDomain,
     CylinderZone,
     ImportedZone,
+    InterfaceJoint,
+    MachineParts,
     MachineProjectConfig,
     Motion,
     PatchType,
@@ -49,10 +51,12 @@ from machines.config import (
     SourceKind,
 )
 from machines.domains import SurfaceInfo
+from machines.msh_import.interfaces import blockage, part_of, sides
 from machines.zones import split_patch
 from vawt.config import Axis, plane_axes
 
 CYCLIC_AMI = "cyclicAMI"
+CYCLIC_ACMI = "cyclicACMI"  # an ACMI interface of a machine of several files (M2b-2)
 
 
 class CaseSetupError(ValueError):
@@ -184,6 +188,16 @@ def configured_kinds(config: MachineProjectConfig) -> dict[str, PatchKind]:
     kinds = {p.name: _KINDS[p.type] for p in config.patches}
     kinds.update({split_patch(b): PatchKind.MOVING_WALL for b in config.bodies
                   if b.motion is Motion.SPLIT})
+    mesh = config.imported_mesh
+    if isinstance(mesh, MachineParts):  # an ACMI interface's walls (M2b-2)
+        turning = {z.cell_zone for z in mesh.zones}
+        for interface in mesh.interfaces:
+            if interface.joint is not InterfaceJoint.ACMI:
+                continue
+            for side, patches in zip(sides(interface), (interface.first, interface.second),
+                                     strict=True):
+                kinds[blockage(side)] = (PatchKind.MOVING_WALL if part_of(patches[0])
+                                         in turning else PatchKind.WALL)
     return kinds
 
 
@@ -195,7 +209,7 @@ def patch_kinds(config: MachineProjectConfig,
     found: list[tuple[str, PatchKind]] = []
     untyped: list[str] = []
     for name, kind in boundary:
-        if kind == CYCLIC_AMI:
+        if kind in (CYCLIC_AMI, CYCLIC_ACMI):
             found.append((name, PatchKind.CONSTRAINT))
         elif name in kinds:
             found.append((name, kinds[name]))

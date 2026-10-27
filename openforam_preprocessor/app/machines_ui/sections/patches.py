@@ -37,6 +37,8 @@ def mesh_candidates(ctx: state.Context, mesh: dict[str, Any],
     else:
         return []
     paired = {n for p in mesh.get("ami_pairs") or [] for n in (p.get("first"), p.get("second"))}
+    paired |= {n for i in mesh.get("interfaces") or [] if isinstance(i, dict)  # M2b-2
+               for n in (*(i.get("first") or ()), *(i.get("second") or ()))}
     return [{"name": n, "kind": "MESH_PATCH", "ref": n,
              "suggested": inspection.suggested_types[n].value
              if n in inspection.suggested_types else None}
