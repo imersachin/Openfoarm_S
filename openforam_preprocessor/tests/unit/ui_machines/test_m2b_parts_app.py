@@ -82,10 +82,10 @@ def test_parts_are_read_then_their_passages_confirmed(msh: MshUi) -> None:
     for index, role in enumerate(("SC", "RU", "GV")):  # casing, runner, vanes (sorted)
         ok(app.selectbox(key=f"machines_part_role_{index}").set_value(role).run())
     assert "3 part(s) to read" in texts(app)
-    assert "the machine axis is not set" not in texts(app)
+    assert "the machine axis (its direction and a point on it) is not set" not in texts(app)
     ok(app.button(key="machines_parts_read").click().run())
     assert "Every part with a prefix has been read" in texts(app)
-    assert "the machine axis is not set" in texts(app)
+    assert "the machine axis (its direction and a point on it) is not set" in texts(app)
     set_draft(app, {"imported_mesh": {**mesh(app), "axis": "z",
                                       "origin": {"x": 0.0, "y": 0.0, "z": 0.0}}})
     assert texts(app).count("a whole ring: 360 deg, no periodic pair") == 3  # boxes

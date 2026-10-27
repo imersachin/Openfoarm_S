@@ -438,3 +438,35 @@ Fixed, each with a test:
   the first part of its name, not its own part;
 - a solver log older than the case's mesh and controlDict counted as
   measured; and the step times left out two steps, not one.
+
+### Browser checklist (machines app, http://localhost:8502)
+
+Checked in Chrome on the RU + DT study (owner's files) and on a new Francis
+project with the fixture parts:
+- Project: "Import several .msh files (a machine in parts)" beside the two
+  other sources; switching to it opens the parts page.
+- Imported mesh: a Windows folder typed, "Add all 4 files as parts" (copied
+  into the project, then added), the role from the file name as a caption
+  only, a role chosen (name and prefix set), Read the parts (three
+  converted, the fourth waiting for its role), units per part against the
+  box, passages found and confirmed, the rotating part, the interface;
+  with it removed in the draft the candidate came back (coverage, ring
+  areas, faces, radius and axial ranges; AMI or ACMI, no stitch on the
+  runner), then Revert.
+- 3D Mesh view, Mesh page (parts, seams, one-pitch check and its labels,
+  Open in ParaView path `\wsl.localhost\Ubuntu-24.04\...\cases\merged\
+  m2b_rudt_app.foam`), Case page (memory, time from the case's own log).
+
+Fixed from it: the legend listed every patch (55 for the runner) and left
+the plot a sliver, many patches "0 of N faces": a part's patches of one type
+are now one surface (inlets, outlets and interface sides alone, the flow
+arrows find inlets by name), the legend of a machine under the plot, cell
+zones by a short name; ACMI pairs named as such in the weights captions
+(they read "WARNING outside 0.95-1.05"); the section's help for a machine;
+an issue shown once; "measured: measured"; a part or the machine axis not
+chosen said plainly (PART_NOT_CHOSEN, MACHINE_AXIS_NOT_CHOSEN) instead of
+"Field required"; the read note names the files still without a part.
+Seen, not changed: checkMesh writes 912,665 nonManifoldPoints for the RU + DT
+mesh (the ACMI couple and its blockage share their faces' points); the flow
+arrow of an imported mesh is not drawn (it reads the setup scene, which an
+imported mesh does not have; as before M2b).

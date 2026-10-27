@@ -213,6 +213,22 @@ def _rename(issue: Issue) -> Issue:
             "Choose them against the bounding box; they are never assumed.",
             category=IssueCategory.UNITS, field=field,
         )
+    if kind in UNSET_ERROR_TYPES and re.fullmatch(r"imported_mesh\.parts\.\d+\.(name|prefix)",
+                                                  field):  # M2b
+        return _blocking(
+            "PART_NOT_CHOSEN", f"Mesh part {int(field.split('.')[2]) + 1} has no "
+            + ("name." if field.endswith("name") else "prefix (short name)."),
+            "Choose the part (spiral casing, guide vanes, runner, draft tube) or give a "
+            "custom name and prefix.", field=field,
+        )
+    if kind in UNSET_ERROR_TYPES and field in ("imported_mesh.axis", "imported_mesh.origin"):
+        what = ("The machine axis's direction" if field.endswith("axis")
+                else "A point on the machine axis")
+        return _blocking(
+            "MACHINE_AXIS_NOT_CHOSEN", f"{what} has not been chosen.",
+            "Choose the axis direction and a point on the axis (x, y, z in m) and press "
+            "Apply; they are never assumed.", field=field,
+        )
     if re.fullmatch(r"imported_mesh\.parts\.\d+\.source_units", field):  # M2b
         return _blocking(
             "UNITS_NOT_CHOSEN", f"The units of mesh part {int(field.split('.')[2]) + 1} have "

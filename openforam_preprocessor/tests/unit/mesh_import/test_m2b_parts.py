@@ -336,3 +336,15 @@ def test_a_changed_part_file_is_found(tmp_path: Path) -> None:
     ("SC-SV-HH-HighRe.msh", "SC"), ("draft_tube.msh", "DT"), ("box.msh", None)])
 def test_the_file_name_suggests_a_role(name: str, role: str | None) -> None:
     assert suggest_role(Path(name)) == role
+
+
+def test_a_part_or_the_axis_not_chosen_is_said_plainly() -> None:
+    data = machine()
+    del data["imported_mesh"]["parts"][2]["name"]
+    del data["imported_mesh"]["parts"][2]["prefix"]
+    del data["imported_mesh"]["origin"]
+    _, issues = parse_config(data)
+    assert [(i.code, i.message) for i in issues] == [
+        ("PART_NOT_CHOSEN", "Mesh part 3 has no name."),
+        ("PART_NOT_CHOSEN", "Mesh part 3 has no prefix (short name)."),
+        ("MACHINE_AXIS_NOT_CHOSEN", "A point on the machine axis has not been chosen.")]

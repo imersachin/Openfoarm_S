@@ -17,7 +17,7 @@ import streamlit as st
 
 from app.components.widgets import render_issues
 from app.machines_ui import state
-from app.machines_ui.sections.common import apply_form, list_at, section_header, section_issues
+from app.machines_ui.sections.common import apply_form, list_at, section_header
 from app.machines_ui.sections.fields import (
     UNIT_LABELS,
     axis_field,
@@ -195,11 +195,13 @@ def read_view(ctx: state.Context, views: list[PartView]) -> None:
     pending = [v for v in views if v.prefix and v.info.readable and not v.converted]
     if not views:
         return
+    missing = [v.path.name for v in views if not v.prefix]
     if not pending:
         st.caption("Every part with a prefix has been read (converted once at scale 1, with "
-                   "its surface; a run reuses it).")
+                   "its surface; a run reuses it)."
+                   + (f" Choose the part of {', '.join(missing)} to read it." if missing
+                      else ""))
         return
-    missing = [v.path.name for v in views if not v.prefix]
     st.info(f"{len(pending)} part(s) to read: each is converted once at scale 1 to find its "
             "passage count (a run reuses the conversion)."
             + (f" Choose the part of {', '.join(missing)} first." if missing else ""))
@@ -333,10 +335,11 @@ def interfaces_view(ctx: state.Context, inspection: Any) -> None:
 
 def render(ctx: state.Context, picker: Any, copies: Any, pairs_view: Any,
            names_used: Any) -> None:
-    section_header(ctx, "imported_mesh")
-    st.caption("Each file is one part: a whole ring or one passage of it. A run converts "
-               "each, uses its patches and cell zones as <prefix>_<name>, copies a passage "
-               "around the machine axis and stitches the copies, then merges the parts.")
+    section_header(ctx, "imported_mesh", help=(
+        "Each file is one part: a whole ring or one passage of it. A run converts each, "
+        "uses its patches and cell zones as <prefix>_<name>, copies a passage around the "
+        "machine axis and stitches the copies, then merges the parts. Patch types are set "
+        "in the patch table."))
     axis_view(ctx)
     with st.expander("Add .msh files (Windows drives and WSL)",
                      expanded=not mesh_of(ctx.draft).get("parts")):
@@ -353,5 +356,8 @@ def render(ctx: state.Context, picker: Any, copies: Any, pairs_view: Any,
         interfaces_view(ctx, inspection)
         st.markdown("**Names in the mesh** (part patch -> name used)")
         st.dataframe(names_used(ctx.draft, inspection), hide_index=True, width="stretch")
-    section_issues(ctx, "imported_mesh")
+    shown = {(i.code, i.message) for v in views for i in v.info.issues}
+    status = ctx.analysis.sections.get("imported_mesh")
+    render_issues([i for i in (status.issues if status else ())
+                   if (i.code, i.message.split(": ", 1)[-1]) not in shown])
 

@@ -806,6 +806,9 @@ class ImportRun:
         payload["ami_weights"] = [asdict(w) for w in parse_ami_weights(ami_text)]
         payload["ami_weights_when"] = AT_REST
         payload["ami_weights_range"] = list(self.pipe.thresholds.imported_ami_weights_range)
+        partial = self._partial_pairs()
+        if partial:  # M2b-2: their weights are an INFO, not ranged
+            payload["acmi_pairs"] = [list(p) for p in partial]
         payload["imported"] = {"report": IMPORT_REPORT, "converter": self._converter(plan)}
         payload["checkmesh_findings"] = [asdict(f) for f in findings]
         payload["quality_by_zone"] = self._by_zone()

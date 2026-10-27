@@ -270,12 +270,14 @@ async def check_revolution(root: Path, config: MachineProjectConfig, *,
             failed_steps=failed))
     found = RevolutionResult(parse_ami_weights(text, every=True), done, failed, digest,
                              tuple(issues), str(log), check_key(root, config, steps))
-    _write_report(root, found, steps, ami_range, sweep_label(config, steps))
+    _write_report(root, found, steps, ami_range, sweep_label(config, steps),
+                  interfaces.partial(mesh) if isinstance(mesh, MachineParts) else ())
     return found
 
 
 def _write_report(root: Path, result: RevolutionResult, steps: int,
-                  ami_range: tuple[float, float], when: str | None = None) -> None:
+                  ami_range: tuple[float, float], when: str | None = None,
+                  acmi: tuple[tuple[str, str], ...] = ()) -> None:
     path = root / REVOLUTION_REPORT
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({
@@ -285,6 +287,7 @@ def _write_report(root: Path, result: RevolutionResult, steps: int,
         "failed_steps": result.failed_steps, "mesh_sha256": result.mesh_sha256,
         "check_sha256": result.check_sha256,
         "range": list(ami_range), "weights": [asdict(w) for w in result.weights],
+        **({"acmi_pairs": [list(p) for p in acmi]} if acmi else {}),
         "issues": [i.as_dict() for i in result.issues], "log": result.log,
         "note": "The zone is turned by solid-body rotation without solving the flow "
                 "(moveDynamicMesh -checkAMI).",

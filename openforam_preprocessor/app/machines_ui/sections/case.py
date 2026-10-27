@@ -88,8 +88,7 @@ def solve_view(ctx: state.Context) -> None:
                f"min a step on {found.ranks} cores, about {found.hours_per_revolution:.0f} h a "
                f"revolution at {found.degrees_per_step:.3g} deg a step"
                + (", the step the solver took (maxCo) " if found.step_from_log else " ")
-               + 
-               f"({'measured' if found.measured else 'scaled'}: {found.basis}).")
+               + f"({found.basis}).")
     if found.fits is not False:
         return
     st.warning(f"Solving this case needs about {found.ram_bytes / 1e9:.0f} GB, more than the "

@@ -88,6 +88,16 @@ def _xyz(points: np.ndarray) -> dict[str, Any]:
     return {"x": points[:, 0], "y": points[:, 1], "z": points[:, 2]}
 
 
+def _short(name: str) -> str:
+    """A cell zone's long name as its last '_' part (the full one on hover)."""
+    words = name.split(" ", 2)
+    zone = words[-1]
+    tail = zone.rsplit("_", 1)[-1]
+    if len(zone) <= 16 or not tail:
+        return name
+    return f"{' '.join(words[:-1])} {zone.split('_', 1)[0]}_\u2026{tail}"
+
+
 def scene_figure(scene: Scene, arrows: Sequence[Arrow] = (), title: str = "") -> go.Figure:
     """Every surface, line set, marker set and arrow of a scene."""
     figure = go.Figure()
@@ -102,7 +112,8 @@ def scene_figure(scene: Scene, arrows: Sequence[Arrow] = (), title: str = "") ->
         figure.add_trace(go.Mesh3d(
             **_xyz(surface.vertices), i=surface.triangles[:, 0], j=surface.triangles[:, 1],
             k=surface.triangles[:, 2], color=colour, opacity=opacity, flatshading=True,
-            name=_name(surface.name, surface.shown, surface.total, "faces"),
+            name=_name(_short(surface.name) if surface.kind == CELL_ZONE else surface.name,
+                       surface.shown, surface.total, "faces"),
             legendgroup=legend, legendgrouptitle_text=group_title, showlegend=True,
             visible="legendonly" if surface.hidden else True,
             hovertemplate=f"{surface.name}<br>{group}<extra></extra>"))
@@ -141,8 +152,12 @@ def scene_figure(scene: Scene, arrows: Sequence[Arrow] = (), title: str = "") ->
         scene={"aspectmode": "data", "xaxis_title": "x (m)", "yaxis_title": "y (m)",
                "zaxis_title": "z (m)",
                "camera": {"up": {"x": up[0], "y": up[1], "z": up[2]}}},
-        legend={"itemsizing": "constant", "groupclick": "toggleitem"},
+        legend={"itemsizing": "constant", "groupclick": "toggleitem",
+                # A machine's legend under the plot: beside it, it left the plot a
+                # sliver of the pane (browser check of M2b).
+                **({"orientation": "h", "y": 0, "yanchor": "top"} if parts else {})},
         margin={"l": 0, "r": 0, "t": 30 if title else 0, "b": 0},
+        **({"height": 760} if parts else {}),
         uirevision=scene.view,  # keep the camera across reruns of the same view
     )
     return figure

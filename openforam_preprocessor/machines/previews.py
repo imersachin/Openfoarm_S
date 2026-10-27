@@ -105,6 +105,10 @@ _FOAM_KINDS = {"cyclicAMI": INTERFACE, "cyclicACMI": INTERFACE, "wall": PatchTyp
 # level used 47 k of 100 k; a share per part gives each part about 20 k.
 ZONE_SHARE = 0.2
 FINE_STEP = 0.9
+_ALONE = (INTERFACE, PatchType.INLET.value, PatchType.OUTLET.value)
+_KIND_WORDS = {"INLET": "inlet", "OUTLET": "outlet", "WALL": "walls",
+               "ROTATING_WALL": "rotating walls", "SLIP": "symmetry or slip",
+               "UNASSIGNED": "patches without a type"}
 
 
 @dataclass(frozen=True)
@@ -1170,6 +1174,7 @@ def _imported_inputs(kinds: Mapping[str, str], limits: PreviewLimits,
              "kinds": dict(sorted(kinds.items())), "limits": limits.__dict__}
     if parts:  # only then: a single file's scene keeps its key (M2b-3)
         found["parts"] = dict(parts)
+        found["parts_view"] = 3  # a part's walls of one type as one surface; inlets alone
     return found
 
 
@@ -1265,10 +1270,13 @@ def _part_surfaces(found: Any, listed: Sequence[tuple[Any, np.ndarray]],
                    kinds: Mapping[str, str], limits: PreviewLimits,
                    parts: Mapping[str, str], owners: Mapping[str, str]) -> list[Surface]:
     """A machine's boundary by part: (1 - ZONE_SHARE) of the limit split evenly
-    between the parts (those with patches), each part's share between its
-    patches by face count, on a finer grid; an interface side keeps its
-    colour. Then each cell zone's outer surface (not a part's own zone <P>),
-    hidden until clicked, from the rest of the limit."""
+    between the parts (those with patches). Within a part, the patches of one
+    type are drawn as one surface (a runner has 55 patches: one legend entry
+    and one grid each left most of them with no triangle; browser check of
+    M2b), each interface side on its own in its colour; the part's share is
+    split between those by face count, on a finer grid. Then each cell zone's
+    outer surface (not a part's own zone <P>), hidden until clicked, from the
+    rest of the limit."""
     def part(name: str) -> str:
         prefix = owners.get(name.removesuffix("_blockage"), name.split("_", 1)[0])
         return prefix if prefix in parts else ""
@@ -1277,18 +1285,29 @@ def _part_surfaces(found: Any, listed: Sequence[tuple[Any, np.ndarray]],
     budget = int(limits.max_faces * (1 - ZONE_SHARE)) // max(len(groups), 1)
     surfaces: list[Surface] = []
     for group in groups:
-        mine = [(p, f) for p, f in listed if part(p.name) == group]
-        keep = allocate([len(f) for _, f in mine], budget,
-                        max(1, limits.min_faces_per_patch // 5))
         label = f"{group}: {parts[group]}" if group else "Other patches"
-        for (patch, faces), count in zip(mine, keep, strict=True):
-            vertices, triangles = cluster(found.points, _fan(found, faces), max(count, 1),
+        merged: dict[str, tuple[str, str, list[np.ndarray]]] = {}  # key: name, kind, faces
+        for patch, faces in listed:
+            if part(patch.name) != group:
+                continue
+            kind = _patch_kind(patch.name, patch.patch_type, kinds)
+            alone = kind in _ALONE  # the flow arrows find an inlet by its patch name
+            key = patch.name if alone else kind
+            name = (f"{patch.name} ({patch.patch_type})" if alone else kind)
+            merged.setdefault(key, (name, kind, []))[2].append(faces)
+        rows = [(name, kind, np.concatenate(found_faces), len(found_faces))
+                for name, kind, found_faces in merged.values()]
+        keep = allocate([len(f) for _, _, f, _ in rows], budget,
+                        max(1, limits.min_faces_per_patch // 5))
+        for (name, kind, faces, count), share in zip(rows, keep, strict=True):
+            vertices, triangles = cluster(found.points, _fan(found, faces), max(share, 1),
                                           FINE_STEP)
+            title = name if kind in _ALONE else (
+                f"{group} {_KIND_WORDS.get(kind, kind.lower())}"
+                + (f" ({count} patches)" if count > 1 else ""))
             surfaces.append(Surface(
-                f"{patch.name} ({patch.patch_type})",
-                _patch_kind(patch.name, patch.patch_type, kinds), vertices.astype(np.float32),
-                triangles.astype(np.int32), min(len(triangles), len(faces)), len(faces),
-                label))
+                title, kind, vertices.astype(np.float32), triangles.astype(np.int32),
+                min(len(triangles), len(faces)), len(faces), label))
     zones = [z for z in found.zones if z not in parts]
     keep = allocate([len(found.zone_faces(z)) for z in zones],
                     int(limits.max_faces * ZONE_SHARE), 1)

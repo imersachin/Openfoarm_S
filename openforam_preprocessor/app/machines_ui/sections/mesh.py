@@ -73,10 +73,11 @@ def report_view(report: dict[str, Any], ctx: state.Context) -> None:
         st.caption(f"Regions: {regions.get('found')} found, {regions.get('expected')} expected")
     when = f" {report['ami_weights_when']}" if report.get("ami_weights_when") else ""
     span = report.get("ami_weights_range")
+    acmi = {p[0] for p in report.get("acmi_pairs") or []}
     for weights in report.get("ami_weights") or []:
         st.caption(f"AMI {weights.get('source')} / {weights.get('target')}{when}: "
                    f"sum(weights) {weights.get('minimum'):.3g}–{weights.get('maximum'):.3g}"
-                   + (f" (WARNING outside {span[0]:g}–{span[1]:g})" if span else ""))
+                   + _range_note(weights, acmi, span))
     st.markdown("**Measured values and acceptance limits**")
     metrics = report.get("metrics") or {}
     rows = [{"check": name.replace("_", " "), "limit": f"{limit:g}",
@@ -111,6 +112,13 @@ def zone_quality_view(report: dict[str, Any]) -> None:
 
 def _duration(seconds: float) -> str:
     return f"{seconds / 60:.0f} min" if seconds >= 90 else f"{seconds:.0f} s"
+
+
+def _range_note(weights: dict[str, Any], acmi: set[str], span: Any) -> str:
+    """The range a pair's weights are held to; an ACMI pair is below 1 by design."""
+    if weights.get("source") in acmi:
+        return " (ACMI: below 1 where the sides do not overlap, by design)"
+    return f" (WARNING outside {span[0]:g}–{span[1]:g})" if span else ""
 
 
 def _sweep_label(steps: int, seconds: float | None, span: float = 360.0) -> str:
@@ -208,7 +216,8 @@ def _names(report: dict[str, Any]) -> None:
         st.dataframe(rows, hide_index=True, width="stretch")
 
 
-def revolution_view(ctx: state.Context, report: dict[str, Any] | None) -> None:
+def revolution_view(ctx: state.Context, report: dict[str, Any] | None,
+                    acmi_pairs: list[Any] | None = None) -> None:
     """The optional check of the AMI weights over one revolution."""
     pitch = ctx.service.revolution_pitch()
     st.markdown(("**AMI weights over one revolution**" if pitch is None else
@@ -244,10 +253,12 @@ def revolution_view(ctx: state.Context, report: dict[str, Any] | None) -> None:
         st.warning("This check is of an earlier mesh or rotating zone (cell zone, axis or "
                    "point); check again.")
     span = report.get("range") or [0.95, 1.05]
+    acmi = {p[0] for p in report.get("acmi_pairs") or acmi_pairs or []}
     for weights in report.get("weights") or []:
         st.caption(f"AMI {weights.get('source')} / {weights.get('target')} "
                    f"{report.get('when')}: sum(weights) {weights.get('minimum'):.4g}–"
-                   f"{weights.get('maximum'):.4g} (WARNING outside {span[0]:g}–{span[1]:g})")
+                   f"{weights.get('maximum'):.4g}"
+                   + _range_note(weights, acmi, span))
     st.caption(f"{report.get('steps')} of {report.get('planned_steps')} steps; the turned mesh "
                f"failed a mesh check at {report.get('failed_steps')}. {report.get('note')}")
     render_issues([Issue.from_dict(i) for i in report.get("issues") or []])
@@ -285,7 +296,7 @@ def render(ctx: state.Context) -> None:
     else:
         report_view(report, ctx)
     if imported and report is not None:
-        revolution_view(ctx, reports["ami_revolution"])
+        revolution_view(ctx, reports["ami_revolution"], report.get("acmi_pairs"))
         paraview_view(ctx)
     st.markdown("**Acceptance limits** (changing them re-runs validation only)")
     with apply_form("quality"):

@@ -52,11 +52,12 @@ def title(ctx: state.Context, key: str) -> str:
     return spec.title if spec is not None else key
 
 
-def section_header(ctx: state.Context, key: str) -> None:
+def section_header(ctx: state.Context, key: str, help: str | None = None) -> None:
+    """The title, the help (the profile's, or `help` instead) and the status."""
     spec = ctx.profile.section(key)
     st.subheader(title(ctx, key))
-    if spec is not None and spec.help:
-        st.caption(spec.help)
+    if help or (spec is not None and spec.help):
+        st.caption(help or spec.help)  # type: ignore[union-attr]
     status = ctx.analysis.sections.get(key)
     if status is None:
         return

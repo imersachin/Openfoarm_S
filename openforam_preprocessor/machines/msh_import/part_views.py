@@ -105,7 +105,7 @@ def views(root: Path, mesh: Mapping[str, Any], tool: Any) -> list[PartView]:
         if folder is None:
             note = "not read yet"
         elif axis is None:
-            note = "the machine axis is not set"
+            note = "the machine axis (its direction and a point on it) is not set"
         elif part.get("source_units") not in _UNITS and any(axis[0]):
             note = "choose the units first (the axis point is in metres)"
         else:

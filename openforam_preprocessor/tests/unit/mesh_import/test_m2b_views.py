@@ -72,7 +72,7 @@ def test_a_machine_figure_has_no_title_either() -> None:
 
 
 def test_an_interface_side_is_drawn_with_its_own_part() -> None:
-    """GV_RU_RU (and its ACMI wall) is the runner's side of interface GV_RU."""
+    """GV_RU_RU (and its ACMI wall, among the runner's walls) is the runner's side."""
     from types import SimpleNamespace
 
     from machines.previews import PreviewLimits, _part_surfaces
@@ -80,7 +80,8 @@ def test_an_interface_side_is_drawn_with_its_own_part() -> None:
     points, triangles = square(2)
     faces = {"GV_RU_GV": [0], "GV_RU_RU": [1], "GV_RU_RU_blockage": [2]}
     found = SimpleNamespace(points=points, zones=(), zone_faces=lambda z: np.zeros(0, int))
-    listed = [(SimpleNamespace(name=n, patch_type="wall"), np.asarray(f))
+    types = {"GV_RU_GV": "cyclicAMI", "GV_RU_RU": "cyclicAMI", "GV_RU_RU_blockage": "wall"}
+    listed = [(SimpleNamespace(name=n, patch_type=types[n]), np.asarray(f))
               for n, f in faces.items()]
     import machines.previews as previews
 
@@ -92,9 +93,9 @@ def test_an_interface_side_is_drawn_with_its_own_part() -> None:
                               {"GV_RU_GV": "GV", "GV_RU_RU": "RU"})
     finally:
         previews._fan = original  # type: ignore[assignment]
-    assert {s.name.split(" ")[0]: s.group for s in made} == {
-        "GV_RU_GV": "GV: Guide vanes", "GV_RU_RU": "RU: Runner",
-        "GV_RU_RU_blockage": "RU: Runner"}
+    assert {s.name: s.group for s in made} == {
+        "GV_RU_GV (cyclicAMI)": "GV: Guide vanes", "GV_RU_RU (cyclicAMI)": "RU: Runner",
+        "RU walls": "RU: Runner"}  # a part's patches of one type are drawn as one
 
 
 def test_paraview_reads_the_case_where_windows_sees_it() -> None:
