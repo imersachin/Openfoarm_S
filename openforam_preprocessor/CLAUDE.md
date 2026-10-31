@@ -18,6 +18,16 @@ physics family, incompressible isothermal transient flow with a rotating mesh
 still does not run solvers. A solver smoke test of a few time steps verifies
 the generated case in the test suite only. A case that runs is not evidence
 that its results are correct. Any other physics needs explicit approval.
+(Approved, U1 D3: the same physics on a static mesh, time in flow-throughs,
+for the stationary foil / object test.)
+
+Approved scope extension (owner, 2026-11-01; `docs/u1_one_app_notes.md`,
+section 0, item 2): the application may run a prepared case's `Allrun` in the
+background from the app, with progress, cancel and the log, so the user never
+needs a terminal. It is built after U1 and ships only after evidence C1b (the
+outer convergence study, `docs/c1_startup_notes.md` 3.4); until C1b passes,
+results from those settings are labelled "not converged per step". Until it
+ships, the sentence above stands: the application does not run solvers.
 
 The current implementation may be incomplete. Treat the documented target
 architecture as the intended design, but treat existing code as the source of

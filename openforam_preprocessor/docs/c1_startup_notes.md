@@ -247,6 +247,17 @@ Torque, N·m, at the same runner angle:
   torque or pressure-pulse study needs 1 deg or less, and more than one
   pitch after the start. Both unchanged from the plan in section 4.
 
+**Owner's reading (2026-11-01, after the merge of 5662b02).** The likely cause
+of the torque gap is that every step hit the 5 outer-iteration limit, so
+neither run is time-accurate yet. Torque and efficiency from these settings
+must not be used.
+
+**C1b, outer convergence study (evidence; after U1, before "run the case
+from the app" ships).** More outer iterations and/or a realistic
+residualControl target, run until the 1 deg and 2 deg torques agree within a
+stated tolerance over several blade pitches. Until C1b passes, the app labels
+every result from these settings "not converged per step".
+
 ## 4. Plan for the app (reviewed; built in C1, section 5)
 
 1. Transient settings for real machines (imported meshes): the robust
