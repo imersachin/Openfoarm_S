@@ -108,9 +108,12 @@ def solve_view(ctx: state.Context) -> None:
     elif outer is not None:
         st.caption(f"The solver log: all {outer.steps} steps converged within their outer "
                    "iterations.")
+    host = ctx.service.host_memory()
+    low = ctx.service.windows_memory_check(found.ram_bytes)
+    if low is not None:  # C1 (owner): Windows' free memory before the solve
+        render_issues([low])
     if found.fits is not False:
         return
-    host = ctx.service.host_memory()
     ceiling = (f" With .wslconfig raised, WSL could have about "
                f"{host.wsl_ceiling_bytes / 1e9:.0f} GB at Windows' use now "
                f"({host.windows_used_bytes / 1e9:.0f} GB of {host.total_bytes / 1e9:.0f} GB): "

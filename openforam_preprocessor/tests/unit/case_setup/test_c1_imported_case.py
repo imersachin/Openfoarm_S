@@ -390,3 +390,85 @@ def test_no_powershell_is_none() -> None:
         raise FileNotFoundError("powershell.exe")
     assert host_memory.host_memory(run=missing, clock=lambda: 0.0) is None
     host_memory._cache.clear()
+
+
+# --- Windows' free memory before a heavy run (owner, 2026-10-31) ------------------------------
+
+GB = 1024**3
+
+
+def test_low_windows_memory_is_a_warning_to_close_heavy_programs() -> None:
+    from core.issues import IssueStage
+
+    low = host_memory.HostMemory(64 * GB, 40 * GB, free_bytes=8 * GB)
+    found = host_memory.low_windows_memory(low, 4 * GB, IssueStage.RESOURCE_PREFLIGHT,
+                                           "meshing")
+    assert found is not None and found.severity.value == "WARNING"
+    assert found.code == "WINDOWS_MEMORY_LOW"
+    assert found.message.startswith("Windows has 8.6 GB free; meshing needs about 4.3 GB")
+    assert found.suggested_action == "Close other heavy programs (e.g. ANSYS) before this run."
+    plenty = host_memory.HostMemory(64 * GB, 10 * GB, free_bytes=30 * GB)
+    assert host_memory.low_windows_memory(plenty, 4 * GB, IssueStage.RESOURCE_PREFLIGHT,
+                                          "meshing") is None
+    assert host_memory.low_windows_memory(None, 4 * GB, IssueStage.RESOURCE_PREFLIGHT,
+                                          "meshing") is None  # unreadable: nothing guessed
+    # the free memory is read from the same script line
+    assert host_memory.parse("66788076 14901904 31093702656").free_bytes == 14901904 * 1024
+
+
+@pytest.mark.parametrize(("free", "warned"), [(2 * GB, True), (40 * GB, False)])
+def test_the_preflight_checks_windows_before_a_heavy_run(tmp_path: Path, free: int,
+                                                         warned: bool) -> None:
+    setup = Setup(tmp_path, FakeMshRunner())
+    setup.service.pipeline.host_probe = lambda: host_memory.HostMemory(64 * GB, 20 * GB, free)
+    result = setup.run()
+    found = [i for i in result.issues if i.code == "WINDOWS_MEMORY_LOW"]
+    assert result.succeeded
+    assert bool(found) is warned
+    if warned:
+        assert found[0].stage.value == "RESOURCE_PREFLIGHT"
+        assert "Close other heavy programs (e.g. ANSYS)" in found[0].suggested_action
+
+
+def test_the_solve_is_checked_against_windows_too(tmp_path: Path) -> None:
+    setup = Setup(tmp_path, FakeMshRunner())
+    setup.service.pipeline.host_probe = lambda: host_memory.HostMemory(64 * GB, 50 * GB, 7 * GB)
+    found = setup.service.windows_memory_check(22e9)
+    assert found is not None and "solving this case needs about 22.0 GB" in found.message
+
+
+def test_the_tests_never_read_the_real_host() -> None:
+    from machines.pipeline import MachinePipeline
+
+    assert MachinePipeline().host() is None  # the autouse stub (tests/host_stub.py)
+
+
+def test_a_failing_probe_never_stops_a_run(tmp_path: Path) -> None:
+    def broken() -> host_memory.HostMemory:
+        raise RuntimeError("interop gone")
+
+    setup = Setup(tmp_path, FakeMshRunner())
+    setup.service.pipeline.host_probe = broken
+    result = setup.run()
+    assert result.succeeded
+    assert not [i for i in result.issues if i.code == "WINDOWS_MEMORY_LOW"]
+
+
+def test_undecodable_powershell_output_is_unreadable_not_a_crash() -> None:
+    host_memory._cache.clear()
+
+    def garbage(*_a: object, **_k: object) -> object:
+        raise UnicodeDecodeError("cp1252", b"\x81", 0, 1, "undefined")
+
+    assert host_memory.host_memory(run=garbage, clock=lambda: 0.0) is None
+    host_memory._cache.clear()
+
+
+def test_no_or_negative_need_counts_as_none() -> None:
+    from core.issues import IssueStage
+
+    host = host_memory.HostMemory(64 * GB, 40 * GB, free_bytes=5 * GB)
+    for needed in (None, -10 * GB, 0):
+        found = host_memory.low_windows_memory(host, needed, IssueStage.RESOURCE_PREFLIGHT,
+                                               "meshing")
+        assert found is not None and found.details["needed_bytes"] == 0.0

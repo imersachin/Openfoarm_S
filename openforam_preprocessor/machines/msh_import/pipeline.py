@@ -80,6 +80,7 @@ from machines.msh_import.checks import (
     unused_face_zones,
 )
 from machines.msh_import.detect import MeshFileInfo
+from machines.msh_import.host_memory import low_windows_memory
 from machines.msh_import.validation import read_mesh_file
 from machines.operations import ASSEMBLE, CASE_SETUP, CHECK_MESH, VALIDATE, VALIDATE_MESH
 from machines.pipeline import (
@@ -442,9 +443,16 @@ class ImportRun:
                                     "note": resources.NOTE}, indent=2) + "\n",
                         encoding="utf-8")
         self.estimates = {e.step: e for e in estimates}
-        if free is None or not estimates:
+        if not estimates:
             return
         worst = max(estimates, key=lambda e: e.ram_bytes)
+        low = low_windows_memory(self.pipe.host(), worst.ram_bytes,
+                                 IssueStage.RESOURCE_PREFLIGHT,
+                                 f"the {resources.LABELS[worst.step]}")
+        if low is not None:  # C1 (owner): Windows' free memory, before any heavy run
+            run.issues.append(low)
+        if free is None:
+            return
         needed = f"{worst.ram_bytes / 1e9:.1f} GB of {free / 1e9:.1f} GB free"
         if worst.ram_bytes > free:
             raise _Stop("Resource preflight BLOCKED the run.", _issue(

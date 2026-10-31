@@ -65,6 +65,7 @@ from machines.mesh_checks import (
     check_domain_case,
     parse_ami_weights,
 )
+from machines.msh_import.host_memory import HostMemory, host_memory, low_windows_memory
 from machines.operations import (
     ASSEMBLE,
     CASE_SETUP,
@@ -231,14 +232,24 @@ class MachinePipeline:
         system_probe: Callable[[Path], SystemResources] | None = None,
         thresholds: MachineThresholds | None = None,
         case_thresholds: CaseSetupThresholds | None = None,
+        host_probe: Callable[[], HostMemory | None] | None = None,
     ) -> None:
         self.case_thresholds = case_thresholds or CaseSetupThresholds()
+        # Windows' memory before a heavy run (C1, owner): read through WSL interop.
+        self.host_probe = host_probe or host_memory
         self.runner = runner or OpenFOAMRunner()
         self.environment = environment  # None: the process environment at run time
         self.estimator = estimator or ResourceEstimator()
         self.system_probe = system_probe or SystemResources.detect
         self.thresholds = thresholds or MachineThresholds()
         self.generator = MachineCaseGenerator()
+
+    def host(self) -> HostMemory | None:
+        """Windows' memory now, or None: a probe that fails never stops a run."""
+        try:
+            return self.host_probe()
+        except Exception:  # noqa: BLE001 - the check is a warning, never a stop
+            return None
 
     def _env(self) -> Mapping[str, str]:
         return self.environment if self.environment is not None else os.environ
@@ -573,6 +584,10 @@ class MachinePipeline:
                        "Reduce the mesh settings, or start the run with "
                        "allow_high_resource_risk to proceed anyway."))
         run.issues.extend(assessment.issues)
+        low = low_windows_memory(self.host(), assessment.ram_bytes,
+                                 IssueStage.RESOURCE_PREFLIGHT, "meshing")
+        if low is not None:
+            run.issues.append(low)
 
     # --- OpenFOAM operations -------------------------------------------------------------------
 

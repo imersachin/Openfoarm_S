@@ -210,9 +210,42 @@ the final one. PL, swirl inlet, 16 ranks, 4 steps:
 
 ### 3.4 2 deg against 1 deg over one blade pitch (owner, after review)
 
-(Filled from the runs: E1 2 deg x 12 steps, E2 1 deg x 24 steps, from the
-steady MRF fields, residualControl as the app writes it, the runner's
-torque about +z from its walls.)
+E1 2 deg x 12 steps and E2 1 deg x 24 steps (24 deg each), from the S3
+steady MRF fields (100 iterations), the robust settings of 3.3 with
+`residualControl` as the app writes it, PL, swirl inlet, 16 ranks. Torque
+is the z moment of the runner's walls (forces, CofR 0) from the solver log.
+Both ran under the memory watchdog (2026-10-31); it never stopped either.
+
+| Run | steps | stable | steps not converged in 5 outer | s a step | h a revolution | peak | Windows free, min |
+|---|---|---|---|---|---|---|---|
+| E1 2 deg | 12/12 | yes, rc 0 | 12 of 12 | 297 | 14.9 | 24.0 GB | 16.9 GB |
+| E2 1 deg | 24/24 | yes, rc 0 | 24 of 24 | 270 | 27.0 | 24.2 GB | 17.7 GB |
+
+Torque, N·m, at the same runner angle:
+
+| angle | 2 deg | 4 | 8 | 12 | 16 | 20 | 24 |
+|---|---|---|---|---|---|---|---|
+| E1 2 deg | -1979 | -166 | 120 | 138 | 156 | 162 | 169 |
+| E2 1 deg | -399 | -51 | 26 | 57 | 76 | 84 | 82 |
+
+- Both step sizes are stable over a whole blade pitch: no divergence, rc 0.
+- No step of either run met the residual control within 5 outer
+  iterations ("PIMPLE: not converged within 5 iterations" every step). The
+  steps are not converged to 1e-4/1e-3; the app reports this count.
+- The first step's large negative torque (-1979 and -4396 N·m) is the
+  switch from the MRF fields to the moving mesh; it is gone within 3 to 5
+  steps. Reported with that caveat, not as a result.
+- The torque depends on the step: at 24 deg the 2 deg run gives 169 N·m,
+  the 1 deg run 82 N·m. Neither has settled: E1 still rises 2-4 N·m a step;
+  E2 levels near 85 and falls the last 3 steps. One blade pitch from the
+  MRF start is too short for a torque. The expected 100-140 N·m (section 1)
+  is bracketed, not matched.
+- Cost: 2 deg halves the hours a revolution (14.9 against 27.0 with forces
+  written every step; 13.0 against 26.7 in 3.3 without). The extra outer
+  work at 2 deg does not show as a longer step.
+- For the app: 2 deg stays the "slow effects" choice it is labelled; a
+  torque or pressure-pulse study needs 1 deg or less, and more than one
+  pitch after the start. Both unchanged from the plan in section 4.
 
 ## 4. Plan for the app (reviewed; built in C1, section 5)
 
@@ -305,6 +338,16 @@ opening confirmed by file name and measurement.
   processors is a WARNING (RANKS_ABOVE_CORES; v2512's runParallel
   oversubscribes, so it runs, slower); the new fields' findings show in
   Operating point and Time.
+- Windows' free memory before any heavy run (owner, 2026-10-31, after a
+  solve was stopped while ANSYS held the memory): WINDOWS_MEMORY_LOW
+  (WARNING, "Windows has X GB free; close other heavy programs (e.g.
+  ANSYS)") when Windows has less free than the run's estimate plus 6 GB; in
+  the STL meshing preflight, the imported-mesh step preflight and the Case
+  page's solve estimate (`host_memory.low_windows_memory`; the probe is the
+  pipeline's `host_probe`). The evidence runs got the same watchdog: below
+  6 GB on Windows (or 1.5 GB in WSL) the solver is stopped cleanly
+  (stopAt writeNow: the step in progress ends and is written; checked on
+  v2512) and the last completed step is recorded.
 - Tests: `tests/unit/case_setup/test_c1_imported_case.py`;
   `tests/integration/test_c1_startup_real.py` (each start-up's Allrun on
   v2512, the swirl inlet on the fixture machine's outer ring). Two existing

@@ -658,7 +658,12 @@ class MachineService(RunControl):
 
     def host_memory(self) -> host_memory.HostMemory | None:
         """The Windows host's RAM and Windows' own use now (C1), or None."""
-        return host_memory.host_memory()
+        return self.pipeline.host()
+
+    def windows_memory_check(self, needed_bytes: float) -> Issue | None:
+        """WINDOWS_MEMORY_LOW before solving the set-up case (C1, owner), or None."""
+        return host_memory.low_windows_memory(self.host_memory(), needed_bytes,
+                                              IssueStage.RESOURCE_PREFLIGHT, "solving this case")
 
     def study_parts(self) -> tuple[str, ...] | None:
         """The parts a smaller study keeps (the rotating part and the outlet's),
