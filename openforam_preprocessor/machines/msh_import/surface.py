@@ -256,6 +256,16 @@ class BoundarySurface:
                 / np.where(total > 0, total, 1)[:, None], corners.mean(axis=1))
         return areas, centroids
 
+    def vectors(self, faces: np.ndarray) -> np.ndarray:
+        """Each face's area vector (Sf): the sum of its fan triangles' vectors."""
+        found = np.zeros((len(faces), 3))
+        for where, labels in self._by_size(faces):
+            corners = self.points[labels]
+            centre = corners.mean(axis=1, keepdims=True)
+            following = np.roll(corners, -1, axis=1)
+            found[where] = (np.cross(corners - centre, following - centre) / 2).sum(axis=1)
+        return found
+
     def keys(self, faces: np.ndarray) -> np.ndarray:
         """A key per face from its sorted point labels (the same face in two
         regions has the same labels: the extraction merges points)."""
@@ -398,6 +408,54 @@ def config_zone_radius(folder: Path, zone: MeshZone) -> float | None:
     """zone_radius of a configured mesh zone, about its axis through its origin."""
     return zone_radius(folder, zone.cell_zone, (zone.origin.x, zone.origin.y, zone.origin.z),
                        axis_vector(zone.axis))
+
+
+@dataclass(frozen=True)
+class PatchRadius:
+    """A patch about an axis: its area-weighted mean radius and how much of it
+    faces the axis (the area-weighted |n . r|, 1 for a cylinder about it)."""
+
+    radius: float
+    facing: float
+
+
+def patch_radii(folder: Path, names: Sequence[str], origin: Point,
+                axis: Point) -> dict[str, PatchRadius]:
+    """PatchRadius of each named patch with faces; {} without a current surface."""
+    surface = load(folder)
+    if surface is None:
+        return {}
+    direction = np.asarray(axis, dtype=float)
+    direction /= np.linalg.norm(direction)
+    found = {}
+    for name in names:
+        faces = surface.faces(name)
+        if not len(faces):
+            continue
+        areas, centroids = surface.area_vectors(faces)
+        total = float(areas.sum())
+        if total <= 0:
+            continue
+        relative = centroids - np.asarray(origin, dtype=float)
+        radial = relative - np.outer(relative @ direction, direction)
+        distance = np.linalg.norm(radial, axis=1)
+        unit = radial / np.where(distance > 0, distance, 1)[:, None]
+        facing = np.abs((surface.vectors(faces) * unit).sum(axis=1)).sum() / total
+        found[name] = PatchRadius(float((distance * areas).sum() / total), float(facing))
+    return found
+
+
+def config_inlet_radii(folder: Path, config: MachineProjectConfig) -> dict[str, PatchRadius]:
+    """patch_radii of each configured patch under its own name, about the first
+    rotating zone's axis (C1: a swirl inlet's radius)."""
+    mesh = config.imported_mesh
+    if mesh is None or not mesh.zones:
+        return {}
+    zone = mesh.zones[0]
+    refs = {p.name: p.source.ref for p in config.patches}
+    found = patch_radii(folder, sorted(set(refs.values())),
+                        (zone.origin.x, zone.origin.y, zone.origin.z), axis_vector(zone.axis))
+    return {name: found[ref] for name, ref in refs.items() if ref in found}
 
 
 def config_areas(folder: Path, config: MachineProjectConfig) -> dict[str, float]:

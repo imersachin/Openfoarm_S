@@ -103,7 +103,24 @@ class FlowRateInlet(BaseModel):
     volumetric_flow_rate: float = Field(ge=0)  # m^3/s; zero is a finding (BLOCKING)
 
 
-InletCondition = Annotated[VelocityInlet | FlowRateInlet, Field(discriminator="kind")]
+class SwirlInlet(BaseModel):
+    """A flow rate with the swirl the guide vanes give it (C1; an imported
+    machine without its guide vanes): radial inflow Q / A towards the axis and
+    a tangential speed Vr / tan(flow angle), the flow angle from the tangential
+    direction (the vanes' trailing-edge angle). Approximate: solid-body swirl
+    over the inlet (cylindricalInletVelocity), angular momentum kept from the
+    vanes to the inlet."""
+
+    model_config = _STRICT
+
+    kind: Literal["SWIRL"]
+    volumetric_flow_rate: float = Field(ge=0)  # m^3/s
+    flow_angle_deg: float = Field(gt=0, lt=90)  # from the tangential direction
+    direction: RotationDirection | None = None  # the swirl's turning; never assumed
+
+
+InletCondition = Annotated[VelocityInlet | FlowRateInlet | SwirlInlet,
+                           Field(discriminator="kind")]
 
 
 class OutletCondition(BaseModel):
@@ -117,9 +134,20 @@ class WriteUnit(StrEnum):
     DEGREES = "DEGREES"
 
 
+class StartUp(StrEnum):
+    """How the transient of an imported machine starts (C1; docs/
+    c1_startup_notes.md 3.3). Every start ran with the robust settings."""
+
+    POTENTIAL_FLOW = "POTENTIAL_FLOW"  # potentialFoam first (seconds)
+    STEADY_MRF = "STEADY_MRF"  # a steady MRF solve first: the developed flow
+    FROM_REST = "FROM_REST"
+
+
 class TimeConfig(BaseModel):
     """Section 9.6. The step is limited by both a rotation angle and a maximum
-    Courant number (adjustable time step). Starting values (P3, P6)."""
+    Courant number (adjustable time step). Starting values (P3, P6). An
+    imported machine steps by the angle alone (C1): `max_courant` is not used
+    for it."""
 
     model_config = _STRICT
 
@@ -128,6 +156,29 @@ class TimeConfig(BaseModel):
     end_revolutions: float = Field(default=5.0, gt=0)
     write_interval: float = Field(default=1.0, gt=0)
     write_unit: WriteUnit = WriteUnit.REVOLUTIONS
+
+
+class StartUpConfig(BaseModel):
+    """How an imported machine's transient starts (C1); an STL-built case
+    starts from rest as before and does not use it."""
+
+    model_config = _STRICT
+
+    method: StartUp = StartUp.POTENTIAL_FLOW
+    mrf_iterations: int = Field(default=100, ge=1, le=100_000)  # C1: 100 converged
+
+
+class GuideVaneOpening(BaseModel):
+    """The operating point's guide vane opening against the mesh's (C1; a check
+    only, never a case input). Openings in degrees from fully closed."""
+
+    model_config = _STRICT
+
+    operating_deg: float | None = Field(default=None, ge=0, le=90)  # published
+    mesh_min_deg: float | None = Field(default=None, ge=0, le=90)
+    mesh_max_deg: float | None = Field(default=None, ge=0, le=90)
+    mesh_source: str | None = Field(default=None, max_length=200)  # how it was found
+    vanes: int | None = Field(default=None, ge=1, le=200)  # steps a vane passing (labels)
 
 
 class PhysicsConfig(BaseModel):
@@ -142,6 +193,12 @@ class PhysicsConfig(BaseModel):
     inlets: dict[str, InletCondition] = Field(default_factory=dict)
     outlets: dict[str, OutletCondition] = Field(default_factory=dict)
     time: TimeConfig = Field(default_factory=TimeConfig)
+    start_up: StartUpConfig = Field(default_factory=StartUpConfig)  # imported machines (C1)
+    guide_vanes: GuideVaneOpening | None = None
+    # MPI ranks the case is decomposed for (an imported machine's case, C1):
+    # 16 was the fastest on the owner's 24-core PC, 8 nearly as fast (memory
+    # bandwidth bound; docs/c1_startup_notes.md 3.1).
+    ranks: int = Field(default=16, ge=1, le=4096)
 
 
 # --- derived quantities ------------------------------------------------------------------
@@ -181,6 +238,19 @@ def step_for_degrees(degrees: float, omega: float) -> float:
 
 def revolution_time(omega: float) -> float:
     return 2.0 * math.pi / abs(omega)
+
+
+# An imported machine's time step as "what are you studying?" (owner, after C1).
+STEP_STUDIES: tuple[tuple[float, str], ...] = (
+    (2.0, "Slow effects (part-load vortex rope)"),
+    (1.0, "Rotor-stator pressure pulses, marginal"),
+    (0.5, "Rotor-stator pressure pulses"),
+)
+
+
+def steps_per_vane_passing(degrees: float, vanes: int) -> float:
+    """Steps between two guide vanes passing a blade: 360 / vanes / degrees."""
+    return 360.0 / vanes / degrees
 
 
 def courant(speed: float, step: float, cell: float) -> float:

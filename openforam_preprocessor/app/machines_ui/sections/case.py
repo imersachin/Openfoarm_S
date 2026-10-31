@@ -13,6 +13,7 @@ from app.components.widgets import render_issues
 from app.machines_ui import state
 from app.machines_ui.sections.common import COURANT_NOTE, zone_html
 from app.machines_ui.sections.mesh import stage_view
+from app.machines_ui.sections.time_controls import duration
 
 REASONS = {
     "NO_PHYSICS": "The project has no physics: it is meshed only.",
@@ -50,7 +51,8 @@ def values_view(report: dict[str, Any]) -> None:
     if time:
         st.markdown("**Time controls**")
         st.caption(str(time.get("estimates", "")))
-        st.caption(COURANT_NOTE)
+        if "solution_settings" not in report:  # an imported machine steps fixed (C1)
+            st.caption(COURANT_NOTE)
         st.json({k: v for k, v in time.items() if k != "estimates"})
     solution_view(report)
     st.markdown("**Patches as set up**")
@@ -60,7 +62,16 @@ def values_view(report: dict[str, Any]) -> None:
 
 def solution_view(report: dict[str, Any]) -> None:
     """The solution settings and why (owner, after M2a): correctors above 70 deg
-    of mesh non-orthogonality; the schemes are limited in every case."""
+    of mesh non-orthogonality; the schemes are limited in every case. An
+    imported machine's (C1): every setting with its reason, and the run order."""
+    settings = report.get("solution_settings")
+    if isinstance(settings, list):
+        st.markdown("**Solution settings** (an imported machine: the robust settings, C1)")
+        st.markdown("\n".join(f"- **{row.get('setting')}.** {row.get('reason')}"
+                              for row in settings if isinstance(row, dict)))
+        st.caption(f"Run order: {report.get('run_order', 'case/Allrun')} (the start-up, then "
+                   "the transient). The app does not run it.")
+        return
     found = report.get("non_orthogonality")
     if not isinstance(found, dict):
         st.markdown("**Solution settings:** the tutorial's (nCorrectors 1, no "
@@ -85,16 +96,30 @@ def solve_view(ctx: state.Context) -> None:
             else "free memory unknown")
     st.caption(f"Memory: about {found.ram_bytes / 1e9:.1f} GB for {found.cells:,} cells "
                f"(with a 1.25 margin; {free}). Time: about {found.seconds_per_step / 60:.1f} "
-               f"min a step on {found.ranks} cores, about {found.hours_per_revolution:.0f} h a "
-               f"revolution at {found.degrees_per_step:.3g} deg a step"
+               f"min a step on {found.ranks} cores, about {duration(found.hours_per_revolution)} "
+               f"a revolution at {found.degrees_per_step:.3g} deg a step"
                + (", the step the solver took (maxCo) " if found.step_from_log else " ")
                + f"({found.basis}).")
+    outer = found.outer
+    if outer is not None and outer.not_converged:
+        st.warning(f"The solver log: {outer.not_converged} of {outer.steps} steps reached the "
+                   f"outer-iteration limit ({outer.limit}) without converging "
+                   "(residualControl): those steps are not converged.")
+    elif outer is not None:
+        st.caption(f"The solver log: all {outer.steps} steps converged within their outer "
+                   "iterations.")
     if found.fits is not False:
         return
+    host = ctx.service.host_memory()
+    ceiling = (f" With .wslconfig raised, WSL could have about "
+               f"{host.wsl_ceiling_bytes / 1e9:.0f} GB at Windows' use now "
+               f"({host.windows_used_bytes / 1e9:.0f} GB of {host.total_bytes / 1e9:.0f} GB): "
+               + ("enough." if host.wsl_ceiling_bytes >= found.ram_bytes else "still short.")
+               if host is not None else "")
     st.warning(f"Solving this case needs about {found.ram_bytes / 1e9:.0f} GB, more than the "
                f"{(found.free_bytes or 0) / 1e9:.0f} GB WSL has free: it would stop when the "
                "memory runs out. WSL's memory is set in %UserProfile%\\.wslconfig "
-               "(your decision), or study the runner and the draft tube alone.")
+               "(your decision), or study the runner and the draft tube alone." + ceiling)
     kept = ctx.service.study_parts()
     if kept and st.button(f"Make a study of {', '.join(kept)} (a new project)",
                           key="machines_make_study"):

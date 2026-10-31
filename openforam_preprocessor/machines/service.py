@@ -28,12 +28,13 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import psutil
 from pydantic import ValidationError
 
 from case_setup.physics import (
+    STEP_STUDIES,
     FlowRateInlet,
     RpmSpeed,
+    SwirlInlet,
     TipSpeedRatio,
     VelocityInlet,
     rpm_to_rad_s,
@@ -65,7 +66,14 @@ from machines.config import (
 from machines.heavy_lock import HeavyLock
 from machines.joints import propose_joints
 from machines.mesh_folder import MeshFolderReport, check_mesh_folder
-from machines.msh_import import interfaces, part_views, resources, solve_estimate, study
+from machines.msh_import import (
+    host_memory,
+    interfaces,
+    part_views,
+    resources,
+    solve_estimate,
+    study,
+)
 from machines.msh_import import surface as mesh_surface
 from machines.msh_import.cases import IMPORTED_CASE, MERGED_CASE, SCRATCH_CASE, converter
 from machines.msh_import.inspection import MeshInspection, PatchGeometry, patch_geometry
@@ -625,7 +633,7 @@ class MachineService(RunControl):
         case = self.root / "case"
         if not (case / "system" / "controlDict").is_file():
             return None
-        ranks = psutil.cpu_count(logical=False) or os.cpu_count() or 1
+        ranks = config.physics.ranks  # the case's decomposition (C1)
         zone = config.zone_names()[0] if config.zone_names() else ""
         rotation = config.physics.rotation.get(zone)
         rpm = (angular_speed(config.physics, zone) * 30.0 / math.pi
@@ -633,6 +641,24 @@ class MachineService(RunControl):
         return solve_estimate.estimate(
             cells, self.system_probe(self.root).available_ram_bytes, ranks,
             config.physics.time.degrees_per_step, solve_estimate.case_log(case), rpm)
+
+    def step_hours(self, ranks: int) -> tuple[dict[float, float], str] | None:
+        """Hours a revolution at each labelled time step (C1), on `ranks`: from
+        the case's own log once it has steps, else scaled from the C1 reference;
+        None before the imported mesh is checked (no cell count)."""
+        try:
+            report = json.loads((self.root / MESH_REPORT).read_text("utf-8"))
+            cells = int(report["metrics"]["cells"])
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+        case = self.root / "case"
+        log = solve_estimate.case_log(case) if case.is_dir() else ""
+        found = solve_estimate.estimate(cells, None, ranks, 1.0, log)
+        return {d: found.hours_for(d) for d, _ in STEP_STUDIES}, found.basis
+
+    def host_memory(self) -> host_memory.HostMemory | None:
+        """The Windows host's RAM and Windows' own use now (C1), or None."""
+        return host_memory.host_memory()
 
     def study_parts(self) -> tuple[str, ...] | None:
         """The parts a smaller study keeps (the rotating part and the outlet's),
@@ -1400,9 +1426,11 @@ class MachineService(RunControl):
         return self._texts(sorted((self.root / "cases").glob("*/system/*")), max_bytes)
 
     def case_files(self, max_bytes: int = 256 * 1024) -> dict[str, str]:
-        """The set-up case's files (0/, constant/ without the mesh, system/)."""
+        """The set-up case's files (0/, constant/ without the mesh, system/; an
+        imported machine's Allrun and steady MRF case too, C1)."""
         case = self.root / CASE_DIR
-        paths = [p for pattern in ("0/*", "constant/*", "system/*")
+        paths = [p for pattern in ("0/*", "constant/*", "system/*", "Allrun", "mrf/system/*",
+                                   "mrf/constant/*")
                  for p in sorted(case.glob(pattern))]
         return self._texts(paths, max_bytes)
 
@@ -1525,7 +1553,7 @@ class MachineService(RunControl):
         if rpm:
             values["omega_rad_s"] = rpm_to_rad_s(rpm)
         discharge = sum(i.volumetric_flow_rate for i in physics.inlets.values()
-                        if isinstance(i, FlowRateInlet))
+                        if isinstance(i, FlowRateInlet | SwirlInlet))
         head = settings.rated_net_head_m
         if rpm and discharge > 0 and head:
             values["specific_speed_nq"] = specific_speed(rpm, discharge, head)

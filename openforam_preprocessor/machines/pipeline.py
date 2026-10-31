@@ -43,8 +43,10 @@ from case_setup.case import (
     clear_stale,
     mark_stale,
     render,
+    users_files,
     write_case,
 )
+from case_setup.dictionaries import ALLRUN, solution_settings
 from case_setup.physics import TipSpeedRatio
 from case_setup.setup import CaseSetup, CaseSetupError, NonOrthogonality, non_orthogonality
 from case_setup.validation import CaseSetupThresholds, check_physics
@@ -428,6 +430,17 @@ class MachinePipeline:
                 IssueSeverity.BLOCKING, IssueCategory.CONFIGURATION, IssueStage.CASE_SETUP,
                 "CASE_SETUP_FAILED", str(error),
                 "Change the physics or patch settings; see the message.")) from error
+        kept = users_files(run.root, files)
+        files = {k: v for k, v in files.items() if k not in kept}
+        if kept:  # C1: the user's own run script stays
+            run.issues.append(_issue(
+                IssueSeverity.INFO, IssueCategory.CONFIGURATION, IssueStage.CASE_SETUP,
+                "CASE_RUN_ORDER_USERS", f"case/{ALLRUN} is yours (not written by the app): "
+                "it was kept, and the app's run order was not written.",
+                f"Rename or remove case/{ALLRUN} and run again for the app's run order "
+                "(the start-up, then the transient).", files=sorted(kept)))
+        if setup.imported:
+            self._ranks_check(run, setup.physics.ranks)
         inputs = {**hash_files(run.root, self._mesh_files(run, MERGED_CASE)),
                   "files": sha256_json(files)}
         if not force and run.store.check(CASE_SETUP, inputs).reusable:
@@ -449,7 +462,20 @@ class MachinePipeline:
                 max_deg=setup.non_orthogonality.max_deg, zone=setup.non_orthogonality.zone))
         run.case_setup = StageResult(StageStatus.SUCCESS,
                                      message=f"The case is set up in {CASE_DIR}/.")
-        _write_case_report(run, setup)
+        _write_case_report(run, setup, users=bool(kept))
+
+    def _ranks_check(self, run: _Run, ranks: int) -> None:
+        """More ranks than the PC's cores (C1): Allrun's runParallel oversubscribes
+        (v2512 RunFunctions), so it runs, slower; a WARNING."""
+        cores = self.system_probe(run.root).cpu_count  # logical processors
+        if cores is None or ranks <= cores:
+            return
+        run.issues.append(_issue(
+            IssueSeverity.WARNING, IssueCategory.RESOURCE_RISK, IssueStage.CASE_SETUP,
+            "RANKS_ABOVE_CORES", f"The case is decomposed for {ranks} ranks; this PC has "
+            f"{cores} logical processors.", f"Set the MPI ranks (Time) to {cores} or fewer: "
+            "more ranks share processors and run slower (C1: 16 of 32 was the fastest).",
+            ranks=ranks, cores=cores, field="physics.ranks"))
 
     @staticmethod
     def _non_orthogonality(run: _Run) -> NonOrthogonality | None:
@@ -704,9 +730,9 @@ class MachinePipeline:
         })
 
 
-def _write_case_report(run: _Run, setup: CaseSetup) -> None:
+def _write_case_report(run: _Run, setup: CaseSetup, users: bool = False) -> None:
     """Derived values, each in the units the user entered and as written
-    (section 9: both values are shown)."""
+    (section 9: both values are shown). `users`: case/Allrun is the user's."""
     physics, rotation, time = setup.physics, setup.rotation, setup.time
     payload = {
         "run_id": run.run_id,
@@ -721,7 +747,9 @@ def _write_case_report(run: _Run, setup: CaseSetup) -> None:
                      "rpm": rotation.omega * 60 / (2 * math.pi)},
         "fluid": physics.fluid.model_dump(mode="json"),
         "turbulence": physics.turbulence.model.value,
-        "inlets": {name: asdict(inlet) for name, inlet in setup.inlets.items()},
+        "inlets": {name: {k: v for k, v in asdict(inlet).items()
+                          if k != "swirl" or v is not None}  # a SWIRL inlet's only (C1)
+                   for name, inlet in setup.inlets.items()},
         "outlets": {name: {"pressure_pa": physics.outlets[name].pressure_pa,
                            "kinematic_pressure_m2_s2": value}
                     for name, value in setup.outlets.items()},
@@ -746,6 +774,16 @@ def _write_case_report(run: _Run, setup: CaseSetup) -> None:
                                     for name, inlet in setup.inlets.items()
                                     if inlet.flow_rate is not None and inlet.speed}
         payload["inlet_area_note"] = "measured from the mesh: the sum of the face areas"
+    if setup.imported:  # C1: the robust settings with their reasons, the start-up
+        payload["solution_settings"] = solution_settings(setup)
+        payload["start_up"] = physics.start_up.method.value
+        payload["ranks"] = physics.ranks
+        payload["run_order"] = f"{CASE_DIR}/{ALLRUN}" + (" (yours, kept)" if users else "")
+        time_report = payload["time"]
+        assert isinstance(time_report, dict)
+        for key in ("max_courant", "courant_estimate", "smallest_cell", "reference_speed"):
+            time_report.pop(key, None)  # a fixed step: no Courant limit or estimate
+        time_report["estimates"] = "a fixed step of the chosen angle (C1)"
     path = run.root / CASE_SETUP_REPORT
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

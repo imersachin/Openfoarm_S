@@ -40,6 +40,7 @@ from case_setup.physics import (
     FlowRateInlet,
     RotationDirection,
     RpmSpeed,
+    SwirlInlet,
     TipSpeedRatio,
     VelocityInlet,
 )
@@ -782,6 +783,8 @@ def flow_arrows(config: MachineProjectConfig, scene: Scene) -> tuple[list[Arrow]
             add(f"flow at {name}", at(name), _normalised(vector),
                 f"flow at {name}: inlet velocity ({vector[0]:g}, {vector[1]:g}, "
                 f"{vector[2]:g}) m/s")
+        elif isinstance(inlet, SwirlInlet):  # imported machines only: no setup scene (C1)
+            notes.append(f"Inlet {name}: a swirl inlet's direction is not drawn.")
         else:
             assert isinstance(inlet, FlowRateInlet)
             frame = scene.patch(name)

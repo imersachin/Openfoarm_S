@@ -11,6 +11,7 @@ below 70 deg every case file is as before (the G6 tests are unchanged).
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import replace
 from pathlib import Path
 
@@ -55,13 +56,14 @@ def plain_and_corrected(tmp_path: Path) -> tuple[str, str]:
 
 def test_fvsolution_gets_the_correctors_and_the_reason_above_70_deg(tmp_path: Path) -> None:
     plain, corrected = plain_and_corrected(tmp_path)
-    assert "    nCorrectors         1;\n    nNonOrthogonalCorrectors 0;\n" in plain
+    # C1 (owner): an imported machine's robust settings, 2 and 1 below 70 deg
+    assert "    nCorrectors         2;\n    nNonOrthogonalCorrectors 1;\n" in plain
     assert (f"    // {REASON}\n    nCorrectors         2;\n"
             "    nNonOrthogonalCorrectors 2;\n") in corrected
     # nothing else changes
-    assert corrected.replace(f"    // {REASON}\n", "").replace(
-        "nCorrectors         2", "nCorrectors         1").replace(
-        "nNonOrthogonalCorrectors 2", "nNonOrthogonalCorrectors 0") == plain
+    block = re.compile(r"(    //[^\n]*\n)*    nCorrectors[^\n]*\n"
+                       r"    nNonOrthogonalCorrectors[^\n]*\n")
+    assert block.sub("", corrected) == block.sub("", plain)
 
 
 @pytest.mark.parametrize("value", [40.0, 70.0])

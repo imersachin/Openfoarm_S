@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from app.components.widgets import get_path
+from app.components.widgets import GENERATION, get_path
 from app.machines_ui import state
 from app.machines_ui.sections.boundary import default_outlets, patches_of
 from app.machines_ui.sections.common import (
@@ -15,18 +15,61 @@ from app.machines_ui.sections.common import (
     section_header,
     section_issues,
 )
-from app.machines_ui.sections.fields import float_field
-from app.machines_ui.sections.rotation import complete_kind, direction_field, omega_text
+from app.machines_ui.sections.fields import float_field, int_field, select_field, text_field
+from app.machines_ui.sections.rotation import (
+    DIRECTION_LABELS,
+    complete_kind,
+    direction_field,
+    omega_text,
+)
 from machines.presets.francis import SPECIFIC_SPEED_SOURCE
 
 
 def flow_rate_kind(ctx: state.Context, inlet: str) -> None:
-    """A discharge entered makes its inlet a flow-rate inlet (the turbine's Q)."""
+    """A discharge entered makes its inlet a flow-rate inlet (the turbine's Q);
+    a swirl inlet (C1) stays one."""
     value = get_path(ctx.draft, f"physics.inlets.{inlet}")
     if isinstance(value, dict) and "volumetric_flow_rate" in value \
-            and value.get("kind") != "FLOW_RATE":
+            and value.get("kind") not in ("FLOW_RATE", "SWIRL"):
         ctx.draft["physics"]["inlets"][inlet] = {
             "kind": "FLOW_RATE", "volumetric_flow_rate": value["volumetric_flow_rate"]}
+
+
+def swirl_toggle(ctx: state.Context, inlet: str) -> bool:
+    """An imported machine's inlet can carry the guide vanes' swirl (C1): a
+    switch outside the form (it changes the fields shown); Q is kept."""
+    value = get_path(ctx.draft, f"physics.inlets.{inlet}") or {}
+    current = isinstance(value, dict) and value.get("kind") == "SWIRL"
+    generation = st.session_state.get(GENERATION, 0)
+    wanted = st.checkbox(
+        f"Swirl at {inlet} from the guide vanes: approximate (from vane trailing-edge angle)",
+        value=current, key=f"machines_swirl_{inlet}_{generation}",
+        help="For a machine without its guide vanes: radial inflow Q / A and the tangential "
+             "speed Vr / tan(flow angle), solid-body swirl over the inlet.")
+    if wanted != current:
+        kept = {"volumetric_flow_rate": value["volumetric_flow_rate"]} \
+            if isinstance(value, dict) and "volumetric_flow_rate" in value else {}
+        ctx.draft["physics"].setdefault("inlets", {})[inlet] = {
+            "kind": "SWIRL" if wanted else "FLOW_RATE", **kept}
+        state.bump_generation()
+        st.rerun()
+    return current
+
+
+def guide_vane_fields(ctx: state.Context) -> None:
+    """The operating point's guide vane opening and the mesh's (C1): a check."""
+    path = "physics.guide_vanes"
+    st.markdown("**Guide vane opening** (from fully closed; a check, not a case input)")
+    float_field(ctx.draft, f"{path}.operating_deg", "Operating point's opening (deg)",
+                min_value=0.0, max_value=90.0, help="As published for the operating point.")
+    float_field(ctx.draft, f"{path}.mesh_min_deg", "Mesh's opening, from (deg)",
+                min_value=0.0, max_value=90.0)
+    float_field(ctx.draft, f"{path}.mesh_max_deg", "Mesh's opening, to (deg)",
+                min_value=0.0, max_value=90.0)
+    text_field(ctx.draft, f"{path}.mesh_source", "How the mesh's opening was found",
+               help="For example: confirmed by file name GV-03-91 and measurement 3.6-4.7 deg.")
+    int_field(ctx.draft, f"{path}.vanes", "Number of guide vanes", min_value=1,
+              help="Labels the time step choices (steps a guide vane passing).")
 
 
 def render(ctx: state.Context) -> None:
@@ -41,12 +84,26 @@ def render(ctx: state.Context) -> None:
                 "passage (or choose the imported mesh's rotating zone) first.")
         return
     runner = zones[0]
+    imported = ctx.draft.get("imported_mesh") is not None
+    swirling = {name: swirl_toggle(ctx, name) for name in inlets} if imported else {}
     with apply_form("operating_point", on_apply=lambda: default_outlets(ctx, outlets)):
         for name in inlets:
             float_field(ctx.draft, f"physics.inlets.{name}.volumetric_flow_rate",
                         f"Discharge Q at {name} (m³/s)", min_value=0.0,
-                        help="A flow-rate inlet, applied normal to the inlet.")
+                        help="A flow-rate inlet, applied normal to the inlet." if not
+                        swirling.get(name) else "Radial inflow Q / A towards the axis.")
             flow_rate_kind(ctx, name)
+            if swirling.get(name):
+                float_field(ctx.draft, f"physics.inlets.{name}.flow_angle_deg",
+                            f"Flow angle at {name} (deg from tangential)", min_value=0.1,
+                            max_value=89.9,
+                            help="The guide vanes' trailing-edge angle (C1: 7.8 deg measured "
+                                 "on the Francis-99 part-load vanes).")
+                select_field(ctx.draft, f"physics.inlets.{name}.direction",
+                             f"Swirl direction at {name}", list(DIRECTION_LABELS),
+                             DIRECTION_LABELS, placeholder="Choose (never assumed)",
+                             help="The way the guide vanes turn the flow; a turbine's runner "
+                                  "turns the same way.")
         float_field(ctx.draft, f"physics.rotation.{runner['name']}.speed.rpm",
                     f"Runner speed N (rpm), {runner['name']}", min_value=0.0)
         complete_kind(ctx, runner["name"], "RPM")
@@ -54,6 +111,8 @@ def render(ctx: state.Context) -> None:
         for name in outlets:
             float_field(ctx.draft, f"physics.outlets.{name}.pressure_pa",
                         f"Outlet static (gauge) pressure at {name} (Pa)", default=0.0)
+        if imported:
+            guide_vane_fields(ctx)
     text = omega_text(ctx, runner["name"])
     if text:
         st.caption(text)

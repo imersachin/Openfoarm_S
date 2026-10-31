@@ -5,6 +5,34 @@ Milestone U1 makes the machines app the one app: a three-step new project
 `app/vawt_app.py`, old projects, and the old app retired (port 8502). Branch
 `u1-one-app`, from main after g9-msh-import was merged (233e27d).
 
+## 0. Order after C1 (owner, 2026-10-29)
+
+Wrapping up soon does not cut scope: U1 is done in full. The order:
+
+1. **U1 in full:** one app (the machines app, port 8502, every case type,
+   VAWT included: D1, the general pipeline with the VAWT zone settings and
+   the wake box, P2); the three-step new project (case type, mesh source,
+   domain); .msh and "several .msh files" as mesh sources for every case
+   type, not only Francis and Custom; the "Foil / object test (stationary)"
+   (airfoil, hydrofoil, any object; air or water; D5); old projects; the old
+   app retired (`app/vawt_app.py`, port 8501; its code and tests stay until
+   the owner approves their removal).
+2. **Run the case from the app:** case/Allrun in the background with its
+   progress, cancel and log; no terminal for the user (section 6, 1).
+3. **Cluster-ready case** for the full machine: decomposePar, a run script,
+   a README (section 6, 2).
+4. **Mixed formats in one machine:** some parts STL, some .msh (for example
+   the runner from STL with the casing and draft tube from .msh), meshed and
+   assembled together, with the same ask-before-pairing interface flow as
+   M2b.
+5. **Mesh upgrades** milestone (section 7, as recorded).
+6. Then: G8 VAWT with pole; the HAWT interface evidence (section 5); the
+   runner inlet from a steady SC + GV run (section 6, 3).
+
+Each item: evidence first on v2512, the STL byte-identity rule, tests, the
+testing-agent review, a browser checklist with the app named, STOP for the
+owner's merge.
+
 ## 1. Decisions (owner)
 
 - **D1, meshing method (after E1 and its evidence step, section 3):** VAWT STL
@@ -152,20 +180,34 @@ Recorded only; not built in U1.
   passage.
 - trame for the 3D pane if plotly is not enough.
 - A blade generator from tables, G8 VAWT with pole. (CAD import, the
-  mesh-independence study and Fluent export moved to section 6.)
+  mesh-independence study and Fluent export moved to section 7.)
 - The heavy lock for STL runs (docs/msh_import_notes.md 13.6).
 - Flow arrow for imported meshes (owner, after M2b): the 3D pane draws no
   flow direction for an imported mesh (it reads the setup scene, which an
   imported mesh does not have); take it from the inlet patches of the mesh.
-- Prepare a case to run on a cluster: decomposePar, a run script, a README
-  (owner, 2026-10-27, M2b answer 1).
 - "Open in ParaView" (owner, 2026-10-27): ParaView 6.2.0 is installed
   (`C:\Program Files\ParaView 6.2.0\bin\paraview.exe`). The app finds
   paraview.exe itself (Program Files, the Start-menu shortcut's target, PATH),
   saves the path in the app settings, and offers a "locate ParaView" picker
   when it is not found.
 
-## 6. Next milestone after U1: mesh upgrades
+## 6. After U1: details (owner, after C1; the order is section 0)
+
+1. Run the case from the app (owner, 2026-10-29): start case/Allrun in the
+   background with its progress (steps, hours left, the outer-loop record),
+   cancel, and the log, so no terminal is needed. C1 writes the Allrun; the
+   app today only prepares the case (CLAUDE.md scope: needs the owner's
+   approval of the scope change).
+2. Prepare a case to run on a cluster (owner, 2026-10-27, M2b answer 1;
+   moved here after C1): decomposePar, a run script, a README. C1 already
+   writes an imported machine's decomposeParDict and Allrun (run order).
+3. Evidence: the swirl inlet against the guide vanes' own outflow. A steady
+   MRF/simpleFoam run of SC + GV (about 11 M cells: check it fits WSL first),
+   its outlet profile mapped onto the runner inlet; compare the Euler head
+   with the approximate swirl's 6.1 m (12.29 m net at Francis-99 PL;
+   docs/c1_startup_notes.md 1).
+
+## 7. Next milestone after U1: mesh upgrades
 
 Recorded only (owner, 2026-10-27); planned after U1, with evidence first.
 

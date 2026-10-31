@@ -24,11 +24,13 @@ from case_setup.physics import (
     PhysicsConfig,
     RotationDirection,
     RpmSpeed,
+    SwirlInlet,
     TurbulenceModel,
     VelocityInlet,
     WriteUnit,
     courant,
     kinematic_pressure,
+    rad_s_to_rpm,
     revolution_time,
     rpm_to_rad_s,
     step_for_degrees,
@@ -52,6 +54,7 @@ from machines.config import (
 )
 from machines.domains import SurfaceInfo
 from machines.msh_import.interfaces import blockage, part_of, sides
+from machines.msh_import.surface import PatchRadius
 from machines.zones import split_patch
 from vawt.config import Axis, plane_axes
 
@@ -80,12 +83,30 @@ _KINDS = {PatchType.INLET: PatchKind.INLET, PatchType.OUTLET: PatchKind.OUTLET,
 
 
 @dataclass(frozen=True)
+class Swirl:
+    """A SWIRL inlet as written (cylindricalInletVelocity about the zone's
+    axis): radial speed -Q/A (towards the axis), tangential Vr / tan(angle) at
+    the inlet's mean radius, as the rpm of a solid-body swirl (signed like
+    omega: positive is right-handed about +axis, verified on v2512, C1)."""
+
+    origin: tuple[float, float, float]
+    axis: tuple[float, float, float]
+    radial_velocity: float  # m/s, negative: inwards
+    tangential_velocity: float  # m/s at `radius`, signed with the direction
+    radius: float  # m: the inlet's area-weighted mean radius, measured from the mesh
+    rpm: float
+    flow_angle_deg: float
+    label: str = "approximate (from vane trailing-edge angle)"
+
+
+@dataclass(frozen=True)
 class Inlet:
     velocity: tuple[float, float, float] | None  # VELOCITY inlet
-    flow_rate: float | None  # FLOW_RATE inlet, m^3/s
+    flow_rate: float | None  # FLOW_RATE or SWIRL inlet, m^3/s
     speed: float  # m/s: |U|, or flow rate / inlet area
     k: float
     omega: float
+    swirl: Swirl | None = None  # a SWIRL inlet (C1)
 
 
 @dataclass(frozen=True)
@@ -148,6 +169,9 @@ class CaseSetup:
     internal_k: float = 0.0
     internal_omega: float = 0.0
     non_orthogonality: NonOrthogonality | None = None  # None: not measured
+    # An imported machine's case (C1): a fixed step, the robust PIMPLE settings,
+    # its start-up and the run order (Allrun). An STL-built case is as before.
+    imported: bool = False
 
     @property
     def turbulent(self) -> bool:
@@ -306,7 +330,27 @@ def inlet_area(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
 
 # --- resolution ---------------------------------------------------------------------------
 
-def _speed(inlet: VelocityInlet | FlowRateInlet, area: float | None) -> float:
+SWIRL_FACING_MIN = 0.9  # a swirl inlet faces the axis over at least 90 % of its area
+
+
+def _swirl(name: str, inlet: SwirlInlet, speed: float, rotation: Rotation,
+           radius: PatchRadius | None) -> Swirl:
+    """The swirl inlet's values; `radius` None (not imported yet) gives a
+    placeholder radius of 1 m, used by the checks only."""
+    if inlet.direction is None:
+        raise CaseSetupError(f"Inlet {name}: the swirl direction is not set.")
+    if radius is not None and radius.facing < SWIRL_FACING_MIN:
+        raise CaseSetupError(
+            f"Inlet {name} faces the axis over {radius.facing:.0%} of its area: a swirl inlet "
+            "needs an inlet around the axis (a runner's inflow), with radial inflow.")
+    r = radius.radius if radius is not None else 1.0
+    sign = 1.0 if inlet.direction is RotationDirection.POSITIVE else -1.0
+    tangential = sign * speed / math.tan(math.radians(inlet.flow_angle_deg))
+    return Swirl(rotation.origin, rotation.axis, -speed, tangential, r,
+                 rad_s_to_rpm(tangential / r), inlet.flow_angle_deg)
+
+
+def _speed(inlet: VelocityInlet | FlowRateInlet | SwirlInlet, area: float | None) -> float:
     if isinstance(inlet, VelocityInlet):
         v = inlet.velocity
         return math.sqrt(v.x**2 + v.y**2 + v.z**2)
@@ -343,12 +387,14 @@ def angular_speed(physics: PhysicsConfig, zone: str) -> float:
 def resolve(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
             boundary: Sequence[tuple[str, str]] | None = None, *,
             mesh_radius: float | None = None,
-            mesh_areas: Mapping[str, float] | None = None) -> CaseSetup:
+            mesh_areas: Mapping[str, float] | None = None,
+            mesh_radii: Mapping[str, PatchRadius] | None = None) -> CaseSetup:
     """Everything the case files need. `boundary`: the mesh's (name, type)
     list; None uses the configured patches (for estimates before meshing).
     `mesh_radius`: an imported mesh's zone radius, computed from the zone
     (M1-MSH); None before meshing. `mesh_areas`: an imported mesh's patch
-    areas, measured from the mesh (inlet_area)."""
+    areas, measured from the mesh (inlet_area). `mesh_radii`: its patches'
+    radii about the zone's axis (a swirl inlet, C1); None before meshing."""
     physics = config.physics
     if physics is None:
         raise CaseSetupError("The project has no physics settings.")
@@ -396,8 +442,18 @@ def resolve(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
         w = turbulence_omega(k, turbulence.length_scale or 1.0) if sst else 0.0
         velocity = ((condition.velocity.x, condition.velocity.y, condition.velocity.z)
                     if isinstance(condition, VelocityInlet) else None)
-        flow = condition.volumetric_flow_rate if isinstance(condition, FlowRateInlet) else None
-        inlets[name] = Inlet(velocity, flow, speed, k, w)
+        flow = (condition.volumetric_flow_rate
+                if isinstance(condition, FlowRateInlet | SwirlInlet) else None)
+        swirl = None
+        if isinstance(condition, SwirlInlet):
+            if mesh is None:
+                raise CaseSetupError(f"Inlet {name}: a swirl inlet is for an imported mesh.")
+            if mesh_radii is not None and name not in mesh_radii:
+                raise CaseSetupError(f"Inlet {name}: its radius could not be measured from "
+                                     "the mesh (the patch has no faces in it).")
+            swirl = _swirl(name, condition, speed, rotation,
+                           None if mesh_radii is None else mesh_radii[name])
+        inlets[name] = Inlet(velocity, flow, speed, k, w, swirl)
     outlets: dict[str, float] = {}
     for name, kind in patches:
         if kind is not PatchKind.OUTLET:
@@ -426,4 +482,5 @@ def resolve(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
     time = TimeControls(angle_step, initial, controls.end_revolutions * period, write,
                         controls.max_courant, estimate, cell if reference else None, reference)
     return CaseSetup(patches, rotation, inlets, outlets, physics, time,
-                     internal_k=fastest.k, internal_omega=fastest.omega)
+                     internal_k=fastest.k, internal_omega=fastest.omega,
+                     imported=mesh is not None)

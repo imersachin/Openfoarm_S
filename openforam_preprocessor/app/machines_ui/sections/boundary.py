@@ -8,9 +8,12 @@ import streamlit as st
 from app.components.widgets import get_path
 from app.machines_ui import state
 from app.machines_ui.sections.common import apply_form, section_header, section_issues
-from app.machines_ui.sections.fields import float_field, vector_field
+from app.machines_ui.sections.fields import float_field, select_field, vector_field
+from app.machines_ui.sections.rotation import DIRECTION_LABELS
 
 INLET_KINDS = {"VELOCITY": "Velocity (m/s)", "FLOW_RATE": "Volumetric flow rate (m³/s)"}
+# An imported machine without its guide vanes (C1).
+SWIRL_KIND = {"SWIRL": "Flow rate with the guide vanes' swirl (approximate)"}
 
 
 def patches_of(ctx: state.Context, kind: str) -> list[str]:
@@ -22,8 +25,9 @@ def inlet_kind(ctx: state.Context, name: str) -> str | None:
     """The kind of an inlet's value, chosen outside the form so its fields follow."""
     current = get_path(ctx.draft, f"physics.inlets.{name}.kind")
     generation = st.session_state.get("draft_generation", 0)
-    kind = st.radio(f"Inlet {name}", list(INLET_KINDS), format_func=INLET_KINDS.__getitem__,
-                    index=list(INLET_KINDS).index(current) if current in INLET_KINDS else None,
+    kinds = {**INLET_KINDS, **(SWIRL_KIND if ctx.draft.get("imported_mesh") else {})}
+    kind = st.radio(f"Inlet {name}", list(kinds), format_func=kinds.__getitem__,
+                    index=list(kinds).index(current) if current in kinds else None,
                     key=f"machines_inlet_kind_{name}_{generation}", horizontal=True)
     if kind is not None and kind != current:
         ctx.draft["physics"].setdefault("inlets", {})[name] = {"kind": kind}
@@ -60,6 +64,16 @@ def render(ctx: state.Context) -> None:
                 float_field(ctx.draft, f"physics.inlets.{name}.volumetric_flow_rate",
                             f"Flow rate at {name} (m³/s)", min_value=0.0,
                             help="Applied normal to the inlet.")
+            elif kind == "SWIRL":
+                float_field(ctx.draft, f"physics.inlets.{name}.volumetric_flow_rate",
+                            f"Flow rate at {name} (m³/s)", min_value=0.0,
+                            help="Radial inflow Q / A towards the axis.")
+                float_field(ctx.draft, f"physics.inlets.{name}.flow_angle_deg",
+                            f"Flow angle at {name} (deg from tangential)", min_value=0.1,
+                            max_value=89.9, help="The guide vanes' trailing-edge angle.")
+                select_field(ctx.draft, f"physics.inlets.{name}.direction",
+                             f"Swirl direction at {name}", list(DIRECTION_LABELS),
+                             DIRECTION_LABELS, placeholder="Choose (never assumed)")
         for name in outlets:
             float_field(ctx.draft, f"physics.outlets.{name}.pressure_pa",
                         f"Static (gauge) pressure at outlet {name} (Pa)", default=0.0)

@@ -19,11 +19,12 @@ from __future__ import annotations
 
 import json
 import shutil
+import stat
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 
-from case_setup.dictionaries import dictionaries
+from case_setup.dictionaries import ALLRUN, dictionaries, imported_files
 from case_setup.fields import fields
 from case_setup.setup import CaseSetup, NonOrthogonality, resolve
 from machines.config import MachineProjectConfig
@@ -38,7 +39,9 @@ POLY_MESH = "constant/polyMesh"
 GENERATED = ".case_setup_files.json"  # relative paths the last setup wrote
 STALE_MARKER = "CASE_STALE.txt"
 _MESH_EXCLUDED = ("sets",)  # checkMesh diagnostics, not part of the mesh
-_GENERATED_DIRS = ("0/", "constant/", "system/")
+_GENERATED_DIRS = ("0/", "constant/", "system/", "mrf/")  # mrf/: a steady MRF start (C1)
+_GENERATED_FILES = (ALLRUN,)
+_MRF_MESH = "mrf/" + POLY_MESH  # a link Allrun makes, never a generated file
 
 
 def mesh_boundary(poly_mesh: Path) -> tuple[tuple[str, str], ...]:
@@ -58,9 +61,12 @@ def render(config: MachineProjectConfig, surfaces: Sequence[SurfaceInfo],
     radius = (surface.config_zone_radius(imported, mesh.zones[0])
               if mesh is not None and mesh.zones else None)
     areas = surface.config_areas(imported, config) if mesh else None
+    radii = surface.config_inlet_radii(imported, config) if mesh else None
     setup = replace(resolve(config, surfaces, mesh_boundary(poly_mesh), mesh_radius=radius,
-                            mesh_areas=areas), non_orthogonality=non_orthogonality)
-    return setup, {**fields(setup), **dictionaries(setup)}
+                            mesh_areas=areas, mesh_radii=radii),
+                    non_orthogonality=non_orthogonality)
+    files = {**fields(setup), **dictionaries(setup)}
+    return setup, {**files, **imported_files(setup, files)}
 
 
 def generated_before(case: Path) -> set[str]:
@@ -70,8 +76,19 @@ def generated_before(case: Path) -> set[str]:
         listed = json.loads((case / GENERATED).read_text("utf-8"))["files"]
     except (OSError, ValueError, KeyError, TypeError):
         return set()
-    return {p for p in listed if isinstance(p, str) and p.startswith(_GENERATED_DIRS)
-            and ".." not in Path(p).parts and not p.startswith(POLY_MESH + "/")}
+    return {p for p in listed if isinstance(p, str)
+            and (p.startswith(_GENERATED_DIRS) or p in _GENERATED_FILES)
+            and ".." not in Path(p).parts and not p.startswith(POLY_MESH + "/")
+            and not p.startswith(_MRF_MESH)}
+
+
+def users_files(project_root: Path, files: dict[str, str]) -> set[str]:
+    """Files this setup would write over that the user made: an Allrun in
+    case/ the app did not generate (C1). The caller leaves them out."""
+    case = project_root / CASE_DIR
+    before = generated_before(case)
+    return {p for p in _GENERATED_FILES if p in files and (case / p).exists()
+            and p not in before}
 
 
 def write_case(project_root: Path, files: dict[str, str], poly_mesh: Path) -> Path:
@@ -84,7 +101,14 @@ def write_case(project_root: Path, files: dict[str, str], poly_mesh: Path) -> Pa
     for relative in sorted(generated_before(case) - set(files)):
         (case / relative).unlink(missing_ok=True)
     for relative, body in sorted(files.items()):
+        if relative in _GENERATED_FILES:
+            continue
         OpenFOAMFileWriter.write_if_changed(case / relative, body)
+    if ALLRUN in files:  # the run order is a script, its shebang first (C1)
+        script = case / ALLRUN
+        if not script.is_file() or script.read_text("utf-8") != files[ALLRUN]:
+            script.write_text(files[ALLRUN], encoding="utf-8", newline="\n")
+        script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     target = case / POLY_MESH
     shutil.rmtree(target, ignore_errors=True)
     shutil.copytree(poly_mesh, target, ignore=shutil.ignore_patterns(*_MESH_EXCLUDED))

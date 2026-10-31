@@ -128,8 +128,13 @@ def test_all_physics_fields_are_exercised() -> None:
     assert {"x", "y", "z"} <= seen
 
 
+# An imported machine's only (C1): they never reach an STL-built case, and
+# guide_vanes is a check only; tests/unit/case_setup/test_c1_imported_case.py.
+IMPORTED_ONLY = {"start_up", "ranks", "guide_vanes"}
+
+
 def test_sections_of_the_physics_model_are_exercised() -> None:
     from case_setup.physics import PhysicsConfig
     for physics in variants().values():
-        assert set(physics) == set(PhysicsConfig.model_fields)
+        assert set(physics) == set(PhysicsConfig.model_fields) - IMPORTED_ONLY
     assert Path(__file__).name == "test_g6_physics_coverage.py"  # named in the coverage test

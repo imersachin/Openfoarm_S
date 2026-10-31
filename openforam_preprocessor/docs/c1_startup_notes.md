@@ -41,7 +41,9 @@ m3/s; high load: 369.6 rpm / 0.221 m3/s.
   fitted from the stem and on "closed" as the vanes touching; the vane's
   outline also differs by up to 19 mm between the cover and mid-height (its
   shaped ends). The Francis-99 guide vane drawing (pivot, closed angle) would
-  settle it: asked of the owner.
+  settle it: asked of the owner. Owner (after C1 review): no drawing needed;
+  the opening is recorded as "confirmed by file name GV-03-91 and
+  measurement 3.6-4.7 deg" (the correction below).
 - As a flow angle at the runner inlet, 9.84 deg gives an Euler head
   of 11.3 m (u Vt / g with u = 11.23 m/s at r 0.32 m, Vt = Vr / tan 9.84 deg
   = 9.90 m/s, Vr = Q / A = 1.716 m/s over the 0.1183 m2 inflow ring) against
@@ -77,7 +79,11 @@ m3/s; high load: 369.6 rpm / 0.221 m3/s.
   Euler head of 6.1 m (u Vt / g, u = 13.61 m/s), half the 12.29 m net head:
   low even for part load. The swirl is reported as measured from the mesh,
   not tuned to the head; the gap is open (deviation from the vanes'
-  direction, or the vaneless gap) and asked of the owner.
+  direction, or the vaneless gap) and asked of the owner. Owner (after C1
+  review): keep the swirl inlet, labelled "approximate (from vane
+  trailing-edge angle)"; evidence after U1: a steady MRF run of SC + GV, its
+  outlet profile mapped onto the runner inlet, the Euler heads compared
+  (docs/u1_one_app_notes.md 6).
 - The rank runs (BEP, speed only) stay valid; the start-up and time-stepping
   runs are made at PL (the BEP driver was stopped before them).
 - A check for later (owner): a Francis case whose operating point does not
@@ -186,9 +192,13 @@ the final one. PL, swirl inlet, 16 ranks, 4 steps:
   cells (0.3-1.3 mm from the hub or shroud by the runner inflow), so a
   Courant limit of 1-2 would mean tiny steps for nothing (the S/T plan's
   "maxCo 2" run, about 0.005 deg a step, was not run).
-- Each step uses all 5 outer iterations (the residual targets are not met
-  in 5; pFinal stops at its 50 iterations): the steps are stable, not
-  converged within the step. More outer iterations cost about 50 s each.
+- Each step used all 5 outer iterations. Correction (found after the
+  review): the residual control these runs were given was the openfoam.org
+  keyword (outerCorrectorResidualControl); v2512 reads `residualControl`
+  inside PIMPLE, so P1-P4 had none and always ran 5. The pitch runs (3.4)
+  and the app use `residualControl`; v2512 then logs "PIMPLE: not converged
+  within 5 iterations" for a step that reaches the limit, which the app
+  counts. pFinal stopped at its 50 iterations in P1-P4.
 - The start matters little for stability once the settings are robust: P1
   and P2 are nearly the same. The MRF start gives the developed flow at
   once (Courant maximum 25, continuity 1e-9) and costs 100 MRF iterations,
@@ -198,7 +208,13 @@ the final one. PL, swirl inlet, 16 ranks, 4 steps:
 - Seconds a step from the log, the first step left out; hours a revolution
   = s a step x 360 / degrees a step / 3600.
 
-## 4. Plan for the app (after review; nothing built yet)
+### 3.4 2 deg against 1 deg over one blade pitch (owner, after review)
+
+(Filled from the runs: E1 2 deg x 12 steps, E2 1 deg x 24 steps, from the
+steady MRF fields, residualControl as the app writes it, the runner's
+torque about +z from its walls.)
+
+## 4. Plan for the app (reviewed; built in C1, section 5)
 
 1. Transient settings for real machines (imported meshes): the robust
    PIMPLE set of 3.3 becomes the default for a rotating imported-mesh case.
@@ -233,3 +249,65 @@ Open for the owner: the PL swirl's Euler head (6.1 m against 12.29 m net);
 the Francis-99 guide vane drawing (pivot, closed angle); the PL head's
 source; whether 2 deg should be tried over a longer run before it is
 offered.
+
+Owner's decisions (after review): 1. the robust settings for imported
+machines (.msh cases), STL-built VAWT/HAWT unchanged until evidence says
+otherwise; the final iteration of each step not relaxed; residualControl on
+the outer loop and the steps that reach the limit reported; every setting
+labelled with its reason. 2. The time step as "what are you studying?",
+hours a revolution beside each choice: 2 deg slow effects (part-load vortex
+rope), 1 deg marginal for rotor-stator pulses (about 13 steps a guide vane
+passing at 28 vanes), 0.5 deg rotor-stator pulses; evidence 3.4. 3. The
+swirl kept, labelled approximate; the SC + GV evidence after U1. 4. The
+opening confirmed by file name and measurement.
+
+## 5. Built (C1)
+
+- `case_setup/dictionaries.py`: an imported machine's controlDict (a fixed
+  step of the chosen angle, no Courant limit) and fvSolution (nOuter 5 with
+  residualControl U 1e-4 / p 1e-3, nCorrectors 2, nNonOrthogonalCorrectors 1
+  or the > 70 deg rule's 2, turbulence every outer iteration, relaxation U
+  0.7 / k, omega 0.7 / p 0.3 with Final 1), each entry with its reason in a
+  comment; decomposeParDict (physics.ranks, default 16); Allrun (the run
+  order: the start-up, then pimpleFoam on the ranks; as root it allows Open
+  MPI to run as root); for the steady MRF start, mrf/ (simpleFoam with
+  MRFProperties, the same 0/ fields; Allrun links its mesh, copies its last
+  fields into 0/). `solution_settings`: the settings and reasons for the
+  report and the screen. An STL-built case is unchanged.
+- `case_setup/physics.py`: `SwirlInlet` (kind SWIRL: Q, flow angle from
+  tangential, direction), `StartUpConfig` (method, MRF iterations),
+  `GuideVaneOpening` (the operating point's and the mesh's opening, its
+  source, the vane count), `ranks`; `STEP_STUDIES`.
+- `case_setup/setup.py` / `fields.py`: the swirl inlet resolved
+  (cylindricalInletVelocity about the zone's axis, its radius measured from
+  the mesh: `surface.patch_radii`; an inlet facing the axis over less than
+  90 % of its area is refused).
+- `case_setup/validation.py`: SWIRL_INLET_NOT_IMPORTED and
+  SWIRL_DIRECTION_NOT_SET (BLOCKING), RUNNER_AGAINST_SWIRL (WARNING),
+  GUIDE_VANE_OPENING_MISMATCH (WARNING), GUIDE_VANE_RANGE_INVALID
+  (BLOCKING); an imported machine may step 2 deg without ROTATION_STEP_LARGE.
+- `machines/msh_import/solve_estimate.py`: the steps that reached the outer
+  limit, counted from the case's log; hours a revolution for each choice;
+  the scaled reference is the robust settings' 266.6 s a step (P1).
+  `host_memory.py`: what WSL could have with .wslconfig raised (the host's
+  RAM less Windows' own use, through powershell.exe; None when unreadable).
+- Screens: Time (what are you studying?, hours a revolution, start-up, MRF
+  iterations, ranks), Operating point (the swirl switch, flow angle and
+  direction, the guide vane opening), Boundary (a SWIRL inlet for an
+  imported machine), Case setup (the settings with reasons, the run order,
+  the outer-loop record, WSL's ceiling in the memory warning).
+- From the testing review: Allrun is a plain script (its shebang first, no
+  generated-file header), stops at the first failed step (`|| exit 1`; the
+  MRF start also when it wrote no fields), and refuses to start over an
+  earlier run's output (log.*, processor*: a new setup keeps them, and
+  RunFunctions would skip a step whose log exists); a user's own case/Allrun
+  is kept (INFO CASE_RUN_ORDER_USERS); more ranks than the PC's logical
+  processors is a WARNING (RANKS_ABOVE_CORES; v2512's runParallel
+  oversubscribes, so it runs, slower); the new fields' findings show in
+  Operating point and Time.
+- Tests: `tests/unit/case_setup/test_c1_imported_case.py`;
+  `tests/integration/test_c1_startup_real.py` (each start-up's Allrun on
+  v2512, the swirl inlet on the fixture machine's outer ring). Two existing
+  tests changed for the owner's approval: the correctors test (an imported
+  case's plain correctors are now 2 / 1) and the physics-sections guard (the
+  imported-only fields listed).

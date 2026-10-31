@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from case_setup.setup import CaseSetup, PatchKind
+from case_setup.setup import CaseSetup, PatchKind, Swirl
 from openfoam.dictionary import foam_scalar, foam_vector
 
 ZERO_VECTOR = "uniform (0 0 0)"
@@ -64,12 +64,29 @@ def _fixed(value: str) -> str:
     return f"type            fixedValue;\nvalue           uniform {value};"
 
 
+def _swirl(swirl: Swirl) -> str:
+    """cylindricalInletVelocity (C1 evidence, v2512: rpm -100 gave -20.54 m/s
+    towards -theta on a test ring, exactly omega r; radial inflow negative)."""
+    return (f"// Swirl {swirl.label}: flow angle {swirl.flow_angle_deg:g} deg from "
+            f"tangential;\n// Vr {swirl.radial_velocity:.4g} m/s, Vt "
+            f"{swirl.tangential_velocity:.4g} m/s at r {swirl.radius:.4g} m (measured)\n"
+            "type            cylindricalInletVelocity;\n"
+            f"origin          {foam_vector(*swirl.origin)};\n"
+            f"axis            {foam_vector(*swirl.axis)};\n"
+            "axialVelocity   constant 0;\n"
+            f"radialVelocity  constant {foam_scalar(swirl.radial_velocity)};\n"
+            f"rpm             constant {foam_scalar(swirl.rpm)};\n"
+            f"value           {ZERO_VECTOR};")
+
+
 def velocity(setup: CaseSetup) -> str:
     def condition(patch: str, kind: PatchKind) -> str:
         if kind is PatchKind.INLET:
             inlet = setup.inlets[patch]
             if inlet.velocity is not None:
                 return _fixed(foam_vector(*inlet.velocity))
+            if inlet.swirl is not None:
+                return _swirl(inlet.swirl)
             assert inlet.flow_rate is not None
             return ("type            flowRateInletVelocity;\n"
                     f"volumetricFlowRate  constant {foam_scalar(inlet.flow_rate)};")
